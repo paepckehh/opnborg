@@ -10,14 +10,14 @@ import (
 
 func main() {
 	fmt.Println("[STARTUP][OPNCENTRAL][V0.0.1]")
-	conf := readConfig()
+	_, err := readConfig()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("[EXIT]%s\n", err)
 		os.Exit(1)
 	}
 }
 
-func readConfig() (*opencentral.OPNCall, error) {
+func readConfig() (*opncentral.OPNCall, error) {
 
 	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
 		return nil, errors.New(fmt.Sprintf("[ERROR] Add at least one target server to env var 'OPN_TARGETS' (multi valued, comma seperated)"))
