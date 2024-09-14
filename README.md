@@ -1,5 +1,6 @@
 # OVERVIEW
-[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opncentral.svg)](https://pkg.go.dev/paepcke.de/opncentral) [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opncentral)](https://goreportcard.com/report/paepcke.de/opncentral) [![Go Build](https://github.com/paepckehh/opncentral/actions/workflows/golang.yml/badge.svg)](https://github.com/paepckehh/opncentral/actions/workflows/golang.yml)
+[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opncentral.svg)](https://pkg.go.dev/paepcke.de/opncentral) 
+[![Go Report Card](https://goreportcard.com/badge/paepcke.de/opncentral)](https://goreportcard.com/report/paepcke.de/opncentral) 
 
 [paepcke.de/opncentral](https://paepcke.de/opncentral/)
 
@@ -19,9 +20,9 @@ go install paepcke.de/tlsinfo/cmd/opncentral@latest
 
 # PROJET STATUS
 
- - -=# WORK IN PROGRESS - NOT YET READY FOR USAGE OR PUBLIC RELEASE OR USAGE - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPEAR ANYTIME #=- 
- - -=# WORK IN PROGRESS - NOT YET READY FOR USAGE OR PUBLIC RELEASE OR USAGE - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPEAR ANYTIME #=- 
- - -=# WORK IN PROGRESS - NOT YET READY FOR USAGE OR PUBLIC RELEASE OR USAGE - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPEAR ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
 
 # TIMLINE 
 
