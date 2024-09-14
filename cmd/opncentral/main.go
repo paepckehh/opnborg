@@ -9,12 +9,13 @@ import (
 )
 
 func main() {
-	fmt.Println("[STARTUP][OPNCENTRAL][V0.0.1]")
+	fmt.Println("[OPNCENTRAL][STARTUP][V0.0.1]")
 	_, err := readConfig()
 	if err != nil {
 		fmt.Printf("[EXIT]%s\n", err)
 		os.Exit(1)
 	}
+	fmt.Println("[OPNCENTRAL][END]")
 }
 
 func readConfig() (*opncentral.OPNCall, error) {
