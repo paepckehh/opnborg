@@ -24,7 +24,7 @@ go install paepcke.de/tlsinfo/cmd/opncentral@latest
  - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
  - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
 
-# TIMLINE 
+# TIMELINE 
 
  - 2024
     - October  -> testphase / code samples / internal developer storage & exchange

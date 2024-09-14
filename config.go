@@ -1,7 +1,6 @@
 package opncentral
 
 import (
-	"net/url"
 	"time"
 )
 
@@ -12,9 +11,8 @@ const (
 )
 
 type OPNCall struct {
-	BaseUrl     url.URL
+	Targets     string
 	Key         string
 	Secret      string
-	UserAgent   string
 	NoSSLVerify bool
 }
