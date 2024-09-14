@@ -36,3 +36,7 @@ go install paepcke.de/tlsinfo/cmd/opncentral@latest
 # CONTRIBUTION
 
 Yes, Please! PRs Welcome! 
+
+# SPONSORS 
+
+Not Yet!
