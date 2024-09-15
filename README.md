@@ -6,7 +6,7 @@
 
 # OPNBORG 
 
-- backup & version control management of [opnsense.org](https://opensense.org/) appliances (cluster)
+- backup & version control management of [opnsense.org](https://opnsense.org/) appliances (cluster)
   
 
 # INSTALL
