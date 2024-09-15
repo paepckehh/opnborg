@@ -8,7 +8,7 @@ import (
 	"paepcke.de/opnborg"
 )
 
-const _app = opnborg._app
+const _app = "[OPNBORG]"
 
 func main() {
 	fmt.Println(_app + "[STARTUP][V0.0.1]")
