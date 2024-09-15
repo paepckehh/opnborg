@@ -1,3 +1,3 @@
-module paepcke.de/opncentral
+module paepcke.de/opnborg
 
-go 1.22.7
+go 1.20.0

@@ -5,20 +5,23 @@ import (
 	"fmt"
 	"os"
 
+	"paepcke.de/opnborg"
 	"paepcke.de/opncentral"
 )
 
+const _app = "[OPNBORG]"
+
 func main() {
-	fmt.Println("[OPNCENTRAL][STARTUP][V0.0.1]")
+	fmt.Println(_app + "[STARTUP][V0.0.1]")
 	_, err := readConfig()
 	if err != nil {
-		fmt.Printf("[EXIT]%s\n", err)
+		fmt.Printf(_app+"[EXIT]%s\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("[OPNCENTRAL][END]")
+	fmt.Println(_app + "[END]")
 }
 
-func readConfig() (*opncentral.OPNCall, error) {
+func readConfig() (*opnborg.OPNCall, error) {
 
 	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
 		return nil, errors.New(fmt.Sprintf("[ERROR] Add at least one target server to env var 'OPN_TARGETS' (multi valued, comma seperated)"))

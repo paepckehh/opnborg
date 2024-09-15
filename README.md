@@ -1,35 +1,37 @@
-# OVERVIEW
-[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opncentral.svg)](https://pkg.go.dev/paepcke.de/opncentral) 
-[![Go Report Card](https://goreportcard.com/badge/paepcke.de/opncentral)](https://goreportcard.com/report/paepcke.de/opncentral) 
+# OVERVIEW 
+[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg) 
+[![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg) 
 
-[paepcke.de/opncentral](https://paepcke.de/opncentral/)
+# OPNBORG [paepcke.de/opnborg](https://paepcke.de/opnborg/)
 
--   central git backup & version control management of [opnsense.org](https://opensense.org/) appliances
+- backup & version control management of [opnsense.org](https://opensense.org/) appliances (cluster)
+  
 
 # INSTALL
 
 ```
-go install paepcke.de/tlsinfo/cmd/opncentral@latest
+go install paepcke.de/opnborg/cmd/opnborg@latest
 ```
 
 ### DOWNLOAD (prebuild)
 
-[github.com/paepckehh/opncentral/releases](https://github.com/paepckehh/opncentral/releases)
+[github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
 
 # SHOWTIME 
 
 # PROJET STATUS
 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE OR DISAPER ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
+ - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
 
 # TIMELINE 
 
  - 2024
-    - October  -> testphase / code samples / internal developer storage & exchange
-    - November -> Offical Pilot Phase
-    - December -> Release Canditate(s)
+    - September -> Internal Use Only (codesamples)
+    - October   -> Offical Testphase 
+    - November  -> Offical Pilot Phase
+    - December  -> Release Canditate(s)
  - 2025
     - January - > First Public Release planned 
 
