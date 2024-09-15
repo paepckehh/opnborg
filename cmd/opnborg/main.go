@@ -6,10 +6,9 @@ import (
 	"os"
 
 	"paepcke.de/opnborg"
-	"paepcke.de/opncentral"
 )
 
-const _app = "[OPNBORG]"
+const _app = opnborg._app
 
 func main() {
 	fmt.Println(_app + "[STARTUP][V0.0.1]")
@@ -34,7 +33,7 @@ func readConfig() (*opnborg.OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_APISECRET"); !ok {
 		return nil, errors.New(fmt.Sprintf("[ERROR] Set env var 'OPN_APISECRET' to your opnsense api key secret"))
 	}
-	return &opncentral.OPNCall{
+	return &opnborg.OPNCall{
 		Targets:     os.Getenv("OPN_TARGETS"),
 		Key:         os.Getenv("OPN_APIKEY"),
 		Secret:      os.Getenv("OPN_APISECRET"),

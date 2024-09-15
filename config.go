@@ -1,4 +1,4 @@
-package opncentral
+package opnborg
 
 import (
 	"time"
