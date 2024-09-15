@@ -2,7 +2,9 @@
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg) 
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg) 
 
-# OPNBORG [paepcke.de/opnborg](https://paepcke.de/opnborg/)
+[paepcke.de/opnborg](https://paepcke.de/opnborg/)
+
+# OPNBORG 
 
 - backup & version control management of [opnsense.org](https://opensense.org/) appliances (cluster)
   
@@ -19,7 +21,7 @@ go install paepcke.de/opnborg/cmd/opnborg@latest
 
 # SHOWTIME 
 
-# PROJET STATUS
+# STATUS
 
  - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
  - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
