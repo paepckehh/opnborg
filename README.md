@@ -8,18 +8,24 @@
 
 - backup & version control management of [opnsense.org](https://opnsense.org/) appliances (cluster)
   
+# HOW TO RUN
+
+```
+OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@latest
+
+```
 
 # INSTALL
 
 ```
 go install paepcke.de/opnborg/cmd/opnborg@latest
+OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." opnborg
 ```
 
 ### DOWNLOAD (prebuild)
 
 [github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
 
-# SHOWTIME 
 
 # STATUS
 
