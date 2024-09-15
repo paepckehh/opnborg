@@ -39,7 +39,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
     - September -> Internal Use Only (codesamples)
     - October   -> Offical Testphase 
     - November  -> Offical Pilot Phase
-    - December  -> Release Canditate(s)
+    - December  -> Release Candidate
  - 2025
     - January - > First Public Release planned 
 
