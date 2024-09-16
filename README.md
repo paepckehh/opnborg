@@ -30,17 +30,20 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 ```
 # OPTIONS FAQ
 - How to create a secure OPENSense Backup OPN_APIKEY & OPN_APISECRET? 
+    
     - Create a User 'backup' 
         - OPNSense WebUI -> System -> Access -> User -> Add 
         - Skip passwords, tick scrambled random password & tick 'Save and go back' 
+    
     - Go back to user 'backup' via -> Edit (new option sections magically appear)
         - Effective Privileges -> Edit 
             - Diagnostics: Configuration History (tick allowed box & 'Save' button)
         - API Keys -> Add (Create API Key): The API Key & Secret will download to your browser download folder as file
- - ... need more details & guides? [opnsense wiki](https://docs.opnsense.org/development/how-tos/api.html)
 
 - How to lock down the TLS Session MitM proof via 'OPN_TLSKEYPIN'? 
+    
     - enable https for your OPNSense Admin interface (even simple self-signed certificates will do the trick)
+    
     - go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
         - Pick First Line (copy only the base64 encoded string, without brackets): 
             Example:    X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
