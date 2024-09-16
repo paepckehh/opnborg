@@ -6,7 +6,7 @@
 
 # OPNBORG 
 
-- secure backup & orchestration ofn[opnsense.org](https://opnsense.org/) appliances (cluster)
+- secure backup & orchestration for [opnsense.org](https://opnsense.org/) appliances
   
 # EXAMPLE 
 ```
