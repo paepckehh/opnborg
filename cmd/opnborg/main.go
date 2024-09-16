@@ -22,7 +22,7 @@ func main() {
 	// Read Application Env
 	config, err := opnborg.ReadConfig()
 	if err != nil {
-		fmt.Printf(_app+"[ERROR][EXIT]%s\n", err)
+		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
 		os.Exit(1)
 	}
 	config.Log = false
@@ -30,7 +30,7 @@ func main() {
 	// Perform Backup of all Appliances xml configuration
 	err = opnborg.Backup(config)
 	if err != nil {
-		fmt.Printf(_app+"[ERROR][EXIT]%s\n", err)
+		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
 		os.Exit(1)
 	}
 
