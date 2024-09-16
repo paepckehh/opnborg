@@ -8,6 +8,7 @@ import (
 	"sync"
 )
 
+// ReadConfig reads OPNBorgs configuration via env
 func ReadConfig() (*OPNCall, error) {
 
 	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
@@ -22,13 +23,17 @@ func ReadConfig() (*OPNCall, error) {
 		return nil, errors.New(fmt.Sprintf("[ERROR] Set env var 'OPN_APISECRET' to your opnsense api key secret"))
 	}
 	return &OPNCall{
-		Targets:     os.Getenv("OPN_TARGETS"),
-		Key:         os.Getenv("OPN_APIKEY"),
-		Secret:      os.Getenv("OPN_APISECRET"),
-		NoSSLVerify: os.Getenv("OPN_NOSSLVERIFY") == "1",
+		Targets:   os.Getenv("OPN_TARGETS"),
+		Key:       os.Getenv("OPN_APIKEY"),
+		Secret:    os.Getenv("OPN_APISECRET"),
+		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"), == "",
+		Daemon:    os.Getenv("OPN_DAEMON") == "false",
+		Git:       os.Getenv("OPN_NOGIT") == "false",
+		SSL:       os.Getenv("OPN_NOSSL") == "false",
 	}, nil
 }
 
+// Backup performs a Backup operation
 func Backup(config *OPNCall) error {
 
 	// spinup WaitGroup

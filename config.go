@@ -10,6 +10,8 @@ type OPNCall struct {
 	Secret  string
 	TLSpin  string
 	AppName string
+	Git     bool
+	Daemon  bool
 	NoSSL   bool
 	Log     bool
 }
