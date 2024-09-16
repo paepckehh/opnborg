@@ -1,17 +1,18 @@
 package opnborg
 
 const (
-	_userAgentPrefix = "opnborg"
+	_empty     = ""
+	_userAgent = "opnborg"
 )
 
 type OPNCall struct {
-	Targets string
-	Key     string
-	Secret  string
-	TLSpin  string
-	AppName string
-	Git     bool
-	Daemon  bool
-	NoSSL   bool
-	Log     bool
+	Targets   string
+	Key       string
+	Secret    string
+	TLSKeyPin string
+	AppName   string
+	Git       bool
+	Daemon    bool
+	SSL       bool
+	Log       bool
 }

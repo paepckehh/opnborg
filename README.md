@@ -36,17 +36,18 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
     - Go back to user 'backup' via -> Edit (new options appear)
         - Effective Privileges -> Edit 
             - Diagnostics: Configuration History (tick allowed box & 'Save' button)
-        - API Keys -> Add (Create API Key)
-            - OPN_KEY: The API Key Name will be shown in GUI (long string, base64)
-            - OPN_APISECRET: The API Key Secret will download to your browser download folder
+        - API Keys -> Add (Create API Key): The API Key & Secret will download to your browser download folder as file
  - ... need more details & guides? [opnsense wiki](https://docs.opnsense.org/development/how-tos/api.html)
 
 - How to lock down the TLS Session MitM proof via 'OPN_TLSKEYPIN'? 
     - enable https for your OPNSense Admin interface (even simple self-signed certificates will do the trick)
-    - go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <opn-server-name>
-        - Pick First Line (base64 string without brackets): X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
+    - go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
+        - Pick First Line (copy only the base64 encoded string, without brackets): 
+            Example:    X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
+                        OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
 
-- Enviroment Variables bools must set exactly to 'true' to enable, anything else will default to false.
+- Enviroment Variables bools must set exactly case senitive to 'true' to enable, anything else will default to false.
+- Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
 
 # HOW TO INSTALL
 
@@ -82,3 +83,4 @@ Yes, Please! PRs Welcome!
 # SPONSORS 
 
 Not Yet!
+
