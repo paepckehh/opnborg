@@ -18,7 +18,6 @@ func main() {
 	fmt.Println(_app + "[STARTUP]" + _version)
 
 	// Read Application Env
-	fmt.Println(_app + "[STARTING][READ-CONFIG-FROM-ENV]")
 	config, err := opnborg.ReadConfig()
 	if err != nil {
 		fmt.Printf(_app+"[ERROR][EXIT]%s\n", err)
