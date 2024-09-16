@@ -17,7 +17,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 
 ```
 # REQUIRED: 
-- OPN_TARGETS   - list of OPNSense Target Server to Backup
+- OPN_TARGETS   - list of OPNSense Target Server to Backup (comma separated)
 - OPN_APIKEY    - OPNsense Backup User APIKEY
 - OPN_APISECRET - OPNsense Backup User APISECRET
 
