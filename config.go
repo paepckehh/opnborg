@@ -5,10 +5,11 @@ const (
 )
 
 type OPNCall struct {
-	Targets     string
-	Key         string
-	Secret      string
-	AppName     string
-	NoSSLVerify bool
-	Log         bool
+	Targets string
+	Key     string
+	Secret  string
+	TLSpin  string
+	AppName string
+	NoSSL   bool
+	Log     bool
 }

@@ -6,20 +6,30 @@
 
 # OPNBORG 
 
-- backup & version control management of [opnsense.org](https://opnsense.org/) appliances (cluster)
+- secure backup & orchestration ofn[opnsense.org](https://opnsense.org/) appliances (cluster)
   
-# HOW TO RUN
-
+# EXAMPLE
 ```
-OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@latest
-
+OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." OPN_KEYPIN="..." go run paepcke.de/opnborg/cmd/opnborg@latest
 ```
 
-# INSTALL
+# SUPPORTED OPTIONS 
+
+```
+REQUIRED: 
+- OPN_TARGETS   - list of OPNsense Target Server to Backup
+- OPN_APIKEY    - OPNsense Backup User APIKEY
+- OPN_APISECRET - OPNsense Backup User APISECRET
+
+OPTIONAL:
+- OPN_TLSKEYPIN - OPNsense TLS Certificate Keypin 
+- OPN_NOSSL     - do not verify SSL Certificate
+
+```
+# HOW TO INSTALL
 
 ```
 go install paepcke.de/opnborg/cmd/opnborg@latest
-OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." opnborg
 ```
 
 ### DOWNLOAD (prebuild)
