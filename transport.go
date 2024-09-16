@@ -13,7 +13,7 @@ import (
 // getTlsConf harden tls object settings
 func getTlsConf(config *OPNCall) *tls.Config {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify:     true,
+		InsecureSkipVerify:     !config.SSL,
 		SessionTicketsDisabled: true,
 		Renegotiation:          0,
 		MinVersion:             tls.VersionTLS13,

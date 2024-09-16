@@ -29,7 +29,7 @@ func ReadConfig() (*OPNCall, error) {
 		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
 		Daemon:    os.Getenv("OPN_DAEMON") == "0",
 		Git:       os.Getenv("OPN_NOGIT") == "0",
-		SSL:       os.Getenv("OPN_NOSSL") == "1",
+		SSL:       os.Getenv("OPN_NOSSL") == "0",
 	}, nil
 }
 
