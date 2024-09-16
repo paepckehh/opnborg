@@ -11,9 +11,9 @@ import (
 )
 
 // getTlsConf harden tls object settings
-func getTlsConf(keyPin string) *tls.Config {
+func getTlsConf(config *OPNCall) *tls.Config {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify:     false,
+		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
 		Renegotiation:          0,
 		MinVersion:             tls.VersionTLS13,
@@ -21,9 +21,9 @@ func getTlsConf(keyPin string) *tls.Config {
 		CipherSuites:           []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 		CurvePreferences:       []tls.CurveID{tls.X25519},
 	}
-	if keyPin != _empty {
+	if config.TLSKeyPin != _empty {
 		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
-			if !pinVerifyState(keyPin, &state) {
+			if !pinVerifyState(config.TLSKeyPin, &state) {
 				return errors.New("keypin verification failed")
 			}
 			return nil

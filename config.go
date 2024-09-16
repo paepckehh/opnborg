@@ -1,8 +1,9 @@
 package opnborg
 
 const (
-	_empty     = ""
-	_userAgent = "opnborg"
+	_empty        = ""
+	_userAgent    = "opnborg"
+	_apiBackupXML = "/api/core/backup/download/this" // no support for legacy api endpoints
 )
 
 type OPNCall struct {
