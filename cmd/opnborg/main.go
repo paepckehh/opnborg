@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"paepcke.de/opnborg"
 )
@@ -15,6 +16,7 @@ const (
 func main() {
 
 	// Startup
+	t0 := time.Now()
 	fmt.Println(_app + "[STARTUP]" + _version)
 
 	// Read Application Env
@@ -23,9 +25,7 @@ func main() {
 		fmt.Printf(_app+"[ERROR][EXIT]%s\n", err)
 		os.Exit(1)
 	}
-	config.AppName = _app
 	config.Log = false
-	fmt.Println(_app + "[SUCCESS][READ-CONFIG-FROM-ENV]")
 
 	// Perform Backup of all Appliances xml configuration
 	err = opnborg.Backup(config)
@@ -35,5 +35,5 @@ func main() {
 	}
 
 	// Finish
-	fmt.Println(_app + "[END]")
+	fmt.Println(_app + "[END][RUNTIME]:" + time.Now().Sub(t0).String())
 }

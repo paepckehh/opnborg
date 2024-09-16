@@ -9,6 +9,7 @@ import (
 // backupSrv, perform individual server backup
 func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 
+	// setup
 	defer wg.Done()
 	displayChan <- []byte("[BACKUP][START][SERVER] " + server)
 
@@ -48,6 +49,7 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][FAIL:READ-BODY][ERROR] " + err.Error())
 		return
 	}
+	displayChan <- []byte("[BACKUP][OK][SUCCESS:FETCH] " + url)
 	if isValidXML(string(data)) {
 		displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-VALIDATION] " + url)
 		return

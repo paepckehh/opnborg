@@ -36,8 +36,11 @@ func ReadConfig() (*OPNCall, error) {
 // Backup performs a Backup operation
 func Backup(config *OPNCall) error {
 
-	// spinup WaitGroup
+	// setup
 	var wg sync.WaitGroup
+	if config.AppName == "" {
+		config.AppName = "[OPNBORG-API]"
+	}
 
 	// spinup Log/Display Engine
 	display.Add(1)
