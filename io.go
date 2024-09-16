@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"encoding/xml"
 	"os"
 	"sync"
 )
@@ -32,4 +33,12 @@ func startLog(config *OPNCall) {
 
 	}
 	display.Done()
+}
+
+//
+// Little Helper
+//
+
+func isValidXML(s string) bool {
+	return xml.Unmarshal([]byte(s), new(interface{})) == nil
 }

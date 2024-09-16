@@ -18,7 +18,7 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	// setup request
 	req, err := getRequest(url, _userAgent)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:SETUP-URL][SERVER] " + url)
+		displayChan <- []byte("[BACKUP][FAIL:SETUP-URL] " + url)
 		return
 	}
 	req.SetBasicAuth(config.Key, config.Secret)
@@ -35,8 +35,8 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	client.Timeout = time.Duration(4 * time.Second)
 	body, err := client.Do(req)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:CONNECT-SERVER][SERVER] " + url)
-		displayChan <- []byte("[BACKUP][FAIL:CONNECT-SERVER][ERROR] " + err.Error())
+		displayChan <- []byte("[BACKUP][FAIL:TLS-CONNECT] " + url)
+		displayChan <- []byte("[BACKUP][FAIL:TLS-CONNECT] " + err.Error())
 		return
 	}
 
@@ -44,9 +44,13 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	defer body.Body.Close()
 	data, err = io.ReadAll(body.Body)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:READ-BODY][SERVER] " + url)
+		displayChan <- []byte("[BACKUP][FAIL:READ-BODY] " + url)
 		displayChan <- []byte("[BACKUP][FAIL:READ-BODY][ERROR] " + err.Error())
 		return
 	}
-	displayChan <- []byte(data)
+	if isValidXML(string(data)) {
+		displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-VALIDATION] " + url)
+		return
+	}
+	displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-VALIDATION] " + url)
 }
