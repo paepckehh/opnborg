@@ -33,7 +33,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
     - Create a User 'backup' 
         - OPNSense WebUI -> System -> Access -> User -> Add 
         - Skip passwords, tick scrambled random password & tick 'Save and go back' 
-    - Go back to user 'backup' via -> Edit (new options appear)
+    - Go back to user 'backup' via -> Edit (new option sections magically appear)
         - Effective Privileges -> Edit 
             - Diagnostics: Configuration History (tick allowed box & 'Save' button)
         - API Keys -> Add (Create API Key): The API Key & Secret will download to your browser download folder as file
