@@ -51,6 +51,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 
 - Enviroment Variables bools must set exactly case senitive to 'true' to enable, anything else will default to false.
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
+- ATT: HTTPS chain verification via system os trust store(s) clusterfuck is disabled by default (OPN_NOSSL='true'), use OPN_TLSKEYPIN !
 
 # HOW TO INSTALL
 
