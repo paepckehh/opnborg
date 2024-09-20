@@ -81,7 +81,7 @@ go install paepcke.de/opnborg/cmd/opnborg@latest
     - November  -> Offical Pilot Phase
     - December  -> Release Candidate
  - 2025
-    - January - > First Public Release planned 
+    - January - > First Public Release & Native [NixOS](https://github.com/nixos) support
 
 # CONTRIBUTION
 
@@ -89,5 +89,5 @@ Yes, Please! PRs Welcome!
 
 # SPONSORS 
 
-Not Yet!
+
 
