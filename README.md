@@ -22,6 +22,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_APISECRET - OPNsense Backup User APISECRET
 
 # OPTIONAL:
+- OPN_PATH      - specify a target path (absolut or releative) to store backups [string: defaults to '.']
 - OPN_TLSKEYPIN - OPNsense TLS MitM proof Certificate Keypin [string]
 - OPN_DAEMON    - run app in daemon mode, never quit, fetch once every hour [bool: defaults to 'false']
 - OPN_NOGIT     - do not create & update local git version repo [bool: defaults to 'false']

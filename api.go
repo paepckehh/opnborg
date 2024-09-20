@@ -26,10 +26,11 @@ func ReadConfig() (*OPNCall, error) {
 		Targets:   os.Getenv("OPN_TARGETS"),
 		Key:       os.Getenv("OPN_APIKEY"),
 		Secret:    os.Getenv("OPN_APISECRET"),
+		Path:      os.Getenv("OPN_PATH"),
 		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
 		Daemon:    os.Getenv("OPN_DAEMON") == "0",
 		Git:       os.Getenv("OPN_NOGIT") == "0",
-		SSL:       os.Getenv("OPN_NOSSL") == "0",
+		SSL:       os.Getenv("OPN_NOSSL") == "1",
 	}, nil
 }
 
