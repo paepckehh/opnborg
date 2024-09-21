@@ -17,4 +17,5 @@ type OPNCall struct {
 	SSL       bool   // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
 	Git       bool   // create and commit all xml files & changes to local .git repo, default: true
 	Log       bool   // if true, write to syslog (daemon mode) instead to stdout, default: false
+	Debug     bool   // defaults to false
 }

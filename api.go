@@ -31,6 +31,7 @@ func ReadConfig() (*OPNCall, error) {
 		Daemon:    os.Getenv("OPN_DAEMON") == "0",
 		Git:       os.Getenv("OPN_NOGIT") == "0",
 		SSL:       os.Getenv("OPN_NOSSL") == "1",
+		Debug:     os.Getenv("DEBUG") == "0",
 	}, nil
 }
 
