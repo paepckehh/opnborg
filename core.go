@@ -12,7 +12,10 @@ import (
 )
 
 // const
-const _ext = ".xml"
+const (
+	_ext    = ".xml"
+	_latest = "latest"
+)
 
 // backupSrv, perform individual server backup
 func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
@@ -55,10 +58,20 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + err.Error())
 		return
 	}
+
+	// set latest symlink
+	linkName := filepath.Join(config.Path, server, _latest)
+	if err = os.Symlink(fileName, filepath.Join(config.Path, server, _latest)); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + linkName)
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + err.Error())
+		return
+	}
+
+	// backup success
 	displayChan <- []byte("[BACKUP][OK][SUCCESS:WRITE-XML-FILE] " + fileName)
 }
 
-// fetchXML file from server
+// fetchXML file from target server
 func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 
 	// parse & assemble target url
