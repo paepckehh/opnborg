@@ -40,35 +40,51 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		config.Path = filepath.Dir("./")
 	}
 
-	// prep timestamps
+	// check xml file into storage
+	if err = checkIntoStore(config, server, serverXML, now); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
+		return
+	}
+	displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-STORE-CHECKIN]")
+}
+
+// checkIntoStore the XML file
+func checkIntoStore(config *OPNCall, server string, serverXML []byte, now time.Time) (err error) {
+
+	// prep storage
 	year, month, _ := now.Date()
 
 	// create store structure
-	dirPath := filepath.Join(config.Path, server, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
-	if err := os.MkdirAll(dirPath, 0770); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + dirPath)
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + err.Error())
-		return
+	store := filepath.Join(strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
+	fullPath := filepath.Join(config.Path, server, store)
+	if err := os.MkdirAll(fullPath, 0770); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + fullPath)
+		return err
+	}
+
+	// change thread into store-root (needed for relative symlink creation)
+	dirStoreRoot := filepath.Join(config.Path, server)
+	if err := os.Chdir(dirStoreRoot); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CHANGE-INTO-STORAGE-DIR] " + dirStoreRoot)
+		return err
 	}
 
 	// write server XML file
-	fileName := filepath.Join(dirPath, now.Format(time.RFC3339)+"-"+server+_ext)
-	if err = os.WriteFile(fileName, serverXML, 0770); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + fileName)
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + err.Error())
-		return
+	file := filepath.Join(store, now.Format(time.RFC3339)+"-"+server+_ext)
+	if err = os.WriteFile(file, serverXML, 0770); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + file)
+		return err
 	}
 
-	// set latest symlink
-	linkName := filepath.Join(config.Path, server, _latest)
-	if err = os.Symlink(fileName, filepath.Join(config.Path, server, _latest)); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + linkName)
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + err.Error())
-		return
-	}
+	// remove pre-existing latest symlink (if any)
+	_ = os.Remove(_latest)
 
-	// backup success
-	displayChan <- []byte("[BACKUP][OK][SUCCESS:WRITE-XML-FILE] " + fileName)
+	// write latest symlink
+	if err = os.Symlink(file, _latest); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + server)
+		return err
+	}
+	return nil
 }
 
 // fetchXML file from target server
