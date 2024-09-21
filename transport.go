@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+const (
+	_empty        = ""
+	_userAgent    = "opnborg"
+	_apiBackupXML = "/api/core/backup/download/this" // no support for legacy api endpoints
+)
+
 // fetchXML file from target server
 func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 
@@ -68,7 +74,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 // getTlsConf harden tls object settings
 func getTlsConf(config *OPNCall) *tls.Config {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify:     !config.SSL,
+		InsecureSkipVerify:     config.SSL,
 		SessionTicketsDisabled: true,
 		Renegotiation:          0,
 		MinVersion:             tls.VersionTLS13,

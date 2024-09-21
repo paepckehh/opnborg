@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"paepcke.de/opnborg"
@@ -21,14 +20,10 @@ func main() {
 	fmt.Println(_app + "[STARTUP]" + _version)
 
 	// Configure
-	config, err := opnborg.ReadConfig()
+	config, err := opnborg.Setup()
 	if err != nil {
 		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
 		os.Exit(1)
-	}
-	config.Log = false
-	if config.Path == "" {
-		config.Path = filepath.Dir("./")
 	}
 
 	// Perform Backup of all Appliances xml configuration

@@ -2,6 +2,8 @@ package opnborg
 
 import (
 	"encoding/xml"
+	"errors"
+	"fmt"
 	"os"
 	"sync"
 )
@@ -48,4 +50,20 @@ func padMonth(in string) string {
 		return "0" + in
 	}
 	return in
+}
+
+// checkRequired env input
+func checkRequired() error {
+	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
+		return errors.New(fmt.Sprintf("Add at least one target server to env var 'OPN_TARGETS' (multi valued, comma seperated)"))
+	}
+
+	if _, ok := os.LookupEnv("OPN_APIKEY"); !ok {
+		return errors.New(fmt.Sprintf("Set env var 'OPN_APIKEY' to your opnsense api key"))
+	}
+
+	if _, ok := os.LookupEnv("OPN_APISECRET"); !ok {
+		return errors.New(fmt.Sprintf("Set env var 'OPN_APISECRET' to your opnsense api key secret"))
+	}
+	return nil
 }

@@ -28,7 +28,9 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 
 	// check for changes
 	sum := sha256.Sum256(serverXML)
-	if sum == lastSum(config, server) {
+	last := lastSum(config, server)
+	// debug: fmt.Printf("fetch: %s --- last: %s\n", sum[:], last[:])
+	if sum == last {
 		if config.Debug {
 			displayChan <- []byte("[BACKUP][SERVER][NO-CHANGE] " + server)
 		}

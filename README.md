@@ -52,7 +52,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
             Example:    X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
                         OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
 
-- Enviroment Variables bools must set exactly case senitive to 'true' to enable, anything else will default to false.
+- Enviroment Variables bools will always be true if set (the value is not relevant)
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
 - ATT: HTTPS chain verification via system os trust store(s) clusterfuck is disabled by default (OPN_NOSSL='true'), use OPN_TLSKEYPIN !
 ```
