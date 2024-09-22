@@ -12,13 +12,14 @@ import (
 
 // const
 const (
-	_ext      = ".xml"
-	_archive  = ".archive"
-	_tab      = "	"
-	_linefeed = "\n"
-	_link     = "link"
-	_current  = "current.xml"
-	_hashFile = "sha256.db"
+	_ext        = ".xml"
+	_archive    = ".archive"
+	_tab        = "	"
+	_linefeed   = "\n"
+	_current    = "current"
+	_last       = "last"
+	_currentXML = "current.xml"
+	_hashFile   = "sha256.db"
 )
 
 // lastSum check last XML file sha256 checksum
@@ -49,10 +50,13 @@ func checkIntoStore(config *OPNCall, server string, serverXML []byte, ts time.Ti
 		return err
 	}
 
-	// write server XML file
+	// remove pre-existing last symlink (if any exist)
+	_ = os.Remove(_currentXML)
+
+	// write server XML file(s)
 	name := ts.UTC().Format("20060102T150405Z") + "-" + server + _ext
 	archiveFile := filepath.Join(store, name)
-	if err := os.WriteFile(_current, serverXML, 0660); err != nil {
+	if err := os.WriteFile(_currentXML, serverXML, 0660); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-CURRENTFILE] " + server)
 		return err
 	}
@@ -77,11 +81,14 @@ func checkIntoStore(config *OPNCall, server string, serverXML []byte, ts time.Ti
 		return err
 	}
 
-	// remove pre-existing symlink (if any)
-	_ = os.Remove(_link)
+	// remove pre-existing last symlink (if any exist)
+	_ = os.Remove(_last)
 
-	// write symlink
-	if err = os.Symlink(archiveFile, _link); err != nil {
+	// rename current link pointer to last (if any exist)
+	_ = os.Rename(_current, _last)
+
+	// write current symlink pointer
+	if err = os.Symlink(archiveFile, _current); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK] " + server)
 		return err
 	}
