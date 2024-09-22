@@ -30,6 +30,8 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_NOSSL     - do not verify SSL Certificates [bool: defaults to *'true'*, SSL SystemCertStore is pointless, use OPN_TLSKEYPIN!]
 - OPN_DEBUG     - verbose mode
 
+# OPN Manager Mode
+- OPN_MASTER    - define a master server, opnborg will replicate all config changes on the master to the hive [string]
 ```
 # OPTIONS FAQ
 
