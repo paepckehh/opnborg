@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,11 +18,11 @@ type OPNCall struct {
 	Path      string // OPNSense Backup Files Target Path, default:'.'
 	TLSKeyPin string // TLS Connection Server Certificate KeyPIN
 	AppName   string // Display and SysLog Application Name
+	Email     string // Git Commiter eMail Address (default: git@opnborg)
 	Sleep     int64  // number of seconds to sleep between polls
 	Daemon    bool   // daemonize (run in background), default: false
 	SSL       bool   // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
 	Git       bool   // create and commit all xml files & changes to local .git repo, default: true
-	Log       bool   // if true, write to syslog (daemon mode) instead to stdout, default: false
 	Debug     bool   // defaults to false
 }
 
@@ -41,6 +40,7 @@ func Setup() (*OPNCall, error) {
 		Key:       os.Getenv("OPN_APIKEY"),
 		Secret:    os.Getenv("OPN_APISECRET"),
 		Path:      os.Getenv("OPN_PATH"),
+		Email:     os.Getenv("OPN_EMAIL"),
 		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
 	}
 
@@ -63,12 +63,22 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
 		config.Git = false
 	}
+	// configure eMail default
+	if config.Email == "" {
+		config.Email = "git@opnborg"
+	}
+	// configure sleep for daemon mode
 	if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
 		var err error
 		config.Sleep, err = strconv.ParseInt(sleep, 10, 64)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("if env var 'OPN_SLEEP' is set, it must contain a number in seconds without prefix or suffix"))
+			return nil, errors.New(fmt.Sprintf("when env var 'OPN_SLEEP' is set, it must contain a number in seconds without prefix or suffix"))
 		}
+		if config.Daemon == false {
+			return nil, errors.New(fmt.Sprintf("env var 'OPN_SLEEP' is defined, but OPN_DAEMON Mode is disabled"))
+		}
+	} else {
+		config.Sleep = 3600
 	}
 	if config.Sleep < 5 {
 		config.Sleep = 5
@@ -80,7 +90,6 @@ func Setup() (*OPNCall, error) {
 func Backup(config *OPNCall) error {
 
 	// setup
-	var wg, display sync.WaitGroup
 	if config.AppName == "" {
 		config.AppName = "[OPNBORG-API]"
 	}
@@ -103,14 +112,28 @@ func Backup(config *OPNCall) error {
 
 		// wait till all worker done
 		wg.Wait()
+
+		// check files into local git repo
+		if config.Git {
+			if err := gitCheckIn(config); err != nil {
+				displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL]")
+				return err
+			}
+		}
+
+		// finish
 		if config.Debug {
 			displayChan <- []byte("[FINISH][BACKUP][ALL]")
 		}
+
+		// exit if not in daemon mode
 		if !config.Daemon {
 			close(displayChan)
 			display.Wait()
 			return nil
 		}
+
+		// wait loop
 		time.Sleep(time.Duration(config.Sleep) * time.Second)
 	}
 }
