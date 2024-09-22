@@ -19,7 +19,6 @@ const (
 	_extGIT     = "git"
 	_extGITOPT1 = "show"
 	_extGITOPT2 = "-c"
-	_extGITOPT3 = "--color=always"
 )
 
 // gitCheckIn commits all config files into a local repository
@@ -85,7 +84,7 @@ func gitCheckIn(config *OPNCall) error {
 	// displayChan <- buf.Bytes()
 	// err = quick.Highlight(&buf, obj.String(), "diff", "TTY16m", "pygments")
 	if config.extGIT {
-		cmd := exec.Command(_extGIT, _extGITOPT1, _extGITOPT2, _extGITOPT3)
+		cmd := exec.Command(_extGIT, _extGITOPT1, _extGITOPT2)
 		o, err := cmd.Output()
 		if err != nil {
 			fmt.Println(err.Error())

@@ -24,12 +24,12 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 # OPTIONAL:
 - OPN_PATH      - specify a target path (absolut or releative) to store backups [string: defaults to '.']
 - OPN_TLSKEYPIN - OPNsense TLS MitM proof Certificate Keypin [string]
-- OPN_DAEMON    - run app in daemon mode, never quit, fetch once every hour [bool: defaults to 'false']
 - OPN_SLEEP     - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
 - OPN_EMAIL     - specify email address contact for local git commits [string, defaults to git@opnborg]
+- OPN_NODAEMON  - do not run app in daemon mode, quit [bool: defaults to 'false']
 - OPN_NOGIT     - do not create & update local git version repo [bool: defaults to 'false']
 - OPN_NOSSL     - do not verify SSL Certificates [bool: defaults to *'true'*, SSL SystemCertStore is pointless, use OPN_TLSKEYPIN!]
-- OPN_DEBUG     - verbose mode
+- OPN_DEBUG     - verbose debug log mode
 
 # OPN Orchestrator (Manager) Mode
 - OPN_MASTER    - define a master server, opnborg will replicate all config changes on the master to all the hive [string]

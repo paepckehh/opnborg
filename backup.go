@@ -36,6 +36,10 @@ func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		}
 		return
 	}
+	// set git global (atomic) worktree state tracker
+	if config.Git {
+		config.dirty.Store(true)
+	}
 
 	// check xml file into storage
 	if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {

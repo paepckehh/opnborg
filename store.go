@@ -13,15 +13,17 @@ import (
 // const
 const (
 	_ext      = ".xml"
+	_archive  = ".archive"
 	_tab      = "	"
 	_linefeed = "\n"
-	_latest   = "latest"
+	_link     = "link"
+	_current  = "current.xml"
 	_hashFile = "sha256.db"
 )
 
 // lastSum check last XML file sha256 checksum
 func lastSum(config *OPNCall, server string) [32]byte {
-	fileName := filepath.Join(config.Path, server, _latest)
+	fileName := filepath.Join(config.Path, server, _current)
 	data, _ := ioutil.ReadFile(fileName)
 	return sha256.Sum256(data)
 }
@@ -33,7 +35,7 @@ func checkIntoStore(config *OPNCall, server string, serverXML []byte, ts time.Ti
 	year, month, _ := ts.Date()
 
 	// create store structure
-	store := filepath.Join(strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
+	store := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	fullPath := filepath.Join(config.Path, server, store)
 	if err := os.MkdirAll(fullPath, 0770); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + fullPath)
@@ -49,9 +51,13 @@ func checkIntoStore(config *OPNCall, server string, serverXML []byte, ts time.Ti
 
 	// write server XML file
 	name := ts.UTC().Format("20060102T150405Z") + "-" + server + _ext
-	file := filepath.Join(store, name)
-	if err := os.WriteFile(file, serverXML, 0660); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + file)
+	archiveFile := filepath.Join(store, name)
+	if err := os.WriteFile(_current, serverXML, 0660); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-CURRENTFILE] " + server)
+		return err
+	}
+	if err := os.WriteFile(archiveFile, serverXML, 0660); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + archiveFile)
 		return err
 	}
 
@@ -71,12 +77,12 @@ func checkIntoStore(config *OPNCall, server string, serverXML []byte, ts time.Ti
 		return err
 	}
 
-	// remove pre-existing latest symlink (if any)
-	_ = os.Remove(_latest)
+	// remove pre-existing symlink (if any)
+	_ = os.Remove(_link)
 
-	// write latest symlink
-	if err = os.Symlink(file, _latest); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-LATEST-SYMLINK] " + server)
+	// write symlink
+	if err = os.Symlink(archiveFile, _link); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK] " + server)
 		return err
 	}
 	return nil

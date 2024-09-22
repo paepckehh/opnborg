@@ -7,23 +7,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 // OPNCall
 type OPNCall struct {
-	Targets   string // list of OPNSense Appliances, csv comma seperated
-	Key       string // OPNSense Backup User API Key (required)
-	Secret    string // OPNSense Backup User API Secret (required)
-	Path      string // OPNSense Backup Files Target Path, default:'.'
-	TLSKeyPin string // TLS Connection Server Certificate KeyPIN
-	AppName   string // Display and SysLog Application Name
-	Email     string // Git Commiter eMail Address (default: git@opnborg)
-	Sleep     int64  // number of seconds to sleep between polls
-	Daemon    bool   // daemonize (run in background), default: false
-	SSL       bool   // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
-	Git       bool   // create and commit all xml files & changes to local .git repo, default: true
-	Debug     bool   // defaults to false
+	Targets   string      // list of OPNSense Appliances, csv comma seperated
+	Key       string      // OPNSense Backup User API Key (required)
+	Secret    string      // OPNSense Backup User API Secret (required)
+	Path      string      // OPNSense Backup Files Target Path, default:'.'
+	TLSKeyPin string      // TLS Connection Server Certificate KeyPIN
+	AppName   string      // Display and SysLog Application Name
+	Email     string      // Git Commiter eMail Address (default: git@opnborg)
+	Sleep     int64       // number of seconds to sleep between polls
+	Daemon    bool        // daemonize (run in background), default: false
+	Debug     bool        // verbose debug logs, defaults to false
+	SSL       bool        // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
+	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
+	extGIT    bool        // when available, use external git for verification
+	dirty     atomic.Bool // git global (atomic) worktree state
 }
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -50,18 +53,21 @@ func Setup() (*OPNCall, error) {
 	}
 
 	// validate bools, set defaults
-	if _, ok := os.LookupEnv("OPN_DAEMON"); ok {
-		config.Daemon = true
-	}
-	if _, ok := os.LookupEnv("OPN_NOSSL"); ok {
-		config.SSL = true
-	}
+	config.Debug = false
 	if _, ok := os.LookupEnv("OPN_DEBUG"); ok {
 		config.Debug = true
+	}
+	config.Daemon = true
+	if _, ok := os.LookupEnv("OPN_NODAEMON"); ok {
+		config.Daemon = false
 	}
 	config.Git = true
 	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
 		config.Git = false
+	}
+	config.SSL = false
+	if _, ok := os.LookupEnv("OPN_NOSSL"); ok {
+		config.SSL = true
 	}
 	// configure eMail default
 	if config.Email == "" {
@@ -80,9 +86,10 @@ func Setup() (*OPNCall, error) {
 	} else {
 		config.Sleep = 3600
 	}
-	if config.Sleep < 5 {
-		config.Sleep = 5
+	if config.Sleep < 4 {
+		config.Sleep = 4
 	}
+	config.extGIT = true
 	return config, nil
 }
 
@@ -101,6 +108,11 @@ func Backup(config *OPNCall) error {
 	servers := strings.Split(config.Targets, ",")
 	for {
 
+		// reset global (atomic) git worktree state tracker
+		if config.Git {
+			config.dirty.Store(false)
+		}
+
 		// spinup individual worker for every server
 		if config.Debug {
 			displayChan <- []byte("[STARTING][BACKUP]")
@@ -114,11 +126,15 @@ func Backup(config *OPNCall) error {
 		wg.Wait()
 
 		// check files into local git repo
-		if config.Git {
-			if err := gitCheckIn(config); err != nil {
-				displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL]")
-				return err
+		if config.dirty.Load() {
+			if config.Git {
+				if err := gitCheckIn(config); err != nil {
+					displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL]")
+					return err
+				}
+				displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
 			}
+			displayChan <- []byte("[CHANGES-DETECTED][UPDATES-DONE][FINISH]")
 		}
 
 		// finish
