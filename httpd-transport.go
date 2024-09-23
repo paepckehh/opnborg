@@ -14,7 +14,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 	if config.CAcert != "" && config.CAkey != "" {
 
 		// read cert & key from file
-		key, err := tls.LoadX509KeyPair(c.CAcert, c.CAkey)
+		key, err := tls.LoadX509KeyPair(config.CAcert, config.CAkey)
 		if err != nil {
 			return listen, err
 		}
@@ -23,7 +23,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 		caClient := x509.NewCertPool()
 		clientAuthMode := tls.VerifyClientCertIfGiven
 		if config.CAclient != "" {
-			cert, err := os.ReadFile(c.CAclient)
+			cert, err := os.ReadFile(config.CAclient)
 			if err != nil {
 				return listen, err
 			}
@@ -31,7 +31,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 			clientAuthMode = tls.RequireAndVerifyClientCert
 		}
 
-		// setup hardened tls13-chachapoly1305-only https listener
+		// setup hardened tls13-chachapoly1305-only https http1.1 listener
 		tlsConf := &tls.Config{
 			Certificates:           []tls.Certificate{key},
 			ClientCAs:              caClient,
@@ -44,7 +44,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 			SessionTicketsDisabled: true,
 			Renegotiation:          0,
 		}
-		return tls.Listen("tcp", c.ListenAddr, tlsConf)
+		return tls.Listen("tcp", config.ListenAddr, tlsConf)
 	}
-	return net.Listen("tcp", c.ListenAddr)
+	return net.Listen("tcp", config.ListenAddr)
 }

@@ -7,10 +7,20 @@ import (
 	"paepcke.de/npad/compress"
 )
 
+const (
+	_ua    = "User-Agent"
+	_utf8  = "text/html;charset=utf-8"
+	_txt   = "text/plain"
+	_svg   = "image/svg+xml"
+	_ctype = "Content-Type"
+	_title = "Title"
+	_app   = "OPNBORG"
+)
+
 // getIconHandler
 func getIconHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		r = _headSVG(r)
+		r = headSVG(r)
 		compress.WriteTransportCompressedPage(_icon, r, q, true)
 	}
 	return http.HandlerFunc(h)
@@ -19,7 +29,7 @@ func getIconHandler() http.Handler {
 // getIndexHandler
 func getIndexHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		r = _headHTML(r)
+		r = headHTML(r)
 		switch q.Method {
 		case "GET":
 			compress.WriteTransportCompressedPage(getStartHTML(), r, q, true)
@@ -36,4 +46,18 @@ func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
 	return s.String()
+}
+
+// headHTML
+func headHTML(r http.ResponseWriter) http.ResponseWriter {
+	r.Header().Set(_ctype, _utf8)
+	r.Header().Set(_title, _app)
+	return r
+}
+
+// headSVG
+func headSVG(r http.ResponseWriter) http.ResponseWriter {
+	r.Header().Set(_ctype, _svg)
+	r.Header().Set(_title, _app)
+	return r
 }

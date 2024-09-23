@@ -13,20 +13,24 @@ import (
 
 // OPNCall
 type OPNCall struct {
-	Targets   string      // list of OPNSense Appliances, csv comma seperated
-	Key       string      // OPNSense Backup User API Key (required)
-	Secret    string      // OPNSense Backup User API Secret (required)
-	Path      string      // OPNSense Backup Files Target Path, default:'.'
-	TLSKeyPin string      // TLS Connection Server Certificate KeyPIN
-	AppName   string      // Display and SysLog Application Name
-	Email     string      // Git Commiter eMail Address (default: git@opnborg)
-	Sleep     int64       // number of seconds to sleep between polls
-	Daemon    bool        // daemonize (run in background), default: false
-	Debug     bool        // verbose debug logs, defaults to false
-	SSL       bool        // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
-	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
-	extGIT    bool        // when available, use external git for verification
-	dirty     atomic.Bool // git global (atomic) worktree state
+	Targets    string      // list of OPNSense Appliances, csv comma seperated
+	Key        string      // OPNSense Backup User API Key (required)
+	Secret     string      // OPNSense Backup User API Secret (required)
+	Path       string      // OPNSense Backup Files Target Path, default:'.'
+	TLSKeyPin  string      // TLS Connection Server Certificate KeyPIN
+	AppName    string      // Display and SysLog Application Name
+	Email      string      // Git Commiter eMail Address (default: git@opnborg)
+	CAcert     string      // httpd server certificate (pem encoded x.509 certificate chain)
+	CAkey      string      // httpd server key (pem encoded key)
+	CAclient   string      // httpd client CA (will enforce mTLS only mode)
+	ListenAddr string      // HTTPD Listen IP and Port
+	Sleep      int64       // number of seconds to sleep between polls
+	Daemon     bool        // daemonize (run in background), default: false
+	Debug      bool        // verbose debug logs, defaults to false
+	SSL        bool        // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
+	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
+	extGIT     bool        // when available, use external git for verification
+	dirty      atomic.Bool // git global (atomic) worktree state
 }
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -39,12 +43,16 @@ func Setup() (*OPNCall, error) {
 
 	// setup from env
 	config := &OPNCall{
-		Targets:   os.Getenv("OPN_TARGETS"),
-		Key:       os.Getenv("OPN_APIKEY"),
-		Secret:    os.Getenv("OPN_APISECRET"),
-		Path:      os.Getenv("OPN_PATH"),
-		Email:     os.Getenv("OPN_EMAIL"),
-		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
+		Targets:    os.Getenv("OPN_TARGETS"),
+		Key:        os.Getenv("OPN_APIKEY"),
+		Secret:     os.Getenv("OPN_APISECRET"),
+		Path:       os.Getenv("OPN_PATH"),
+		Email:      os.Getenv("OPN_EMAIL"),
+		TLSKeyPin:  os.Getenv("OPN_TLSKEYPIN"),
+		CAcert:     os.Getenv("OPN_CACERT"),
+		CAkey:      os.Getenv("OPN_CAKEY"),
+		CAclient:   os.Getenv("OPN_CACLIENT"),
+		ListenAddr: os.Getenv("OPN_LISTEN"),
 	}
 
 	// sanitize input
@@ -72,6 +80,10 @@ func Setup() (*OPNCall, error) {
 	// configure eMail default
 	if config.Email == "" {
 		config.Email = "git@opnborg"
+	}
+	// configure httpd defaults
+	if config.ListenAddr == "" {
+		config.ListenAddr = "0.0.0.0:6464"
 	}
 	// configure sleep for daemon mode
 	if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
@@ -101,7 +113,10 @@ func Backup(config *OPNCall) error {
 		config.AppName = "[OPNBORG-API]"
 	}
 
-	// spinup Log/Display Engine
+	// spin up webserver
+	go startWeb(config)
+
+	// spin up Log/Display Engine
 	display.Add(1)
 	go startLog(config)
 

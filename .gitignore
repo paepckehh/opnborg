@@ -26,3 +26,6 @@ go.work.sum
 
 # backup test opn dir 
 192*
+
+# dev internal archive
+.attic
