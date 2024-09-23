@@ -67,6 +67,15 @@ func headSVG(r http.ResponseWriter) http.ResponseWriter {
 	return r
 }
 
+// addSecurityHeader
+func addSecurityHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		next.ServeHTTP(w, req)
+	})
+}
+
 // gitLog
 func gitLog() string {
 

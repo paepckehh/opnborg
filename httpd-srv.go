@@ -32,9 +32,8 @@ func startWeb(config *OPNCall) {
 	mux := http.NewServeMux()
 
 	// handler
-	mux.Handle("/", getIndexHandler())
-	mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path))))
-	// mux.Handle("/files/", getFilesHandler())
+	mux.Handle("/", addSecurityHeader(getIndexHandler()))
+	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path)))))
 	// mux.Handle("/icon.svg", getFavIconHandler())
 
 	// httpsrv
