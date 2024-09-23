@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// get https listener
+// getHTTPTLS provides the tcp listener with an hardened tls configuration
 func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 
 	// return plain text listener when not CAcert
