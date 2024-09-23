@@ -74,7 +74,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 // getTlsConf harden tls object settings
 func getTlsConf(config *OPNCall) *tls.Config {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify:     config.SSL,
+		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
 		Renegotiation:          0,
 		MinVersion:             tls.VersionTLS13,

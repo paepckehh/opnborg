@@ -16,8 +16,8 @@ const (
 	_archive    = ".archive"
 	_tab        = "	"
 	_linefeed   = "\n"
-	_current    = "current"
-	_last       = "last"
+	_current    = "CONFIG-CURRENT"
+	_last       = "CONFIG-LAST"
 	_currentXML = "current.xml"
 	_hashFile   = "sha256.db"
 )

@@ -27,7 +27,6 @@ type OPNCall struct {
 	Sleep      int64       // number of seconds to sleep between polls
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
-	SSL        bool        // enforce verify SSL trustchain against system SSL Trust store (use TLSKeyPIN), default: false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
@@ -72,10 +71,6 @@ func Setup() (*OPNCall, error) {
 	config.Git = true
 	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
 		config.Git = false
-	}
-	config.SSL = false
-	if _, ok := os.LookupEnv("OPN_NOSSL"); ok {
-		config.SSL = true
 	}
 	// configure eMail default
 	if config.Email == "" {

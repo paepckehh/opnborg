@@ -32,7 +32,6 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_LISTEN    - HTTPD Listen Address (string: defaults to http:0.0.0:6464)
 - OPN_NODAEMON  - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
 - OPN_NOGIT     - do not create & update local git version repo [bool: defaults to 'false']
-- OPN_NOSSL     - do not verify SSL Certificates [bool: defaults to *'true'*, SSL SystemCertStore is pointless, use OPN_TLSKEYPIN!]
 - OPN_DEBUG     - verbose debug log mode [bool: defaults to 'false']
 
 # OPN Orchestrator (Manager) Mode (WIP)
@@ -62,9 +61,9 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
                         OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
 
 - The internal webserver is listening to on [any] interface port 6464 -> 0.0.0.0:6464 (http://localhost:6464) 
-- Enviroment Variables bools will always be true if set (the value is not relevant)
+- Enviroment Variables bools will always be true if defined (the value you set is not relevant)
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
-- ATT: HTTPS chain verification via system os trust store(s) clusterfuck is disabled by default (OPN_NOSSL='true'), use OPN_TLSKEYPIN !
+- ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
 
 # HOW TO INSTALL

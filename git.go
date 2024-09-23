@@ -74,6 +74,12 @@ func gitCheckIn(config *OPNCall) error {
 		return err
 	}
 
+	// repack if possible
+	_ = repo.RepackObjects(&git.RepackConfig{
+		UseRefDeltas:             true,
+		OnlyDeletePacksOlderThan: time.Now(),
+	})
+
 	// Fetch & Verify HEAD to show last commit
 	obj, err := repo.CommitObject(commit)
 	if err != nil {

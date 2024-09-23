@@ -3,7 +3,10 @@ package opnborg
 import (
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"paepcke.de/npad/compress"
 )
 
@@ -45,6 +48,8 @@ func getIndexHandler() http.Handler {
 func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
+	s.WriteString(_filesLink)
+	s.WriteString(gitLog())
 	return s.String()
 }
 
@@ -60,4 +65,51 @@ func headSVG(r http.ResponseWriter) http.ResponseWriter {
 	r.Header().Set(_ctype, _svg)
 	r.Header().Set(_title, _app)
 	return r
+}
+
+// gitLog
+func gitLog() string {
+
+	// open git repo
+	repo, err := git.PlainOpen(_currentDir)
+	if err != nil {
+		return err.Error()
+	}
+
+	// identify repo head
+	ref, err := repo.Head()
+	if err != nil {
+		return err.Error()
+	}
+
+	// Fetch Log
+	now := time.Now()
+	since := time.Now().AddDate(0, -14, 0)
+	objIter, err := repo.Log(&git.LogOptions{
+		From:  ref.Hash(),
+		Since: &since,
+		Until: &now,
+	})
+	if err != nil {
+		return err.Error()
+	}
+	var s strings.Builder
+	s.WriteString("<pre>")
+	_ = objIter.ForEach(func(c *object.Commit) error {
+		// hash := c.Hash.String()
+		// line := strings.Split(c.Message, "\n")
+		// s.WriteString(hash[:8])
+		// s.WriteString(c.Message)
+		// s.WriteString(_linefeed)
+		// s.WriteString(_linefeed)
+		// s.WriteString(c.String())
+		s.WriteString(_linefeed)
+		s.WriteString(_linefeed)
+		obj, _ := repo.CommitObject(c.Hash)
+		s.WriteString(obj.String())
+		s.WriteString(_linefeed)
+		return nil
+	})
+	s.WriteString("</pre>")
+	return s.String()
 }

@@ -33,6 +33,7 @@ func startWeb(config *OPNCall) {
 
 	// handler
 	mux.Handle("/", getIndexHandler())
+	mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path))))
 	// mux.Handle("/files/", getFilesHandler())
 	// mux.Handle("/icon.svg", getFavIconHandler())
 
