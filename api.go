@@ -18,6 +18,7 @@ type OPNCall struct {
 	Secret     string      // OPNSense Backup User API Secret (required)
 	Path       string      // OPNSense Backup Files Target Path, default:'.'
 	TLSKeyPin  string      // TLS Connection Server Certificate KeyPIN
+	Master     string      // Master Server to follow for configuration changes
 	AppName    string      // Display and SysLog Application Name
 	Email      string      // Git Commiter eMail Address (default: git@opnborg)
 	CAcert     string      // httpd server certificate (pem encoded x.509 certificate chain)
@@ -30,6 +31,12 @@ type OPNCall struct {
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
+	target     OPNMaster   // OPNMaster target configuration
+}
+
+// OPNMaster
+type OPNMaster struct {
+	packages []string
 }
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -46,6 +53,7 @@ func Setup() (*OPNCall, error) {
 		Key:        os.Getenv("OPN_APIKEY"),
 		Secret:     os.Getenv("OPN_APISECRET"),
 		Path:       os.Getenv("OPN_PATH"),
+		Master:     os.Getenv("OPN_MASTER"),
 		Email:      os.Getenv("OPN_EMAIL"),
 		TLSKeyPin:  os.Getenv("OPN_TLSKEYPIN"),
 		CAcert:     os.Getenv("OPN_CACERT"),
@@ -100,8 +108,8 @@ func Setup() (*OPNCall, error) {
 	return config, nil
 }
 
-// Backup performs a Backup operation
-func Backup(config *OPNCall) error {
+// Start Application
+func Start(config *OPNCall) error {
 
 	// setup
 	if config.AppName == "" {
@@ -117,6 +125,10 @@ func Backup(config *OPNCall) error {
 
 	servers := strings.Split(config.Targets, ",")
 	for {
+		// fetch target configuration from master server
+		if config.Master != "" {
+
+		}
 
 		// reset global (atomic) git worktree state tracker
 		if config.Git {
@@ -129,7 +141,7 @@ func Backup(config *OPNCall) error {
 		}
 		for _, server := range servers {
 			wg.Add(1)
-			go backupSrv(server, config, &wg)
+			go actionSrv(server, config, &wg)
 		}
 
 		// wait till all worker done

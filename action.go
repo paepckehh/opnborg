@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// backupSrv, perform individual server backup
-func backupSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
+// actionSrv, perform individual server backup
+func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 
 	// setup
 	defer wg.Done()

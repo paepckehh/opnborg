@@ -27,7 +27,7 @@ func main() {
 	}
 
 	// Perform Backup of all Appliances xml configuration
-	err = opnborg.Backup(config)
+	err = opnborg.Start(config)
 	if err != nil {
 		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
 		os.Exit(1)
