@@ -26,6 +26,7 @@ type OPNCall struct {
 	CAclient   string      // httpd client CA (will enforce mTLS only mode)
 	ListenAddr string      // HTTPD Listen IP and Port
 	Sleep      int64       // number of seconds to sleep between polls
+	MasterPKG  bool        // enables the syncronisation of all packages installed on master to all targets, default: false
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
@@ -73,6 +74,10 @@ func Setup() (*OPNCall, error) {
 	config.Git = true
 	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
 		config.Git = false
+	}
+	config.MasterPKG = false
+	if _, ok := os.LookupEnv("OPN_MASTER_PKG"); ok {
+		config.MasterPKG = true
 	}
 	// configure eMail default
 	if config.Email == "" {

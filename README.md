@@ -17,25 +17,26 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 
 ```
 # REQUIRED: 
-- OPN_TARGETS   - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
-- OPN_APIKEY    - OPNsense Backup User APIKEY [string, base64 encoded]
-- OPN_APISECRET - OPNsense Backup User APISECRET [string, base64 encoded]
+- OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
+- OPN_APIKEY      - OPNsense Backup User APIKEY [string, base64 encoded]
+- OPN_APISECRET   - OPNsense Backup User APISECRET [string, base64 encoded]
 
 # OPTIONAL:
-- OPN_PATH      - specify a target path (absolut or releative) to store backups [string: defaults to '.']
-- OPN_TLSKEYPIN - OPNsense TLS MitM proof Certificate Keypin [string]
-- OPN_SLEEP     - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
-- OPN_EMAIL     - specify email address contact for local git commits [string: defaults to git@opnborg]
-- OPN_CACERT    - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
-- OPN_CACKEY    - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
-- OPN_CACLIENT  - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
-- OPN_LISTEN    - HTTPD Listen Address (string: defaults to http:0.0.0:6464)
-- OPN_NODAEMON  - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
-- OPN_NOGIT     - do not create & update local git version repo [bool: defaults to 'false']
-- OPN_DEBUG     - verbose debug log mode [bool: defaults to 'false']
+- OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
+- OPN_TLSKEYPIN   - OPNsense TLS MitM proof Certificate Keypin [string]
+- OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
+- OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
+- OPN_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
+- OPN_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
+- OPN_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
+- OPN_LISTEN      - HTTPD Listen Address (string: defaults to http:0.0.0:6464)
+- OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
+- OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
+- OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
 # OPN Orchestrator (Manager) Mode (WIP)
-- OPN_MASTER    - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
+- OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
+- OPN_MASTER_PKG  - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 ```
 # OPTIONS FAQ
 
