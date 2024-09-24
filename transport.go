@@ -24,14 +24,14 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	// parse & assemble target url
 	targetURL := "https://" + server + _apiBackupXML
 	if _, err = url.Parse(targetURL); err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:UNABLE-TO-PARSE-TARGET-URL] " + targetURL)
+		displayChan <- []byte("[FETCH][FAIL:UNABLE-TO-PARSE-TARGET-URL] " + targetURL)
 		return nil, errors.New("[UNABLE-TO-PARSE-TARGET-URL]")
 	}
 
 	// setup request
 	req, err := getRequest(targetURL, _userAgent)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:SETUP-URL] " + targetURL)
+		displayChan <- []byte("[FETCH][FAIL:SETUP-URL] " + targetURL)
 		return nil, errors.New("[UNABLE-TO-SETUP-TARGET-URL]")
 	}
 	req.SetBasicAuth(config.Key, config.Secret)
@@ -45,8 +45,8 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	client.Timeout = time.Duration(4 * time.Second)
 	body, err := client.Do(req)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:TLS-CONNECT] " + targetURL)
-		displayChan <- []byte("[BACKUP][FAIL:TLS-CONNECT] " + err.Error())
+		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + targetURL)
+		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + err.Error())
 		return nil, errors.New("[UNABLE-TO-TLS-CONNECT-SERVER]")
 	}
 
@@ -54,20 +54,20 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	defer body.Body.Close()
 	data, err = io.ReadAll(body.Body)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][FAIL:READ-BODY] " + targetURL)
-		displayChan <- []byte("[BACKUP][FAIL:READ-BODY][ERROR] " + err.Error())
+		displayChan <- []byte("[FETCH][FAIL:READ-BODY] " + targetURL)
+		displayChan <- []byte("[FETCH][FAIL:READ-BODY][ERROR] " + err.Error())
 		return nil, errors.New("[UNABLE-TO-READ-XML-BODY]")
 	}
 	if config.Debug {
-		displayChan <- []byte("[BACKUP][OK][SUCCESS:FETCH] " + targetURL)
+		displayChan <- []byte("[FETCH][OK][SUCCESS:FETCH] " + targetURL)
 	}
 	if isValidXML(string(data)) {
 		if config.Debug {
-			displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-VALIDATION] " + targetURL)
+			displayChan <- []byte("[FETCH][OK][SUCCESS:XML-VALIDATION] " + targetURL)
 		}
 		return data, nil
 	}
-	displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-VALIDATION] " + targetURL)
+	displayChan <- []byte("[FETCH][ERROR][FAIL:XML-VALIDATION] " + targetURL)
 	return nil, errors.New("[INVALID-XML-FILE]")
 }
 

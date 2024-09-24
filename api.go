@@ -31,12 +31,6 @@ type OPNCall struct {
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
-	target     OPNMaster   // OPNMaster target configuration
-}
-
-// OPNMaster
-type OPNMaster struct {
-	packages []string
 }
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -125,9 +119,15 @@ func Start(config *OPNCall) error {
 
 	servers := strings.Split(config.Targets, ",")
 	for {
+		// init
+		var err error
+
 		// fetch target configuration from master server
 		if config.Master != "" {
-
+			config, err = readMasterConf(config)
+			if err != nil {
+				displayChan <- []byte("[MASTER][FAIL-TO-READ-CONFIG]" + err.Error())
+			}
 		}
 
 		// reset global (atomic) git worktree state tracker
