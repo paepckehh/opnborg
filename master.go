@@ -6,28 +6,6 @@ import (
 	"fmt"
 )
 
-// opnsense
-type opnsense struct {
-	XMLName xml.Name `xml:"opnsense"`
-	text    string   `xml:,"chardata"`
-	system  struct {
-		text    string `xml:",chardata"`
-		plugins string `xml:"plugins"`
-	} `xml:"system"`
-}
-
-// system
-type system struct {
-	XMLName xml.Name `xml:"system"`
-	plugins plugins
-}
-
-// plugins
-type plugins struct {
-	XMLName xml.Name `xml:"plugins"`
-	value   string   `xml:",chardata"`
-}
-
 // readMasterConf
 func readMasterConf(config *OPNCall) (*OPNCall, error) {
 
