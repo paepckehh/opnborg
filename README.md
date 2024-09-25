@@ -49,7 +49,9 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
     
     - Go back to user 'backup' via -> Edit (new option sections magically appear)
         - Effective Privileges -> Edit 
-            - Diagnostics: Configuration History (tick allowed box & 'Save' button)
+            - Diagnostics: Configuration History -> tick allowed box [for system backups]
+            - System: Firmware -> tick allowed box [only needed for automatic plugin/pkg management]
+            - click 'Save' button to activate
         - API Keys -> Add (Create API Key): The API Key & Secret will download to your browser download folder as file
 
 - How to lock down the TLS Session MitM proof via 'OPN_TLSKEYPIN'? 
