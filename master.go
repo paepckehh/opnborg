@@ -3,18 +3,29 @@ package opnborg
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 )
 
 // opnsense
 type opnsense struct {
-	XMLName xml.Name `xml:opnsense`
-	system  system
+	XMLName xml.Name `xml:"opnsense"`
+	text    string   `xml:,"chardata"`
+	system  struct {
+		text    string `xml:",chardata"`
+		plugins string `xml:"plugins"`
+	} `xml:"system"`
 }
 
 // system
 type system struct {
-	XMLName xml.Name `xml:system`
-	plugins string
+	XMLName xml.Name `xml:"system"`
+	plugins plugins
+}
+
+// plugins
+type plugins struct {
+	XMLName xml.Name `xml:"plugins"`
+	value   string   `xml:",chardata"`
 }
 
 // readMasterConf
@@ -32,18 +43,20 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 		return config, err
 	}
 	// validate XML
-	if isValidXML(string(masterXML)) {
-		if config.Debug {
-			displayChan <- []byte("[MASTER][OK][SUCCESS:XML-VALIDATION] " + config.Master)
-		}
-	} else {
+	if !isValidXML(string(masterXML)) {
 		return config, errors.New("[INVALID-XML-FILE]")
+	}
+	if config.Debug {
+		displayChan <- []byte("[MASTER][OK][SUCCESS:XML-VALIDATION] " + config.Master)
 	}
 
 	// xml unmarshal
 	var opn opnsense
-	xml.Unmarshal(masterXML, &opn)
+	if err = xml.Unmarshal(masterXML, &opn); err != nil {
+		displayChan <- []byte("[MASTER][ERROR][XML-PARSE][PLUGINS]" + err.Error())
+	}
 	displayChan <- []byte("[MASTER][PLUGINS]" + opn.system.plugins)
+	fmt.Println(opn)
 
 	// fin
 	if config.Debug {
