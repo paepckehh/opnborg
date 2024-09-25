@@ -1,10 +1,14 @@
 package opnborg
 
 import (
+	"bytes"
+	"fmt"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"paepcke.de/npad/compress"
@@ -48,8 +52,10 @@ func getIndexHandler() http.Handler {
 func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
+	s.WriteString(_sponsor)
 	s.WriteString(_filesLink)
 	s.WriteString(gitLog())
+	s.WriteString(_fin)
 	return s.String()
 }
 
@@ -78,6 +84,18 @@ func addSecurityHeader(next http.Handler) http.Handler {
 
 // gitLog
 func gitLog() string {
+	cgit := true
+	if cgit {
+		// native c git log
+		cmd := exec.Command("git", "log", "-c", "--since=14d")
+		o, err := cmd.Output()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		var buf bytes.Buffer
+		_ = quick.Highlight(&buf, string(o), "diff", "html", "github")
+		return buf.String()
+	}
 
 	// open git repo
 	repo, err := git.PlainOpen(_currentDir)
