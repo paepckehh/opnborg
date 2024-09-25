@@ -18,7 +18,6 @@ type OPNCall struct {
 	Secret     string      // OPNSense Backup User API Secret (required)
 	Path       string      // OPNSense Backup Files Target Path, default:'.'
 	TLSKeyPin  string      // TLS Connection Server Certificate KeyPIN
-	Master     string      // Master Server to follow for configuration changes
 	AppName    string      // Display and SysLog Application Name
 	Email      string      // Git Commiter eMail Address (default: git@opnborg)
 	CAcert     string      // httpd server certificate (pem encoded x.509 certificate chain)
@@ -26,12 +25,22 @@ type OPNCall struct {
 	CAclient   string      // httpd client CA (will enforce mTLS only mode)
 	ListenAddr string      // HTTPD Listen IP and Port
 	Sleep      int64       // number of seconds to sleep between polls
-	MasterPKG  bool        // enables the syncronisation of all packages installed on master to all targets, default: false
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
+	Sync       struct {
+		Enable bool   // enable Master Server
+		Master string // Master Server Name
+		USR    struct {
+			Enable bool // enable user account sync
+		}
+		PKG struct {
+			Enable   bool     // enable packages sync
+			Packages []string // list of Packages to sync
+		}
+	}
 }
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -48,7 +57,6 @@ func Setup() (*OPNCall, error) {
 		Key:        os.Getenv("OPN_APIKEY"),
 		Secret:     os.Getenv("OPN_APISECRET"),
 		Path:       os.Getenv("OPN_PATH"),
-		Master:     os.Getenv("OPN_MASTER"),
 		Email:      os.Getenv("OPN_EMAIL"),
 		TLSKeyPin:  os.Getenv("OPN_TLSKEYPIN"),
 		CAcert:     os.Getenv("OPN_CACERT"),
@@ -75,9 +83,19 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
 		config.Git = false
 	}
-	config.MasterPKG = false
-	if _, ok := os.LookupEnv("OPN_MASTER_PKG"); ok {
-		config.MasterPKG = true
+	config.Sync.Enable = false
+	config.Sync.PKG.Enable = false
+	config.Sync.USR.Enable = false
+	// config Master
+	if _, ok := os.LookupEnv("OPN_MASTER"); ok {
+		config.Sync.Enable = true
+		config.Sync.Master = os.Getenv("OPN_MASTER")
+		if _, ok := os.LookupEnv("OPN_MASTER_PKG"); ok {
+			config.Sync.PKG.Enable = true
+		}
+		if _, ok := os.LookupEnv("OPN_MASTER_USR"); ok {
+			config.Sync.USR.Enable = true
+		}
 	}
 	// configure eMail default
 	if config.Email == "" {
@@ -128,7 +146,7 @@ func Start(config *OPNCall) error {
 		var err error
 
 		// fetch target configuration from master server
-		if config.Master != "" {
+		if config.Sync.Enable {
 			config, err = readMasterConf(config)
 			if err != nil {
 				displayChan <- []byte("[MASTER][FAIL-TO-READ-CONFIG]" + err.Error())

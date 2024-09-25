@@ -3,6 +3,7 @@ package opnborg
 import (
 	"encoding/xml"
 	"errors"
+	"strings"
 )
 
 // readMasterConf
@@ -14,9 +15,9 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	}
 
 	// fetch current XML from master server
-	masterXML, err := fetchXML(config.Master, config)
+	masterXML, err := fetchXML(config.Sync.Master, config)
 	if err != nil {
-		displayChan <- []byte("[MASTER][ERROR][FAIL:UNABLE-TO-FETCH] " + config.Master)
+		displayChan <- []byte("[MASTER][ERROR][FAIL:UNABLE-TO-FETCH] " + config.Sync.Master)
 		return config, err
 	}
 	// validate XML
@@ -24,7 +25,7 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 		return config, errors.New("[INVALID-XML-FILE]")
 	}
 	if config.Debug {
-		displayChan <- []byte("[MASTER][OK][SUCCESS:XML-VALIDATION] " + config.Master)
+		displayChan <- []byte("[MASTER][OK][SUCCESS:XML-VALIDATION] " + config.Sync.Master)
 	}
 
 	// xml unmarshal
@@ -32,7 +33,10 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	if err = xml.Unmarshal(masterXML, &opn); err != nil {
 		displayChan <- []byte("[MASTER][ERROR][XML-PARSE][PLUGINS]" + err.Error())
 	}
-	displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)
+	if config.Debug {
+		displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)
+	}
+	config.Sync.PKG.Packages = strings.Split(opn.System.Firmware.Plugins, ",")
 
 	// fin
 	if config.Debug {
