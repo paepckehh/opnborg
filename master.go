@@ -3,7 +3,6 @@ package opnborg
 import (
 	"encoding/xml"
 	"errors"
-	"fmt"
 )
 
 // readMasterConf
@@ -29,12 +28,11 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	}
 
 	// xml unmarshal
-	var opn opnsense
+	var opn Opnsense
 	if err = xml.Unmarshal(masterXML, &opn); err != nil {
 		displayChan <- []byte("[MASTER][ERROR][XML-PARSE][PLUGINS]" + err.Error())
 	}
-	displayChan <- []byte("[MASTER][PLUGINS]" + opn.system.plugins)
-	fmt.Println(opn)
+	displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)
 
 	// fin
 	if config.Debug {
