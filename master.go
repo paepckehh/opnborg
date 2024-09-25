@@ -32,6 +32,7 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	var opn Opnsense
 	if err = xml.Unmarshal(masterXML, &opn); err != nil {
 		displayChan <- []byte("[MASTER][ERROR][XML-PARSE][PLUGINS]" + err.Error())
+		return config, err
 	}
 	if config.Debug {
 		displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)

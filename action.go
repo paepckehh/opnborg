@@ -18,9 +18,11 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 
 	// check for pending Orchestrator Tasks
 	if config.Sync.Enable {
-		if err = checkInstallPKG(server, config); err != nil {
-			displayChan <- []byte("[SYNC][PKG][FAIL] " + server)
-			displayChan <- []byte("[SYNC][PKG][FAIL] " + err.Error())
+		if server != config.Sync.Master {
+			if err = checkInstallPKG(server, config); err != nil {
+				displayChan <- []byte("[SYNC][PKG][FAIL] " + server)
+				displayChan <- []byte("[SYNC][PKG][FAIL] " + err.Error())
+			}
 		}
 	}
 

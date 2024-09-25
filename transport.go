@@ -9,14 +9,73 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 const (
-	_empty        = ""
-	_userAgent    = "opnborg"
-	_apiBackupXML = "/api/core/backup/download/this" // no support for legacy api endpoints
+	_empty         = ""
+	_userAgent     = "opnborg"
+	_apiBackupXML  = "/api/core/backup/download/this" // no support for legacy backup api endpoints
+	_apiInstallPKG = "/api/core/firmware/install/"    // install packages
 )
+
+// installPKG
+func installPKG(config *OPNCall, server, pkg string) error {
+
+	// parse & assemble target url
+	targetURL := "https://" + server + _apiInstallPKG + pkg
+	if _, err := url.Parse(targetURL); err != nil {
+		return errors.New("[INSTALL-PKG][UNABLE-TO-PARSE-TARGET-URL]" + targetURL + " " + err.Error())
+	}
+
+	// build payload
+	params := url.Values{}
+	params.Add("", ``)
+	post := strings.NewReader(params.Encode())
+
+	// setup request
+	req, err := http.NewRequest("POST", targetURL, post)
+	if err != nil {
+		return errors.New("[INSTALL-PKG][UNABLE-TO-CREATE-HTTP-REQUEST]" + targetURL + " " + err.Error())
+	}
+	req.Header.Set("User-Agent", _userAgent)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(config.Key, config.Secret)
+
+	// setup transport layer
+	tlsconf := getTlsConf(config)
+	transport := getTransport(tlsconf)
+	client := getClient(transport)
+
+	// connect
+	client.Timeout = time.Duration(4 * time.Second)
+	body, err := client.Do(req)
+	if err != nil {
+		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + targetURL)
+		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + err.Error())
+		return errors.New("[UNABLE-TO-TLS-CONNECT-SERVER]")
+	}
+
+	// read body
+	defer body.Body.Close()
+	msg, err := io.ReadAll(body.Body)
+	if err != nil {
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL)
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY][ERROR] " + err.Error())
+		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]" + string(msg))
+	}
+	if body.StatusCode > 299 {
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL)
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + string(msg))
+		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]")
+	}
+	if config.Debug {
+		displayChan <- []byte("[INSTALL-PKG][OK][FINISH] " + targetURL + " -> " + string(msg))
+	}
+	time.Sleep(12 * time.Second) // wait for action to finish
+	return nil
+}
 
 // fetchXML file from target server
 func fetchXML(server string, config *OPNCall) (data []byte, err error) {

@@ -3,7 +3,7 @@ package opnborg
 const (
 	_root = "<html><body style=\"background-color:orange;\"><center><h1 style=\"color:white;\">[ OPNBORG ]</H1><center></body></html>"
 
-	_filesLink = "<a href=\"./files/\">[ XML-FILES-ARCHIVE ]</a>"
+	_filesLink = "<a href=\"./files/\">[ XML-CONFIG-FILE-ARCHIVE ]</a>"
 
 	_cssLink = "<link rel=\"stylesheet\" href=\"style.css\">"
 
