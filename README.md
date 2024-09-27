@@ -10,7 +10,14 @@
   
 # EXAMPLE 
 ```
-OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET="..." OPN_NOSSL="true" go run paepcke.de/opnborg/cmd/opnborg@latest
+OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@latest
+```
+
+# EXAMPLE ENV CONFIG
+```
+please see:
+- example.sh 
+- example-env-config.sh
 ```
 
 # SUPPORTED OPTIONS 
@@ -34,11 +41,11 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
-# OPN Orchestrator (BorgSYNC) Mode 
+# OPN Orchestrator (BorgSYNC - Mode)
 - OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
-# OPN Operations (BorgOPS) Mode
+# OPN Operations (BorgOPS - Mode)
 - OPN_RSYSLOG     - spin up borg-app internal RFC5424 rsyslog server and auto-configures (enforces) all member opnsense to log/report
 ```
 # OPTIONS FAQ
@@ -85,15 +92,13 @@ go install paepcke.de/opnborg/cmd/opnborg@latest
 
 # STATUS
 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
- - -=# WORK IN PROGRESS - DO NOT USE THIS REPO - MAY IMPLODE ANYTIME #=- 
+ - -=# WORK IN PROGRESS - BUT USABLE #=- 
 
 # TIMELINE 
 
  - 2024
     - September -> Internal Use Only (codesamples)
-    - October   -> Offical Testphase 
+    - October   -> Kickoff Offical Testphase 
     - November  -> Offical Pilot Phase
     - December  -> Release Candidate
  - 2025

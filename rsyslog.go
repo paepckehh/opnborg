@@ -13,6 +13,7 @@ func startRSysLog(config *OPNCall) {
 
 	// terminate if not in daemon mode
 	if !config.Daemon || !config.RSysLog {
+		displayChan <- []byte("[RSYSLOG][TERMINATED)")
 		return
 	}
 
@@ -38,6 +39,11 @@ func startRSysLog(config *OPNCall) {
 			fmt.Println(logParts)
 		}
 	}(channel)
+
+	// info
+	if config.Debug {
+		displayChan <- []byte("[RSYSLOG][SPIN-UP-SERVER]")
+	}
 
 	server.Wait()
 }
