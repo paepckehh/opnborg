@@ -32,7 +32,7 @@ type OPNCall struct {
 	dirty      atomic.Bool // git global (atomic) worktree state
 	RSysLog    struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server
-		Listen string // listen interface and port, default: 0.0.0.0:5140
+		Server string // borg syslog listen interface and port, example: 192.168.0.100:5140
 	}
 	Sync struct {
 		Enable bool   // enable Master Server
@@ -69,6 +69,11 @@ func Setup() (*OPNCall, error) {
 		ListenAddr: os.Getenv("OPN_LISTEN"),
 	}
 
+	// setup app
+	if config.AppName == "" {
+		config.AppName = "[OPNBORG-API]"
+	}
+
 	// sanitize input
 	if config.Path == "" {
 		config.Path = filepath.Dir("./")
@@ -91,10 +96,12 @@ func Setup() (*OPNCall, error) {
 	config.RSysLog.Enable = false
 	if config.Daemon {
 		if _, ok := os.LookupEnv("OPN_RSYSLOG"); ok {
-			config.RSysLog.Enable = true
-			config.RSysLog.Listen = "0.0.0.0:5140"
-			if _, ok := os.LookupEnv("OPN_RSYSLOG_LISTEN"); ok {
-				config.RSysLog.Listen = os.Getenv("OPN_RSYSLOG_LISTEN")
+			if _, ok := os.LookupEnv("OPN_RSYSLOG_SRV"); ok {
+				config.RSysLog.Enable = true
+				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SRV")
+				if len(strings.Split(config.RSysLog.Server, ":")) < 1 {
+					return nil, errors.New(fmt.Sprintf("env var 'OPN_RSYSLOG_SRV' format error, example \"192.168.0.100:5140\""))
+				}
 			}
 		}
 	}
@@ -121,17 +128,16 @@ func Setup() (*OPNCall, error) {
 		config.ListenAddr = "0.0.0.0:6464"
 	}
 	// configure sleep for daemon mode
-	if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
-		var err error
-		config.Sleep, err = strconv.ParseInt(sleep, 10, 64)
-		if err != nil {
-			return nil, errors.New(fmt.Sprintf("when env var 'OPN_SLEEP' is set, it must contain a number in seconds without prefix or suffix"))
+	config.Sleep = 1
+	if config.Daemon {
+		if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
+			var err error
+			config.Sleep, err = strconv.ParseInt(sleep, 10, 64)
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("env var 'OPN_SLEEP' must contain a number in seconds without prefix or suffix"))
+			}
+			config.Sleep = 3600
 		}
-		if config.Daemon == false {
-			return nil, errors.New(fmt.Sprintf("env var 'OPN_SLEEP' is defined, but OPN_DAEMON Mode is disabled"))
-		}
-	} else {
-		config.Sleep = 3600
 	}
 	if config.Sleep < 4 {
 		config.Sleep = 4
@@ -142,11 +148,6 @@ func Setup() (*OPNCall, error) {
 
 // Start Application
 func Start(config *OPNCall) error {
-
-	// setup
-	if config.AppName == "" {
-		config.AppName = "[OPNBORG-API]"
-	}
 
 	// spin up Log/Display Engine
 	display.Add(1)

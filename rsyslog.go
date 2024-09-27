@@ -44,8 +44,7 @@ func startRSysLog(config *OPNCall) {
 	server := syslog.NewServer()
 	server.SetFormat(syslog.RFC5424)
 	server.SetHandler(handler)
-	server.ListenUDP(config.RSysLog.Listen)
-	server.ListenTCP(config.RSysLog.Listen)
+	server.ListenUDP(config.RSysLog.Server)
 	server.Boot()
 
 	go func(channel syslog.LogPartsChannel) {
@@ -56,7 +55,7 @@ func startRSysLog(config *OPNCall) {
 
 	// info
 	if config.Debug {
-		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER] listen interface (tcp/udp): " + config.RSysLog.Listen)
+		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER] listen interface (udp): " + config.RSysLog.Server)
 		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER] logging to: " + logFile)
 	}
 

@@ -2,7 +2,7 @@ package opnborg
 
 import "encoding/xml"
 
-// Opnsense
+// Opnsense xml schema
 type Opnsense struct {
 	XMLName xml.Name `xml:"opnsense"`
 	Text    string   `xml:",chardata"`
@@ -95,6 +95,29 @@ type Opnsense struct {
 			Reboot       string `xml:"reboot"`
 		} `xml:"firmware"`
 		Dnsserver string `xml:"dnsserver"`
+		Backup    struct {
+			Text string `xml:",chardata"`
+			Git  struct {
+				Text     string `xml:",chardata"`
+				Version  string `xml:"version,attr"`
+				Enabled  string `xml:"enabled"`
+				URL      string `xml:"url"`
+				Branch   string `xml:"branch"`
+				Privkey  string `xml:"privkey"`
+				User     string `xml:"user"`
+				Password string `xml:"password"`
+			} `xml:"git"`
+		} `xml:"backup"`
+		Language                string `xml:"language"`
+		DnsallowoverrideExclude string `xml:"dnsallowoverride_exclude"`
+		Dns1gw                  string `xml:"dns1gw"`
+		Dns2gw                  string `xml:"dns2gw"`
+		Dns3gw                  string `xml:"dns3gw"`
+		Dns4gw                  string `xml:"dns4gw"`
+		Dns5gw                  string `xml:"dns5gw"`
+		Dns6gw                  string `xml:"dns6gw"`
+		Dns7gw                  string `xml:"dns7gw"`
+		Dns8gw                  string `xml:"dns8gw"`
 	} `xml:"system"`
 	Interfaces struct {
 		Text string `xml:",chardata"`
@@ -188,8 +211,11 @@ type Opnsense struct {
 		Enable string `xml:"enable"`
 	} `xml:"rrd"`
 	Ntpd struct {
-		Text   string `xml:",chardata"`
-		Prefer string `xml:"prefer"`
+		Text       string `xml:",chardata"`
+		Prefer     string `xml:"prefer"`
+		Logpeer    string `xml:"logpeer"`
+		Logsys     string `xml:"logsys"`
+		Statsgraph string `xml:"statsgraph"`
 	} `xml:"ntpd"`
 	Revision struct {
 		Text        string `xml:",chardata"`
@@ -548,7 +574,23 @@ type Opnsense struct {
 				Maxpreserve string `xml:"maxpreserve"`
 				Maxfilesize string `xml:"maxfilesize"`
 			} `xml:"general"`
-			Destinations string `xml:"destinations"`
+			Destinations struct {
+				Text        string `xml:",chardata"`
+				Destination struct {
+					Text        string `xml:",chardata"`
+					Uuid        string `xml:"uuid,attr"`
+					Enabled     string `xml:"enabled"`
+					Transport   string `xml:"transport"`
+					Program     string `xml:"program"`
+					Level       string `xml:"level"`
+					Facility    string `xml:"facility"`
+					Hostname    string `xml:"hostname"`
+					Certificate string `xml:"certificate"`
+					Port        string `xml:"port"`
+					Rfc5424     string `xml:"rfc5424"`
+					Description string `xml:"description"`
+				} `xml:"destination"`
+			} `xml:"destinations"`
 		} `xml:"Syslog"`
 		OpenVPN struct {
 			Text       string `xml:",chardata"`
