@@ -28,10 +28,13 @@ type OPNCall struct {
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
-	RSysLog    bool        // enable the internal rsyslog server instance & auto configure all targets (req. daemon mode)
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
-	Sync       struct {
+	RSysLog    struct {
+		Enable bool   // enable RFC5424 compliant remote syslog store server
+		Listen string // listen interface and port, default: 0.0.0.0:5140
+	}
+	Sync struct {
 		Enable bool   // enable Master Server
 		Master string // Master Server Name
 		USR    struct {
@@ -84,10 +87,15 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_NODAEMON"); ok {
 		config.Daemon = false
 	}
-	config.RSysLog = false
+	// configure remote syslog server
+	config.RSysLog.Enable = false
 	if config.Daemon {
 		if _, ok := os.LookupEnv("OPN_RSYSLOG"); ok {
-			config.RSysLog = true
+			config.RSysLog.Enable = true
+			config.RSysLog.Listen = "0.0.0.0:5140"
+			if _, ok := os.LookupEnv("OPN_RSYSLOG_LISTEN"); ok {
+				config.RSysLog.Listen = os.Getenv("OPN_RSYSLOG_LISTEN")
+			}
 		}
 	}
 	config.Sync.Enable = false

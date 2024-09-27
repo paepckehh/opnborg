@@ -46,7 +46,8 @@ please see:
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
 # OPN Operations (BorgOPS - Mode)
-- OPN_RSYSLOG     - spin up borg-app internal RFC5424 rsyslog server and auto-configures (enforces) all member opnsense to log/report
+- OPN_RSYSLOG        - spin up borg-app internal RFC5424 rsyslog server and auto-configures (enforces) all member opnsense to log/report
+- OPN_RSYSLOG_LISTEN - [optional] define remote syslog listen ip & port [default: 0.0.0.0:5140]
 ```
 # OPTIONS FAQ
 
