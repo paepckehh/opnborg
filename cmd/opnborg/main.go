@@ -10,7 +10,7 @@ import (
 
 const (
 	_app     = "[OPNBORG-CLI]"
-	_version = "[v0.0.2]"
+	_version = "[v0.0.3]"
 )
 
 func main() {
