@@ -1,11 +1,11 @@
 package opnborg
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
-	logConfig "paepcke.de/opnborg/tinysyslog/config"
-	logServer "paepcke.de/opnborg/tinysyslog/server"
+	"github.com/cnaude/go-syslog/syslog/v3"
 )
 
 // httpd spinup the internal rsyslog server
@@ -24,24 +24,20 @@ func startRSysLog(config *OPNCall) {
 	}
 
 	// setup
-	c := logConfig.New()
-	c.BindAddr = "0.0.0.0:5140"
-	c.FilesystemSink.Filename = filepath.Join(logStore, "syslog.log")
-	c.FilesystemSink.MaxAge = 180  // days
-	c.FilesystemSink.MaxSize = 100 // megabyte
+	channel := make(syslog.LogPartsChannel)
+	handler := syslog.NewChannelHandler(channel)
 
-	// serv
-	srv, err := logServer.New()
-	if err != nil {
-		displayChan <- []byte("[RSYSLOG][ERROR][FATAL] " + err.Error())
-		return
-	}
+	server := syslog.NewServer()
+	server.SetFormat(syslog.RFC5424)
+	server.SetHandler(handler)
+	server.ListenUDP("0.0.0.0:5140")
+	server.Boot()
 
-	// info
-	if config.Debug {
-		displayChan <- []byte("[RSYSLOG][SPIN-UP-SERVER]")
-	}
+	go func(channel syslog.LogPartsChannel) {
+		for logParts := range channel {
+			fmt.Println(logParts)
+		}
+	}(channel)
 
-	// spin up server
-	srv.Run()
+	server.Wait()
 }
