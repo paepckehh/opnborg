@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"tinysyslog/util"
+	"paepcke.de/opnborg/tinysyslog/util"
 )
 
 // JSON represents a JSON mutator

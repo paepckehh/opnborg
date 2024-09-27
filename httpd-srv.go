@@ -38,11 +38,15 @@ func startWeb(config *OPNCall) {
 	// handler
 	mux.Handle("/", addSecurityHeader(getIndexHandler()))
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path)))))
-	// mux.Handle("/icon.svg", getFavIconHandler())
 
 	// httpsrv
 	httpsrv := &http.Server{
 		Handler: mux,
+	}
+
+	// info
+	if config.Debug {
+		displayChan <- []byte("[HTTP-SRV][SPIN-UP-SERVER]")
 	}
 
 	// serve requestes, print err after httpd crash

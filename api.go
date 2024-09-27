@@ -140,16 +140,17 @@ func Start(config *OPNCall) error {
 		config.AppName = "[OPNBORG-API]"
 	}
 
+	// spin up Log/Display Engine
+	display.Add(1)
+	go startLog(config)
+
 	// spin up internal webserver
 	go startWeb(config)
 
 	// spin up internal rsyslog server
 	go startRSysLog(config)
 
-	// spin up Log/Display Engine
-	display.Add(1)
-	go startLog(config)
-
+	// loop
 	servers := strings.Split(config.Targets, ",")
 	for {
 		// init

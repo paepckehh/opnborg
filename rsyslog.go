@@ -18,18 +18,17 @@ func startRSysLog(config *OPNCall) {
 
 	// create store structure
 	logStore := filepath.Join(config.Path, "Logs")
-	if err := os.MkdirAll(fulllogStore, 0770); err != nil {
+	if err := os.MkdirAll(logStore, 0770); err != nil {
 		displayChan <- []byte("[RSYSLOG][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + logStore + ":" + err.Error())
 		return
 	}
 
 	// setup
 	c := logConfig.New()
-	c.FilesystemSink.FilesystemSink{
-		Filename: logStore,
-		MaxAge:   180, // days
-		MaxSize:  100, // megabyte
-	}
+	c.BindAddr = "0.0.0.0:5140"
+	c.FilesystemSink.Filename = filepath.Join(logStore, "syslog.log")
+	c.FilesystemSink.MaxAge = 180  // days
+	c.FilesystemSink.MaxSize = 100 // megabyte
 
 	// serv
 	srv, err := logServer.New()
@@ -37,5 +36,12 @@ func startRSysLog(config *OPNCall) {
 		displayChan <- []byte("[RSYSLOG][ERROR][FATAL] " + err.Error())
 		return
 	}
+
+	// info
+	if config.Debug {
+		displayChan <- []byte("[RSYSLOG][SPIN-UP-SERVER]")
+	}
+
+	// spin up server
 	srv.Run()
 }
