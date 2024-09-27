@@ -28,6 +28,7 @@ type OPNCall struct {
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
+	Syslog     bool        // enable the internal rsyslog server instance & auto configure all targets (req. daemon mode)
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
 	Sync       struct {
@@ -75,13 +76,19 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_DEBUG"); ok {
 		config.Debug = true
 	}
+	config.Git = true
+	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
+		config.Git = false
+	}
 	config.Daemon = true
 	if _, ok := os.LookupEnv("OPN_NODAEMON"); ok {
 		config.Daemon = false
 	}
-	config.Git = true
-	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
-		config.Git = false
+	config.Syslog = false
+	if config.Daemon {
+		if _, ok := os.LookupEnv("OPN_SYSLOG"); ok {
+			config.syslog = true
+		}
 	}
 	config.Sync.Enable = false
 	config.Sync.PKG.Enable = false
@@ -90,10 +97,10 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_MASTER"); ok {
 		config.Sync.Enable = true
 		config.Sync.Master = os.Getenv("OPN_MASTER")
-		if _, ok := os.LookupEnv("OPN_MASTER_PKG"); ok {
+		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
 		}
-		if _, ok := os.LookupEnv("OPN_MASTER_USR"); ok {
+		if _, ok := os.LookupEnv("OPN_SYNC_USR"); ok {
 			config.Sync.USR.Enable = true
 		}
 	}

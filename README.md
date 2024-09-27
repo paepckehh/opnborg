@@ -34,9 +34,12 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
-# OPN Orchestrator (Manager) Mode (WIP)
+# OPN Orchestrator (BorgSYNC) Mode 
 - OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
-- OPN_MASTER_PKG  - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
+- OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
+
+# OPN Operations (BorgOPS) Mode
+- OPN_SYSLOG      - spin up borg-internal central rsyslog server, auto-configure (enforce) all member opns (requires daemon mode)
 ```
 # OPTIONS FAQ
 
