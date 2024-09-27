@@ -39,7 +39,7 @@ OPN_TARGETS="opn001.lan,opn002.lan,opn003.lan" OPN_APIKEY="..." OPN_APISECRET=".
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
 # OPN Operations (BorgOPS) Mode
-- OPN_RSYSLOG     - spin up borg-internal central rsyslog server, auto-configure (enforce) all member opns (requires daemon mode)
+- OPN_RSYSLOG     - spin up borg-app internal RFC5424 rsyslog server and auto-configures (enforces) all member opnsense to log/report
 ```
 # OPTIONS FAQ
 
