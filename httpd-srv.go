@@ -9,6 +9,10 @@ import (
 // httpd spinup the http internal web server
 func startWeb(config *OPNCall) {
 
+	// terminate if not in daemon mode
+	if !config.Daemon {
+		return
+	}
 	// create store structure
 	if err := os.MkdirAll(config.Path, 0770); err != nil {
 		fmt.Println(err)

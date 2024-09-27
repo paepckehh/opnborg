@@ -28,7 +28,7 @@ type OPNCall struct {
 	Daemon     bool        // daemonize (run in background), default: false
 	Debug      bool        // verbose debug logs, defaults to false
 	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
-	Syslog     bool        // enable the internal rsyslog server instance & auto configure all targets (req. daemon mode)
+	RSysLog    bool        // enable the internal rsyslog server instance & auto configure all targets (req. daemon mode)
 	extGIT     bool        // when available, use external git for verification
 	dirty      atomic.Bool // git global (atomic) worktree state
 	Sync       struct {
@@ -84,10 +84,10 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_NODAEMON"); ok {
 		config.Daemon = false
 	}
-	config.Syslog = false
+	config.RSysLog = false
 	if config.Daemon {
-		if _, ok := os.LookupEnv("OPN_SYSLOG"); ok {
-			config.syslog = true
+		if _, ok := os.LookupEnv("OPN_RSYSLOG"); ok {
+			config.RSysLog = true
 		}
 	}
 	config.Sync.Enable = false
@@ -140,8 +140,11 @@ func Start(config *OPNCall) error {
 		config.AppName = "[OPNBORG-API]"
 	}
 
-	// spin up webserver
+	// spin up internal webserver
 	go startWeb(config)
+
+	// spin up internal rsyslog server
+	go startRSysLog(config)
 
 	// spin up Log/Display Engine
 	display.Add(1)

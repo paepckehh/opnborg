@@ -14,7 +14,7 @@ import (
 const (
 	_currentDir = "."
 	_gitignore  = ".gitignore"
-	_ignore     = ".archive\nCONFIG*\n"
+	_ignore     = ".archive\nCONFIG*\nLogs\n"
 	// optional verification via classic git
 	_extGIT     = "git"
 	_extGITOPT1 = "show"
