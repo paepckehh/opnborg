@@ -7,11 +7,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
-	"github.com/opnborg/tinysyslog/config"
-	"github.com/opnborg/tinysyslog/constants"
-	"github.com/opnborg/tinysyslog/filters"
-	"github.com/opnborg/tinysyslog/mutators"
-	"github.com/opnborg/tinysyslog/sinks"
+	"paepcke.de/opnborg/tinysyslog/config"
+	"paepcke.de/opnborg/tinysyslog/constants"
+	"paepcke.de/opnborg/tinysyslog/filters"
+	"paepcke.de/opnborg/tinysyslog/mutators"
+	"paepcke.de/opnborg/tinysyslog/sinks"
 )
 
 // Mutator creates a new object with mutators.Mutator interface

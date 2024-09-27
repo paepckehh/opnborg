@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/opnborg/tinysyslog/constants"
-	"github.com/opnborg/tinysyslog/filters"
-	"github.com/opnborg/tinysyslog/mutators"
-	"github.com/opnborg/tinysyslog/sinks"
+	"paepcke.de/opnborg/tinysyslog/constants"
+	"paepcke.de/opnborg/tinysyslog/filters"
+	"paepcke.de/opnborg/tinysyslog/mutators"
+	"paepcke.de/opnborg/tinysyslog/sinks"
 )
 
 // Config holds all configuration for our program

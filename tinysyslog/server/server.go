@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/mcuadros/go-syslog.v2"
 
-	"github.com/opnborg/tinysyslog/config"
-	"github.com/opnborg/tinysyslog/factories"
-	"github.com/opnborg/tinysyslog/mutators"
-	"github.com/opnborg/tinysyslog/sinks"
+	"paepcke.de/opnborg/tinysyslog/config"
+	"paepcke.de/opnborg/tinysyslog/factories"
+	"paepcke.de/opnborg/tinysyslog/mutators"
+	"paepcke.de/opnborg/tinysyslog/sinks"
 )
 
 // Server holds the config
