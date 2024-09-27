@@ -16,13 +16,21 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][START][SERVER] " + server)
 	}
 
-	// check for pending Orchestrator Tasks
+	// check for pending BorgSYNC Orchestrator Tasks
 	if config.Sync.Enable {
 		if server != config.Sync.Master {
 			if err = checkInstallPKG(server, config); err != nil {
 				displayChan <- []byte("[SYNC][PKG][FAIL] " + server)
 				displayChan <- []byte("[SYNC][PKG][FAIL] " + err.Error())
 			}
+		}
+	}
+
+	// check for pending BorgOPS Operations Tasks
+	if config.RSysLog.Enable {
+		if err = checkRSysLogConfig(server, config); err != nil {
+			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL] " + server)
+			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL] " + err.Error())
 		}
 	}
 
@@ -46,6 +54,7 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		}
 		return
 	}
+
 	// set git global (atomic) worktree state tracker
 	if config.Git {
 		config.dirty.Store(true)
