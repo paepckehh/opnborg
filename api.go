@@ -40,10 +40,7 @@ type OPNCall struct {
 	Sync struct {
 		Enable bool   // enable Master Server
 		Master string // Master Server Name
-		USR    struct {
-			Enable bool // enable user account sync
-		}
-		PKG struct {
+		PKG    struct {
 			Enable   bool     // enable packages sync
 			Packages []string // list of Packages to sync
 		}
@@ -125,16 +122,12 @@ func Setup() (*OPNCall, error) {
 	}
 	config.Sync.Enable = false
 	config.Sync.PKG.Enable = false
-	config.Sync.USR.Enable = false
 	// config Master
 	if _, ok := os.LookupEnv("OPN_MASTER"); ok {
 		config.Sync.Enable = true
 		config.Sync.Master = os.Getenv("OPN_MASTER")
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
-		}
-		if _, ok := os.LookupEnv("OPN_SYNC_USR"); ok {
-			config.Sync.USR.Enable = true
 		}
 	}
 	// configure eMail default
@@ -153,8 +146,8 @@ func Setup() (*OPNCall, error) {
 			config.Sleep = 3600
 		}
 	}
-	if config.Sleep < 4 {
-		config.Sleep = 4
+	if config.Sleep < 10 {
+		config.Sleep = 10
 	}
 	config.extGIT = true
 	return config, nil

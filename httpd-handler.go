@@ -53,7 +53,9 @@ func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
 	s.WriteString(_sponsor)
+	s.WriteString(getPKG())
 	s.WriteString(_filesLink)
+	s.WriteString(_changeHead)
 	s.WriteString(gitLog())
 	s.WriteString(_fin)
 	return s.String()
@@ -80,6 +82,14 @@ func addSecurityHeader(next http.Handler) http.Handler {
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		next.ServeHTTP(w, req)
 	})
+}
+
+// getPKG
+func getPKG() string {
+	if len(syncPKG) < 5 {
+		return _empty
+	}
+	return "<br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>" + strings.ReplaceAll(syncPKG, ",", " ") + "<br><br>"
 }
 
 // gitLog

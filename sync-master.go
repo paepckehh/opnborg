@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// global
+var syncPKG string
+
 // readMasterConf
 func readMasterConf(config *OPNCall) (*OPNCall, error) {
 
@@ -37,6 +40,7 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	if config.Debug {
 		displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)
 	}
+	syncPKG = opn.System.Firmware.Plugins // global
 	config.Sync.PKG.Packages = strings.Split(opn.System.Firmware.Plugins, ",")
 
 	// fin
