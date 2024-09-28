@@ -20,8 +20,7 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	opn := new(Opnsense)
 	if config.Sync.Enable || config.RSysLog.Enable {
 		if opn, err = fetchOPN(server, config); err != nil {
-			displayChan <- []byte("[XML][FAIL] " + server)
-			displayChan <- []byte("[XML][FAIL] " + err.Error())
+			displayChan <- []byte("[XML][FAIL]" + err.Error())
 		}
 	}
 
@@ -29,8 +28,7 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	if config.Sync.Enable {
 		if server != config.Sync.Master {
 			if err = checkInstallPKG(server, config, opn); err != nil {
-				displayChan <- []byte("[SYNC][PKG][FAIL] " + server)
-				displayChan <- []byte("[SYNC][PKG][FAIL] " + err.Error())
+				displayChan <- []byte("[SYNC][PKG][FAIL]" + err.Error())
 			}
 		}
 	}
@@ -38,8 +36,7 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	// check for pending BorgOPS Operations Tasks
 	if config.RSysLog.Enable {
 		if err = checkRSysLogConfig(server, config, opn); err != nil {
-			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL] " + server)
-			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL] " + err.Error())
+			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL]" + err.Error())
 		}
 	}
 
