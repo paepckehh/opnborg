@@ -11,10 +11,10 @@ import (
 func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 
 	// return plain text listener when not CAcert
-	if config.CAcert != "" && config.CAkey != "" {
+	if config.Httpd.CAcert != "" && config.Httpd.CAkey != "" {
 
 		// read cert & key from file
-		key, err := tls.LoadX509KeyPair(config.CAcert, config.CAkey)
+		key, err := tls.LoadX509KeyPair(config.Httpd.CAcert, config.Httpd.CAkey)
 		if err != nil {
 			return listen, err
 		}
@@ -22,8 +22,8 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 		// create cert pool
 		caClient := x509.NewCertPool()
 		clientAuthMode := tls.VerifyClientCertIfGiven
-		if config.CAclient != "" {
-			cert, err := os.ReadFile(config.CAclient)
+		if config.Httpd.CAClient != "" {
+			cert, err := os.ReadFile(config.Httpd.CAClient)
 			if err != nil {
 				return listen, err
 			}
@@ -44,7 +44,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 			SessionTicketsDisabled: true,
 			Renegotiation:          0,
 		}
-		return tls.Listen("tcp", config.ListenAddr, tlsConf)
+		return tls.Listen("tcp", config.Httpd.Server, tlsConf)
 	}
-	return net.Listen("tcp", config.ListenAddr)
+	return net.Listen("tcp", config.Httpd.Server)
 }

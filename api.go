@@ -13,26 +13,29 @@ import (
 
 // OPNCall
 type OPNCall struct {
-	Targets    string      // list of OPNSense Appliances, csv comma seperated
-	Key        string      // OPNSense Backup User API Key (required)
-	Secret     string      // OPNSense Backup User API Secret (required)
-	Path       string      // OPNSense Backup Files Target Path, default:'.'
-	TLSKeyPin  string      // TLS Connection Server Certificate KeyPIN
-	AppName    string      // Display and SysLog Application Name
-	Email      string      // Git Commiter eMail Address (default: git@opnborg)
-	CAcert     string      // httpd server certificate (pem encoded x.509 certificate chain)
-	CAkey      string      // httpd server key (pem encoded key)
-	CAclient   string      // httpd client CA (will enforce mTLS only mode)
-	ListenAddr string      // HTTPD Listen IP and Port
-	Sleep      int64       // number of seconds to sleep between polls
-	Daemon     bool        // daemonize (run in background), default: false
-	Debug      bool        // verbose debug logs, defaults to false
-	Git        bool        // create and commit all xml files & changes to local .git repo, default: true
-	extGIT     bool        // when available, use external git for verification
-	dirty      atomic.Bool // git global (atomic) worktree state
-	RSysLog    struct {
-		Enable bool   // enable RFC5424 compliant remote syslog store server
-		Server string // borg syslog listen interface and port, example: 192.168.0.100:5140
+	Targets   string      // list of OPNSense Appliances, csv comma seperated
+	Key       string      // OPNSense Backup User API Key (required)
+	Secret    string      // OPNSense Backup User API Secret (required)
+	Path      string      // OPNSense Backup Files Target Path, default:'.'
+	TLSKeyPin string      // TLS Connection Server Certificate KeyPIN
+	AppName   string      // Display and SysLog Application Name
+	Email     string      // Git Commiter eMail Address (default: git@opnborg)
+	Sleep     int64       // number of seconds to sleep between polls
+	Daemon    bool        // daemonize (run in background), default: false
+	Debug     bool        // verbose debug logs, defaults to false
+	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
+	extGIT    bool        // when available, use external git for verification
+	dirty     atomic.Bool // git global (atomic) worktree state
+	Httpd     struct {
+		Enable   bool   // enable internal web server
+		Server   string // internal httpd server listen ip & port (string, default: 127.0.0.1:6464)
+		CAcert   string // httpd server certificate (path to pem encoded x509 file - full certificate chain)
+		CAkey    string // httpd server key (path to pem encoded tls server key file)
+		CAClient string // httpd client CA (path to pem endcoded x509 file - if set, it will enforce mTLS-only mode)
+	}
+	RSysLog struct {
+		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)
+		Server string // internal syslog listen ip and port [ example: 192.168.0.100:5140 ] (required)
 	}
 	Sync struct {
 		Enable bool   // enable Master Server
@@ -57,16 +60,12 @@ func Setup() (*OPNCall, error) {
 
 	// setup from env
 	config := &OPNCall{
-		Targets:    os.Getenv("OPN_TARGETS"),
-		Key:        os.Getenv("OPN_APIKEY"),
-		Secret:     os.Getenv("OPN_APISECRET"),
-		Path:       os.Getenv("OPN_PATH"),
-		Email:      os.Getenv("OPN_EMAIL"),
-		TLSKeyPin:  os.Getenv("OPN_TLSKEYPIN"),
-		CAcert:     os.Getenv("OPN_CACERT"),
-		CAkey:      os.Getenv("OPN_CAKEY"),
-		CAclient:   os.Getenv("OPN_CACLIENT"),
-		ListenAddr: os.Getenv("OPN_LISTEN"),
+		Targets:   os.Getenv("OPN_TARGETS"),
+		Key:       os.Getenv("OPN_APIKEY"),
+		Secret:    os.Getenv("OPN_APISECRET"),
+		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
+		Path:      os.Getenv("OPN_PATH"),
+		Email:     os.Getenv("OPN_EMAIL"),
 	}
 
 	// setup app
@@ -95,13 +94,32 @@ func Setup() (*OPNCall, error) {
 	// configure remote syslog server
 	config.RSysLog.Enable = false
 	if config.Daemon {
-		if _, ok := os.LookupEnv("OPN_RSYSLOG"); ok {
-			if _, ok := os.LookupEnv("OPN_RSYSLOG_SRV"); ok {
+		if _, ok := os.LookupEnv("OPN_RSYSLOG_ENABLE"); ok {
+			if _, ok := os.LookupEnv("OPN_RSYSLOG_SERVER"); ok {
 				config.RSysLog.Enable = true
-				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SRV")
+				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SERVER")
 				if len(strings.Split(config.RSysLog.Server, ":")) < 1 {
 					return nil, errors.New(fmt.Sprintf("env var 'OPN_RSYSLOG_SRV' format error, example \"192.168.0.100:5140\""))
 				}
+			}
+		}
+	}
+	// configure httpd
+	config.Httpd.Enable = false
+	if config.Daemon {
+		if _, ok := os.LookupEnv("OPN_HTTPD_ENABLE"); ok {
+			if _, ok := os.LookupEnv("OPN_HTTPD_SERVER"); ok {
+				config.Httpd.Enable = true
+				config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
+				if config.Httpd.Server == "" {
+					config.Httpd.Server = "127.0.0.1:6464"
+				}
+				if len(strings.Split(config.Httpd.Server, ":")) < 1 {
+					return nil, errors.New(fmt.Sprintf("env var 'OPN_HTTPD_SRV' format error, example \"127.0.0.1:6464\""))
+				}
+				config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
+				config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
+				config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
 			}
 		}
 	}
@@ -122,10 +140,6 @@ func Setup() (*OPNCall, error) {
 	// configure eMail default
 	if config.Email == "" {
 		config.Email = "git@opnborg"
-	}
-	// configure httpd defaults
-	if config.ListenAddr == "" {
-		config.ListenAddr = "0.0.0.0:6464"
 	}
 	// configure sleep for daemon mode
 	config.Sleep = 1

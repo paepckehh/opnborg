@@ -15,10 +15,10 @@ func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 
 	// compare
 	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
-		return errors.New("[RSYSLOG-CONFIG-CHECK][FAIL]" + server)
+		return errors.New("[RSYSLOG-CONF][FAIL]" + server + " -> need: " + opn.OPNsense.Syslog.Destinations.Destination.Hostname + " got: " + srv[0])
 	}
-	if opn.OPNsense.Syslog.Destinations.Destination.Port == srv[1] {
-		return errors.New("[RSYSLOG-CONFIG-CHECK][FAIL]" + server)
+	if opn.OPNsense.Syslog.Destinations.Destination.Port != srv[1] {
+		return errors.New("[RSYSLOG-CONF][FAIL]" + server + " -> need: " + opn.OPNsense.Syslog.Destinations.Destination.Port + " got: " + srv[1])
 	}
 	return nil
 }

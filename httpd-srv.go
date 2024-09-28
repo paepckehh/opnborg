@@ -46,7 +46,7 @@ func startWeb(config *OPNCall) {
 
 	// info
 	if config.Debug {
-		displayChan <- []byte("[HTTP-SRV][SPIN-UP-SERVER]")
+		displayChan <- []byte("[HTTPD-SRV][SPIN-UP-SERVER] " + config.Httpd.Server)
 	}
 
 	// serve requestes, print err after httpd crash

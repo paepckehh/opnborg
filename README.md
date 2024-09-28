@@ -33,21 +33,25 @@ please see:
 - OPN_TLSKEYPIN   - OPNsense TLS MitM proof Certificate Keypin [string]
 - OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
 - OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
-- OPN_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
-- OPN_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
-- OPN_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
-- OPN_LISTEN      - HTTPD Listen Address (string: defaults to http:0.0.0:6464)
 - OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
-# OPN Orchestrator (BorgSYNC - Mode)
+# OPN Orchestrator 
 - OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
-# OPN Operations (BorgOPS - Mode)
-- OPN_RSYSLOG     - spin up borg-app internal RFC5424 rsyslog server and auto-configure (enforce) all member opnsense instances to log/report
-- OPN_RSYSLOG_SRV - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv listen & target ip conf!)
+# OPN Operations 
+- OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, configure all hive member to log (bool, default: false)
+- OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
+
+# OPN WebConsole 
+- OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: false)
+- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80] 
+- OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
+- OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
+- OPN_HTTPD_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
+
 ```
 # OPTIONS FAQ
 
