@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/xml"
 	"errors"
 	"io"
 	"net/http"
@@ -75,6 +76,29 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	}
 	time.Sleep(12 * time.Second) // wait for action to finish
 	return nil
+}
+
+// fetchOPN retrives the xml and unmarschal it into an Opnsense object
+func fetchOPN(server string, config *OPNCall) (opn *Opnsense, err error) {
+
+	// fetch current XML config from server
+	masterXML, err := fetchXML(server, config)
+	if err != nil {
+		displayChan <- []byte("[ERROR][FAIL:UNABLE-TO-FETCH] " + server)
+		return opn, err
+	}
+
+	// validate XML
+	if !isValidXML(string(masterXML)) {
+		return opn, errors.New("[INVALID-XML-FILE]")
+	}
+
+	// xml unmarshal
+	if err = xml.Unmarshal(masterXML, &opn); err != nil {
+		displayChan <- []byte("[ERROR][XML-PARSE]" + server)
+		return opn, err
+	}
+	return opn, nil
 }
 
 // fetchXML file from target server
