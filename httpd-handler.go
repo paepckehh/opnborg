@@ -89,7 +89,7 @@ func getPKG() string {
 	if len(syncPKG) < 5 {
 		return _empty
 	}
-	return "<br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>" + strings.ReplaceAll(syncPKG, ",", " ") + "<br><br>"
+	return "<br><br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>" + strings.ReplaceAll(syncPKG, ",", " ") + "<br><br>"
 }
 
 // gitLog
