@@ -1,3 +1,5 @@
+# *** OPNBORG - RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ***
+
 # OVERVIEW 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg) 
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg) 
@@ -6,8 +8,7 @@
 
 # OPNBORG 
 
-- Secure Backup, Monitoring & Coniguration Management for [opnsense.org](https://opnsense.org/) appliances
-- Resistance is futile. Your OPNSense will be assimilated.
+- Secure Backup, Monitoring & Coniguration Management for [opnsense.org](https://opnsense.org/) firewall appliances
   
 # EXAMPLE 
 ```

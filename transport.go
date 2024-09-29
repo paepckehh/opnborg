@@ -205,13 +205,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 		displayChan <- []byte("[FETCH][FAIL:READ-BODY] " + targetURL)
 		return nil, errors.New("[UNABLE-TO-READ-XML-BODY]" + err.Error())
 	}
-	if config.Debug {
-		displayChan <- []byte("[FETCH][OK][SUCCESS:FETCH] " + targetURL)
-	}
 	if isValidXML(string(data)) {
-		if config.Debug {
-			displayChan <- []byte("[FETCH][OK][SUCCESS:XML-VALIDATION] " + targetURL)
-		}
 		return data, nil
 	}
 	displayChan <- []byte("[FETCH][ERROR][FAIL:XML-VALIDATION] " + targetURL)

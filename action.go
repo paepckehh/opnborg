@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"sync"
 	"time"
-
-	"github.com/dustin/go-humanize"
 )
 
 // actionSrv, perform individual server backup
@@ -21,19 +19,16 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	// timestamp
 	ts := time.Now()
 
-	// skip the configuration & compliance section, till we have a valid master conf
-	if config.Sync.validConf {
-
-		// get current opn config via xml
-		opn := new(Opnsense)
-		if config.Sync.Enable || config.RSysLog.Enable {
-			if opn, err = fetchOPN(server, config); err != nil {
-				displayChan <- []byte("[XML][FAIL]" + err.Error())
-			}
+	// get current opn config via xml
+	opn := new(Opnsense)
+	if config.Sync.Enable || config.RSysLog.Enable {
+		if opn, err = fetchOPN(server, config); err != nil {
+			displayChan <- []byte("[XML][FAIL]" + err.Error())
 		}
+	} else {
 
 		// check for pending BorgSYNC Orchestrator Tasks
-		if server != config.Sync.Master {
+		if config.Sync.validConf && server != config.Sync.Master {
 			if err = checkInstallPKG(server, config, opn); err != nil {
 				displayChan <- []byte("[SYNC][PKG][FAIL]" + err.Error())
 			}
@@ -56,7 +51,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	}
 
 	// backup was successful, update hive inventory
-	seen := ts.Format(time.RFC3339) + " (" + humanize.Time(ts) + ")"
+	seen := ts.Format(time.RFC3339)
 	version := getFirmwareVersion(config, server)
 	status := "<b>Member: </b> " + server + " <b>Version: </b>" + version + " <b>Last Seen: </b>" + seen + "<br>"
 	hiveMutex.Lock()

@@ -177,7 +177,7 @@ func Start(config *OPNCall) error {
 	// setup hive
 	servers := strings.Split(config.Targets, ",")
 	for _, server := range servers {
-		status := "<b>Member: </b> " + server + " <b>Version: </b> n/a" + " <b>Last Seen: </b> n/a<br>"
+		status := "<b>Member: </b> " + server + " <b>Version: </b>n/a" + _na + " <b>Last Seen: </b>n/a" + _na + "<br>"
 		hive = append(hive, status)
 	}
 	// loop

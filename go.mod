@@ -5,7 +5,6 @@ go 1.22.7
 require (
 	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3
-	github.com/dustin/go-humanize v1.0.1
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/sirupsen/logrus v1.9.0
