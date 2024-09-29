@@ -38,9 +38,10 @@ type OPNCall struct {
 		Server string // internal syslog listen ip and port [ example: 192.168.0.100:5140 ] (required)
 	}
 	Sync struct {
-		Enable bool   // enable Master Server
-		Master string // Master Server Name
-		PKG    struct {
+		Enable    bool   // enable Master Server
+		validConf bool   // internal state (skip if master conf is invalid/unreachable)
+		Master    string // Master Server Name
+		PKG       struct {
 			Enable   bool     // enable packages sync
 			Packages []string // list of Packages to sync
 		}
@@ -120,9 +121,10 @@ func Setup() (*OPNCall, error) {
 			}
 		}
 	}
-	config.Sync.Enable = false
-	config.Sync.PKG.Enable = false
 	// config Master
+	config.Sync.Enable = false
+	config.Sync.validConf = false
+	config.Sync.PKG.Enable = false
 	if _, ok := os.LookupEnv("OPN_MASTER"); ok {
 		config.Sync.Enable = true
 		config.Sync.Master = os.Getenv("OPN_MASTER")
@@ -135,7 +137,6 @@ func Setup() (*OPNCall, error) {
 		config.Email = "git@opnborg"
 	}
 	// configure sleep for daemon mode
-	config.Sleep = 1
 	if config.Daemon {
 		if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
 			var err error
@@ -174,8 +175,10 @@ func Start(config *OPNCall) error {
 
 		// fetch target configuration from master server
 		if config.Sync.Enable {
+			config.Sync.validConf = true
 			config, err = readMasterConf(config)
 			if err != nil {
+				config.Sync.validConf = false
 				displayChan <- []byte("[MASTER][FAIL-TO-READ-CONFIG]" + err.Error())
 			}
 		}

@@ -16,27 +16,29 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][START][SERVER] " + server)
 	}
 
-	// get current opn config via xml
-	opn := new(Opnsense)
-	if config.Sync.Enable || config.RSysLog.Enable {
-		if opn, err = fetchOPN(server, config); err != nil {
-			displayChan <- []byte("[XML][FAIL]" + err.Error())
-		}
-	}
+	// skip the configuration & compliance section, till we have a valid master conf
+	if config.Sync.validConf {
 
-	// check for pending BorgSYNC Orchestrator Tasks
-	if config.Sync.Enable {
+		// get current opn config via xml
+		opn := new(Opnsense)
+		if config.Sync.Enable || config.RSysLog.Enable {
+			if opn, err = fetchOPN(server, config); err != nil {
+				displayChan <- []byte("[XML][FAIL]" + err.Error())
+			}
+		}
+
+		// check for pending BorgSYNC Orchestrator Tasks
 		if server != config.Sync.Master {
 			if err = checkInstallPKG(server, config, opn); err != nil {
 				displayChan <- []byte("[SYNC][PKG][FAIL]" + err.Error())
 			}
 		}
-	}
 
-	// check for pending BorgOPS Operations Tasks
-	if config.RSysLog.Enable {
-		if err = checkRSysLogConfig(server, config, opn); err != nil {
-			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL]" + err.Error())
+		// check for pending BorgOPS Operations Tasks
+		if config.RSysLog.Enable {
+			if err = checkRSysLogConfig(server, config, opn); err != nil {
+				displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL]" + err.Error())
+			}
 		}
 	}
 
