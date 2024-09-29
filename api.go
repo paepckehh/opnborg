@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -154,6 +155,10 @@ func Setup() (*OPNCall, error) {
 	return config, nil
 }
 
+// global
+var hive []string
+var hiveMutex sync.Mutex
+
 // Start Application
 func Start(config *OPNCall) error {
 
@@ -167,8 +172,13 @@ func Start(config *OPNCall) error {
 	// spin up internal rsyslog server
 	go startRSysLog(config)
 
-	// loop
+	// setup hive
 	servers := strings.Split(config.Targets, ",")
+	for _, server := range servers {
+		status := "<b>Member: </b> " + server + " <b>Version: </b> n/a" + " <b>Last Seen: </b> n/a<br>"
+		hive = append(hive, status)
+	}
+	// loop
 	for {
 		// init
 		var err error
@@ -192,9 +202,9 @@ func Start(config *OPNCall) error {
 		if config.Debug {
 			displayChan <- []byte("[STARTING][BACKUP]")
 		}
-		for _, server := range servers {
+		for id, server := range servers {
 			wg.Add(1)
-			go actionSrv(server, config, &wg)
+			go actionSrv(server, config, id, &wg)
 		}
 
 		// wait till all worker done

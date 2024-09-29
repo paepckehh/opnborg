@@ -15,11 +15,80 @@ import (
 )
 
 const (
-	_empty         = ""
-	_userAgent     = "opnborg"
-	_apiBackupXML  = "/api/core/backup/download/this" // no support for legacy backup api endpoints
-	_apiInstallPKG = "/api/core/firmware/install/"    // install packages
+	_empty              = ""
+	_userAgent          = "opnborg"
+	_apiBackupXML       = "/api/core/backup/download/this" // no support for legacy backup api endpoints
+	_apiInstallPKG      = "/api/core/firmware/install/"    // install packages
+	_apiFirmwareVersion = "/api/core/firmware/info"        // firmware version
 )
+
+// firmware
+type fw struct {
+	product_id      string
+	product_version string
+}
+
+// getFirmwareVersion
+func getFirmwareVersion(config *OPNCall, server string) string {
+
+	// setup
+	var err error
+
+	// parse & assemble target url
+	targetURL := "https://" + server + _apiFirmwareVersion
+	if _, err = url.Parse(targetURL); err != nil {
+		displayChan <- []byte("[FETCH-VERSION][FAIL:UNABLE-TO-PARSE-TARGET-URL] " + targetURL + " " + err.Error())
+		return "fail"
+	}
+
+	// setup request
+	req, err := getRequest(targetURL, _userAgent)
+	if err != nil {
+		displayChan <- []byte("[FETCH-VERSION][FAIL:SETUP-URL] " + targetURL + " " + err.Error())
+		return "fail"
+	}
+	req.SetBasicAuth(config.Key, config.Secret)
+
+	// setup transport layer
+	tlsconf := getTlsConf(config)
+	transport := getTransport(tlsconf)
+	client := getClient(transport)
+
+	// connect
+	client.Timeout = time.Duration(20 * time.Second)
+	body, err := client.Do(req)
+	if err != nil {
+		displayChan <- []byte("[FETCH-VERSION][FAIL:TLS-CONNECT] " + targetURL + " " + err.Error())
+		return "fail"
+	}
+
+	// read, validate & return full xml body
+	defer body.Body.Close()
+	data, err := io.ReadAll(body.Body)
+	if err != nil {
+		displayChan <- []byte("[FETCH-VERSION][FAIL:READ-BODY] " + targetURL + err.Error())
+		return "fail"
+	}
+
+	// parse json [TODO: verify why parser fails]
+	// var firmware fw
+	// if err = json.Unmarshal(data, &firmware); err != nil {
+	//	displayChan <- []byte("[PARSE-VERSION][FAIL:JSON-PARSER] " + targetURL + err.Error())
+	//	return "fail"
+	// }
+	// fmt.Println(firmware)
+	// return firmware.product_version
+
+	// parse raw
+	p := strings.Split(string(data), ",")
+	if len(p) > 1 {
+		ps := strings.Split(p[1], ":")
+		if len(ps) > 1 {
+			return strings.ReplaceAll(ps[1], "\"", _empty)
+		}
+	}
+	return "fail"
+}
 
 // installPKG
 func installPKG(config *OPNCall, server, pkg string) error {
@@ -53,8 +122,7 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	client.Timeout = time.Duration(4 * time.Second)
 	body, err := client.Do(req)
 	if err != nil {
-		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + targetURL)
-		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + err.Error())
+		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + targetURL + " " + err.Error())
 		return errors.New("[UNABLE-TO-TLS-CONNECT-SERVER]")
 	}
 
@@ -62,13 +130,11 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	defer body.Body.Close()
 	msg, err := io.ReadAll(body.Body)
 	if err != nil {
-		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL)
-		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY][ERROR] " + err.Error())
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL + " " + err.Error())
 		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]" + string(msg))
 	}
 	if body.StatusCode > 299 {
-		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL)
-		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + string(msg))
+		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL + " " + string(msg))
 		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]")
 	}
 	if config.Debug {
@@ -108,14 +174,14 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	targetURL := "https://" + server + _apiBackupXML
 	if _, err = url.Parse(targetURL); err != nil {
 		displayChan <- []byte("[FETCH][FAIL:UNABLE-TO-PARSE-TARGET-URL] " + targetURL)
-		return nil, errors.New("[UNABLE-TO-PARSE-TARGET-URL]")
+		return nil, errors.New("[UNABLE-TO-PARSE-TARGET-URL] " + err.Error())
 	}
 
 	// setup request
 	req, err := getRequest(targetURL, _userAgent)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:SETUP-URL] " + targetURL)
-		return nil, errors.New("[UNABLE-TO-SETUP-TARGET-URL]")
+		return nil, errors.New("[UNABLE-TO-SETUP-TARGET-URL] " + err.Error())
 	}
 	req.SetBasicAuth(config.Key, config.Secret)
 
@@ -129,8 +195,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	body, err := client.Do(req)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + targetURL)
-		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + err.Error())
-		return nil, errors.New("[UNABLE-TO-TLS-CONNECT-SERVER]")
+		return nil, errors.New("[UNABLE-TO-TLS-CONNECT-SERVER] " + err.Error())
 	}
 
 	// read, validate & return full xml body
@@ -138,8 +203,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	data, err = io.ReadAll(body.Body)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:READ-BODY] " + targetURL)
-		displayChan <- []byte("[FETCH][FAIL:READ-BODY][ERROR] " + err.Error())
-		return nil, errors.New("[UNABLE-TO-READ-XML-BODY]")
+		return nil, errors.New("[UNABLE-TO-READ-XML-BODY]" + err.Error())
 	}
 	if config.Debug {
 		displayChan <- []byte("[FETCH][OK][SUCCESS:FETCH] " + targetURL)

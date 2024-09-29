@@ -6,7 +6,8 @@
 
 # OPNBORG 
 
-- secure backup & orchestration for [opnsense.org](https://opnsense.org/) appliances
+- Secure Backup, Monitoring & Coniguration Management for [opnsense.org](https://opnsense.org/) appliances
+- Resistance is futile. Your OPNSense will be assimilated.
   
 # EXAMPLE 
 ```

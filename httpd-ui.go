@@ -3,7 +3,7 @@ package opnborg
 const (
 	_root = "<html><body style=\"background-color:orange;\"><center><h1 style=\"color:white;\"> [ OPNBORG ] </H1>"
 
-	_sponsor = "sponsored-by: <a href=\"https://pvz.digital\"> pvz.digital </a><br><br>"
+	_sponsor = "[ Resistance is futile. Your OPNSense will be assimilated. Sponsored-by: <a href=\"https://pvz.digital\"> pvz.digital ]</a><br><br>"
 
 	_fin = "</center></body></html>"
 

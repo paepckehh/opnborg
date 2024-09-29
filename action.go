@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"sync"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // actionSrv, perform individual server backup
-func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
+func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 
 	// setup
 	defer wg.Done()
@@ -15,6 +17,9 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 	if config.Debug {
 		displayChan <- []byte("[BACKUP][START][SERVER] " + server)
 	}
+
+	// timestamp
+	ts := time.Now()
 
 	// skip the configuration & compliance section, till we have a valid master conf
 	if config.Sync.validConf {
@@ -42,9 +47,6 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		}
 	}
 
-	// timestamp
-	ts := time.Now()
-
 	// fetch current XML backup from server
 	serverXML, err := fetchXML(server, config)
 	if err != nil {
@@ -52,6 +54,14 @@ func actionSrv(server string, config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH] " + err.Error())
 		return
 	}
+
+	// backup was successful, update hive inventory
+	seen := ts.Format(time.RFC3339) + " (" + humanize.Time(ts) + ")"
+	version := getFirmwareVersion(config, server)
+	status := "<b>Member: </b> " + server + " <b>Version: </b>" + version + " <b>Last Seen: </b>" + seen + "<br>"
+	hiveMutex.Lock()
+	hive[id] = status
+	hiveMutex.Unlock()
 
 	// check for changes
 	sum := sha256.Sum256(serverXML)

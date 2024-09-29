@@ -53,6 +53,7 @@ func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
 	s.WriteString(_sponsor)
+	s.WriteString(getHive())
 	s.WriteString(getPKG())
 	s.WriteString(_filesLink)
 	s.WriteString(_changeHead)
@@ -90,6 +91,11 @@ func getPKG() string {
 		return _empty
 	}
 	return "<br><br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>" + strings.ReplaceAll(syncPKG, ",", " ") + "<br><br>"
+}
+
+// getPKG
+func getHive() string {
+	return "<br><br><b>HIVE</b><br><b>Module:Backup:Active</b><br>" + strings.Join(hive, "\n") + "<br><br>"
 }
 
 // gitLog
