@@ -1,9 +1,11 @@
 package opnborg
 
 const (
-	_root = "<html><body style=\"background-color:orange;\"><center><h1 style=\"color:white;\"> [ OPNBORG ] </H1>"
+	_root = "<html><body style=\"background-color:orange;\">"
 
-	_sponsor = "[ Resistance is futile. Your OPNSense will be assimilated. Sponsored-by: <a href=\"https://pvz.digital\"> pvz.digital ]</a><br><br>"
+	_head = "<center><h1 style=\"color:white;\"> [ OPNBORG ] </h1>"
+
+	_info = "<h5 style=\"color:white;\"> [ " + _version + " ] [ Resistance is futile. Your OPNSense will be assimilated. Sponsored-by: <a href=\"https://pvz.digital\"> pvz.digital ] </a></h5>"
 
 	_fin = "</center></body></html>"
 

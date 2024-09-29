@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const _version = "v0.0.3"
+
 // OPNCall
 type OPNCall struct {
 	Targets   string      // list of OPNSense Appliances, csv comma seperated

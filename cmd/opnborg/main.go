@@ -9,15 +9,14 @@ import (
 )
 
 const (
-	_app     = "[OPNBORG-CLI]"
-	_version = "[v0.0.3]"
+	_app = "[OPNBORG-CLI]"
 )
 
 func main() {
 
 	// Startup
 	t0 := time.Now()
-	fmt.Println(_app + "[STARTUP]" + _version)
+	fmt.Println(_app + "[STARTUP]")
 
 	// Configure
 	config, err := opnborg.Setup()

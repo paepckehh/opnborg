@@ -52,7 +52,8 @@ func getIndexHandler() http.Handler {
 func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_root)
-	s.WriteString(_sponsor)
+	s.WriteString(_head)
+	s.WriteString(_info)
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
 	s.WriteString(_filesLink)
