@@ -8,11 +8,14 @@ import (
 // checkRSysLogConfig
 func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 
+	// setup target
+	srv := strings.Split(config.RSysLog.Server, ":")
+
 	// get target configuration
 	_ = getLogConf(srv)
 
 	// compare
-	if err := compareLogConf(config, opn); err != nil {
+	if err := compareLogConf(server, srv, opn); err != nil {
 		// cleanup
 		// configure
 		return err
@@ -39,9 +42,7 @@ func getLogConf(srv []string) *Opnsense {
 }
 
 // compareLogConf
-func compareLogConf(config *OPNCall, opn *Opnsense) error {
-
-	srv := strings.Split(config.RSysLog.Server, ":")
+func compareLogConf(server string, srv []string, opn *Opnsense) error {
 
 	// compare
 	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
