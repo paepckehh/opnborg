@@ -8,20 +8,16 @@ import (
 // checkRSysLogConfig
 func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 
-	srv := strings.Split(config.RSysLog.Server, ":")
-
 	// get target configuration
 	_ = getLogConf(srv)
 
 	// compare
-	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
-		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Hostname + " need: " + srv[0]
-		return errors.New("[TARGET-SYSLOG-SERVER-HOSTNAME] " + details)
+	if err := compareLogConf(config, opn); err != nil {
+		// cleanup
+		// configure
+		return err
 	}
-	if opn.OPNsense.Syslog.Destinations.Destination.Port != srv[1] {
-		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Port + " need: " + srv[1]
-		return errors.New("[TARGET-SYSLOG-SERVER-PORT] " + details)
-	}
+
 	return nil
 }
 
@@ -40,4 +36,21 @@ func getLogConf(srv []string) *Opnsense {
 	opn.OPNsense.Syslog.Destinations.Destination.Facility = "kern,user,mail,daemon,auth,syslog,lpr,news,uucp,cron,authpriv,ftp,ntp,security,console,local0,local1,local2,local3,local4,local5,local6,local7"
 	opn.OPNsense.Syslog.Destinations.Destination.Program = "audit,named,configd.py,dhcpd,dhcrelay,dnsmasq,filterlog,firewall,dpinger,haproxy,charon,kea-ctrl-agent,kea-dhcp4,kea-dhcp6,lighttpd,monit,nginx,ntp,ntpd,ntpdate,openvpn,pkg,pkg-static,captiveportal,ppp,unbound,bgpd,miniupnpd,olsrd,ospfd,routed,zebra,(squid-1),suricata,wireguard,hostapd"
 	return opn
+}
+
+// compareLogConf
+func compareLogConf(config *OPNCall, opn *Opnsense) error {
+
+	srv := strings.Split(config.RSysLog.Server, ":")
+
+	// compare
+	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Hostname + " need: " + srv[0]
+		return errors.New("[TARGET-SYSLOG-SERVER-HOSTNAME] " + details)
+	}
+	if opn.OPNsense.Syslog.Destinations.Destination.Port != srv[1] {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Port + " need: " + srv[1]
+		return errors.New("[TARGET-SYSLOG-SERVER-PORT] " + details)
+	}
+	return nil
 }
