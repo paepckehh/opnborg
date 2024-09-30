@@ -101,7 +101,8 @@ go install paepcke.de/opnborg/cmd/opnborg@latest
 
 # STATUS
 
- - -=# WORK IN PROGRESS - BUT USABLE #=- 
+ - -=# WORK IN PROGRESS - USABLE - BUT ENV VAR SYNTAX API IS NOT (!) FIXED YET #=- 
+ - -=# YOU HAVE TO TRACK ENV VAR CHANGES VIA CHANGELOG TILL v1.0.0 RELEASE API FREEZE #=- 
 
 # TIMELINE 
 
