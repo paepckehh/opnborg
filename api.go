@@ -180,6 +180,9 @@ func Start(config *OPNCall) error {
 		status := _na + " <b>Member: </b> " + server + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
 		hive = append(hive, status)
 	}
+
+	displayChan <- []byte("[STARTING][" + _app + "][" + _version + "]")
+
 	// loop
 	for {
 		// init
