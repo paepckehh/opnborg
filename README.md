@@ -14,7 +14,7 @@
   
 # EXAMPLE 
 ```
-OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@latest
+OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
 # EXAMPLE ENV CONFIG
@@ -91,7 +91,7 @@ please see:
 # HOW TO INSTALL
 
 ```
-go install paepcke.de/opnborg/cmd/opnborg@latest
+go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
 ### DOWNLOAD (prebuild)
