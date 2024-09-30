@@ -1,11 +1,10 @@
 package opnborg
 
 const (
-	_startHTML = `<!-- index.html --><!doctype html><html>`
+	_startHTML = `<!-- index.html --><!doctype html><html><head><meta http-equiv="refresh" content="30"><meta http-equiv="content-type" content="text/html; charset=UTF-8"></head><body style="background-color:orange;">`
+	_endHTML   = `</center></body></html>`
 
-	_endHTML = `</center></body></html>`
-
-	_headHTML = "<body style=\"background-color:orange;\"><center><h1 style=\"color:white;\"> [ OPNBORG ] </h1><h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
+	_headHTML = "<center><h1 style=\"color:white;\"> [ OPNBORG ] </h1><h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
 
 	_filesLink = "<br><br><a href=\"./files/\"><button type=\"button\"><b> [ XML-CONFIG-FILE-ARCHIVE ] </b></button></a><br><br><br><br>"
 
