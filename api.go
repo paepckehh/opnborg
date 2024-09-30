@@ -13,7 +13,7 @@ import (
 )
 
 // global
-const _version = "v0.0.10"
+const _version = "v0.0.11"
 
 var sleep string
 
