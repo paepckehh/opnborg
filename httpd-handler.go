@@ -51,15 +51,13 @@ func getIndexHandler() http.Handler {
 // getStartHTML is the root pacge
 func getStartHTML() string {
 	var s strings.Builder
-	s.WriteString(_root)
-	s.WriteString(_head)
-	s.WriteString(_info)
+	s.WriteString(_startHTML)
+	s.WriteString(_headHTML)
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
-	s.WriteString(_filesLink)
 	s.WriteString(_changeHead)
 	s.WriteString(gitLog())
-	s.WriteString(_fin)
+	s.WriteString(_endHTML)
 	return s.String()
 }
 

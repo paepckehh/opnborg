@@ -1,17 +1,13 @@
 package opnborg
 
 const (
-	_root = "<html><body style=\"background-color:orange;\">"
+	_startHTML = `<!-- index.html --><!doctype html><html>`
 
-	_head = "<center><h1 style=\"color:white;\"> [ OPNBORG ] </h1>"
+	_endHTML = `</center></body></html>`
 
-	_info = "<h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
-
-	_fin = "</center></body></html>"
+	_headHTML = "<body style=\"background-color:orange;\"><center><h1 style=\"color:white;\"> [ OPNBORG ] </h1><h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
 
 	_filesLink = "<br><br><a href=\"./files/\"><button type=\"button\"><b> [ XML-CONFIG-FILE-ARCHIVE ] </b></button></a><br><br><br><br>"
-
-	_cssLink = "<link rel=\"stylesheet\" href=\"style.css\">"
 
 	_changeHead = "</center><br>ChangeLog Last 14 Days:<br>"
 

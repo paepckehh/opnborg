@@ -38,10 +38,12 @@ func startLog(config *OPNCall) {
 // Little Helper
 //
 
+// isValidXML
 func isValidXML(s string) bool {
 	return xml.Unmarshal([]byte(s), new(interface{})) == nil
 }
 
+// padMonth
 func padMonth(in string) string {
 	if len(in) == 1 {
 		return "0" + in

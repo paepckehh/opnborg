@@ -164,6 +164,19 @@ func fetchOPN(server string, config *OPNCall) (opn *Opnsense, err error) {
 		displayChan <- []byte("[ERROR][XML-PARSE]" + server)
 		return opn, err
 	}
+
+	// verify opnborg schema completeness, re-encode xml
+	_, err = xml.MarshalIndent(&opn, " ", "  ")
+	if err != nil {
+		displayChan <- []byte("[ERROR][XML-RE-ENCODE]" + server)
+		return opn, err
+	}
+
+	// diff xml files
+	// dmp := diffmatchpatch.New()
+	// diffs := dmp.DiffMain(string(masterXML), string(verifyXML), false)
+	// fmt.Println(dmp.DiffPrettyText(diffs))
+
 	return opn, nil
 }
 

@@ -85,11 +85,6 @@ func gitCheckIn(config *OPNCall) error {
 	if err != nil {
 		return err
 	}
-	// fmt.Println(obj)
-	// displayChan <- []byte(obj.String())
-	// var buf bytes.Buffer
-	// displayChan <- buf.Bytes()
-	// err = quick.Highlight(&buf, obj.String(), "diff", "TTY16m", "pygments")
 	if config.extGIT {
 		cmd := exec.Command(_extGIT, _extGITOPT1, _extGITOPT2, _extGITOPT3)
 		o, err := cmd.Output()
@@ -98,6 +93,7 @@ func gitCheckIn(config *OPNCall) error {
 		}
 		fmt.Println(string(o))
 	} else {
+		// TODO: add patch details (go-native)
 		err = quick.Highlight(os.Stdout, obj.String(), "diff", "TTY265", "github")
 		if err != nil {
 			return err

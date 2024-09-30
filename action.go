@@ -2,6 +2,8 @@ package opnborg
 
 import (
 	"crypto/sha256"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -51,9 +53,14 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	}
 
 	// backup was successful, update hive inventory
+	year, month, _ := ts.Date()
+	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	seen := ts.Format(time.RFC3339)
 	version := getFirmwareVersion(config, server)
-	status := "<b>Member: </b> " + server + " <b>Version: </b>" + version + " <b>Last Seen: </b>" + seen + "<br>"
+	linkCurrent := "<a href=\"./files/" + server + "/current.xml\"><button type=\"button\"><b>[current.xml]</b></button></a>"
+	linkArchive := "<a href=\"./files/" + server + "/" + archive + "\"><button type=\"button\"><b>[archive]</b></button></a>"
+	links := linkCurrent + " " + linkArchive
+	status := _ok + " <b>Member: </b> " + server + " <b>Version: </b>" + version + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
 	hiveMutex.Lock()
 	hive[id] = status
 	hiveMutex.Unlock()
