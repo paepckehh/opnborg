@@ -203,7 +203,8 @@ func Start(config *OPNCall) error {
 			config.Sync.validConf = true
 			config, err = readMasterConf(config)
 			if err != nil {
-				return errors.New("[DAEMON-SLEP][ERROR][FATAL]" + err.Error())
+				config.Sync.validConf = false
+				displayChan <- []byte("[ERROR][UNABLE-TO-READ-MASTER-CONFIG]" + err.Error())
 			}
 		}
 

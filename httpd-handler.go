@@ -2,7 +2,6 @@ package opnborg
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -48,15 +47,38 @@ func getIndexHandler() http.Handler {
 	return http.HandlerFunc(h)
 }
 
-// getStartHTML is the root pacge
+// getGitHandler
+func getGitHandler() http.Handler {
+	h := func(r http.ResponseWriter, q *http.Request) {
+		r = headHTML(r)
+		switch q.Method {
+		case "GET":
+			compress.WriteTransportCompressedPage(getGitHTML(), r, q, true)
+		default:
+			inf := "Error: Method Not Allowed (405) [" + q.Method + "]"
+			http.Error(r, inf, http.StatusMethodNotAllowed)
+		}
+	}
+	return http.HandlerFunc(h)
+}
+
+// getStartHTML is the root page
 func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_startHTML)
-	s.WriteString(_headHTML)
+	s.WriteString(_bodyHTML)
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
-	s.WriteString(_changeHead)
-	s.WriteString(gitLog())
+	s.WriteString(_gitLogLink)
+	s.WriteString(_endHTML)
+	return s.String()
+}
+
+// getGitHTML is the git changelog page
+func getGitHTML() string {
+	var s strings.Builder
+	s.WriteString(_startHTML)
+	s.WriteString(getGitLog())
 	s.WriteString(_endHTML)
 	return s.String()
 }
@@ -97,17 +119,18 @@ func getHive() string {
 	return "<br><br><b>HIVE</b><br><b>Module:Backup:Active<br>[ checking state every " + sleep + " seconds ]</b><br>" + strings.Join(hive, "\n") + "<br><br>"
 }
 
-// gitLog
-func gitLog() string {
+// getGitLog
+func getGitLog() string {
 	cgit := true
 	if cgit {
-		// native c git log
+		// native c lib git log
+		var buf bytes.Buffer
 		cmd := exec.Command("git", "log", "-c", "--since=14d")
 		o, err := cmd.Output()
 		if err != nil {
-			fmt.Println(err.Error())
+			_, _ = buf.WriteString("<br>GIT REPO ERROR - GIT REPO DOES NOT EXIST BEFORE FIRST SUCCESSFUL FETCH/COMMIT<br>")
+			_, _ = buf.WriteString(err.Error())
 		}
-		var buf bytes.Buffer
 		_ = quick.Highlight(&buf, string(o), "diff", "html", "github")
 		return buf.String()
 	}

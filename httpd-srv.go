@@ -37,6 +37,7 @@ func startWeb(config *OPNCall) {
 
 	// handler
 	mux.Handle("/", addSecurityHeader(getIndexHandler()))
+	mux.Handle("/gitlog/", addSecurityHeader(getGitHandler()))
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path)))))
 
 	// httpsrv

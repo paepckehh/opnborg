@@ -3,8 +3,8 @@
 . ./example-env-config.sh
 
 # local repository mode
-# go mod tidy
-# go run cmd/opnborg/main.go
+go mod tidy
+go run cmd/opnborg/main.go
 
 # if not in local repository, use:
-go run paepcke.de/opnborg/cmd/opnborg@main
+# go run paepcke.de/opnborg/cmd/opnborg@main

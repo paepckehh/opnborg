@@ -50,7 +50,7 @@ please see:
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
 # OPN Operations 
-- OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, configure all hive member to log (bool, default: false)
+- OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, monitor all hive members log config (bool, default: false)
 - OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
 
 # OPN WebConsole 
