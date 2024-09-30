@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
+// global
 const _version = "v0.0.8"
+
+var sleep string
 
 // OPNCall
 type OPNCall struct {
@@ -24,7 +27,7 @@ type OPNCall struct {
 	AppName   string      // Display and SysLog Application Name
 	Email     string      // Git Commiter eMail Address (default: git@opnborg)
 	Sleep     int64       // number of seconds to sleep between polls
-	Daemon    bool        // daemonize (run in background), default: false
+	Daemon    bool        // daemonize (run in background), default: true
 	Debug     bool        // verbose debug logs, defaults to false
 	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
 	extGIT    bool        // when available, use external git for verification
@@ -140,18 +143,20 @@ func Setup() (*OPNCall, error) {
 		config.Email = "git@opnborg"
 	}
 	// configure sleep for daemon mode
+	sleep = "0"
 	if config.Daemon {
+		config.Sleep = 3600
 		if sleep, ok := os.LookupEnv("OPN_SLEEP"); ok {
 			var err error
 			config.Sleep, err = strconv.ParseInt(sleep, 10, 64)
 			if err != nil {
 				return nil, errors.New(fmt.Sprintf("env var 'OPN_SLEEP' must contain a number in seconds without prefix or suffix"))
 			}
-			config.Sleep = 3600
 		}
-	}
-	if config.Sleep < 10 {
-		config.Sleep = 10
+		if config.Sleep < 10 {
+			config.Sleep = 10
+		}
+		sleep = strconv.FormatInt(config.Sleep, 10)
 	}
 	config.extGIT = true
 	return config, nil
@@ -181,7 +186,12 @@ func Start(config *OPNCall) error {
 		hive = append(hive, status)
 	}
 
-	displayChan <- []byte("[STARTING][" + _app + "][" + _version + "]")
+	// startup app version & state, sleep panic gate
+	suffix := "[CLI-ONE-TIME-PASS-MODE]"
+	if config.Daemon {
+		suffix = "[DAEMON-MODE][SLEEP:" + sleep + " SECONDS]"
+	}
+	displayChan <- []byte("[STARTING][" + _app + "][" + _version + "]" + suffix)
 
 	// loop
 	for {
@@ -193,8 +203,7 @@ func Start(config *OPNCall) error {
 			config.Sync.validConf = true
 			config, err = readMasterConf(config)
 			if err != nil {
-				config.Sync.validConf = false
-				displayChan <- []byte("[MASTER][FAIL-TO-READ-CONFIG]" + err.Error())
+				return errors.New("[DAEMON-SLEP][ERROR][FATAL]" + err.Error())
 			}
 		}
 

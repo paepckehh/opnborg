@@ -94,7 +94,7 @@ func getPKG() string {
 
 // getPKG
 func getHive() string {
-	return "<br><br><b>HIVE</b><br><b>Module:Backup:Active</b><br>" + strings.Join(hive, "\n") + "<br><br>"
+	return "<br><br><b>HIVE</b><br><b>Module:Backup:Active<br>[ checking state every " + sleep + " seconds ]</b><br>" + strings.Join(hive, "\n") + "<br><br>"
 }
 
 // gitLog
