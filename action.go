@@ -83,6 +83,12 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	setOPNStatus(config, server, id, ts, degraded, true)
 }
 
+const (
+	_dash = "/ui/core/dashboard"
+	_fwup = "/ui/core/firmware#status"
+	_nwin = "target=\"_blank\""
+)
+
 // setOPNStatus
 func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded, ok bool) {
 	year, month, _ := ts.Date()
@@ -94,10 +100,12 @@ func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded
 		}
 		seen := ts.Format(time.RFC3339)
 		ver := getFirmwareVersion(config, server)
-		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"><button type=\"button\"><b>[current.xml]</b></button></a>"
-		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\"><button type=\"button\"><b>[archive]</b></button></a>"
+		linkUI := "<a href=\"https://" + server + _dash + "\" " + _nwin + "><button type=\"button\"><b>[" + server + "]</b></button></a>"
+		linkUP := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button type=\"button\"><b>[" + ver + "]</b></button></a>"
+		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button type=\"button\"><b>[current.xml]</b></button></a>"
+		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button type=\"button\"><b>[archive]</b></button></a>"
 		links := linkCurrent + " " + linkArchive
-		status := state + " <b>Member: </b> " + server + " <b>Version: </b>" + ver + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
+		status := state + " <b>Member: </b> " + linkUI + " <b>Version: </b>" + linkUP + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
 		hiveMutex.Lock()
 		hive[id] = status
 		hiveMutex.Unlock()
