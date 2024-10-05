@@ -11,9 +11,6 @@ func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 	// setup target
 	srv := strings.Split(config.RSysLog.Server, ":")
 
-	// get target configuration
-	_ = getLogConf(srv)
-
 	// compare
 	if err := compareLogConf(server, srv, opn); err != nil {
 		// cleanup
@@ -21,6 +18,33 @@ func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 		return err
 	}
 
+	return nil
+}
+
+// compareLogConf
+func compareLogConf(server string, srv []string, opn *Opnsense) error {
+
+	// compare
+	if opn.OPNsense.Syslog.Destinations.Destination.Enabled != "1" {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Enabled + " need: 1"
+		return errors.New("[TARGET-REMOTE-SYSLOG-SERVER-ENABLED] " + details)
+	}
+	if opn.OPNsense.Syslog.Destinations.Destination.Transport != "udp4" {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Transport + " need: udp4"
+		return errors.New("[TARGET-REMOTE-SYSLOG-HOSTNAME] " + details)
+	}
+	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Hostname + " need: " + srv[0]
+		return errors.New("[TARGET-REMOTE-SYSLOG-HOSTNAME] " + details)
+	}
+	if opn.OPNsense.Syslog.Destinations.Destination.Port != srv[1] {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Port + " need: " + srv[1]
+		return errors.New("[TARGET-REMOTE-SYSLOG-PORT] " + details)
+	}
+	if opn.OPNsense.Syslog.Destinations.Destination.Rfc5424 != "1" {
+		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Rfc5424 + " need: 1"
+		return errors.New("[TARGET-REMOTE-SYSLOG-PORT] " + details)
+	}
 	return nil
 }
 
@@ -39,19 +63,4 @@ func getLogConf(srv []string) *Opnsense {
 	opn.OPNsense.Syslog.Destinations.Destination.Facility = "kern,user,mail,daemon,auth,syslog,lpr,news,uucp,cron,authpriv,ftp,ntp,security,console,local0,local1,local2,local3,local4,local5,local6,local7"
 	opn.OPNsense.Syslog.Destinations.Destination.Program = "audit,named,configd.py,dhcpd,dhcrelay,dnsmasq,filterlog,firewall,dpinger,haproxy,charon,kea-ctrl-agent,kea-dhcp4,kea-dhcp6,lighttpd,monit,nginx,ntp,ntpd,ntpdate,openvpn,pkg,pkg-static,captiveportal,ppp,unbound,bgpd,miniupnpd,olsrd,ospfd,routed,zebra,(squid-1),suricata,wireguard,hostapd"
 	return opn
-}
-
-// compareLogConf
-func compareLogConf(server string, srv []string, opn *Opnsense) error {
-
-	// compare
-	if opn.OPNsense.Syslog.Destinations.Destination.Hostname != srv[0] {
-		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Hostname + " need: " + srv[0]
-		return errors.New("[TARGET-SYSLOG-SERVER-HOSTNAME] " + details)
-	}
-	if opn.OPNsense.Syslog.Destinations.Destination.Port != srv[1] {
-		details := server + " -> have: " + opn.OPNsense.Syslog.Destinations.Destination.Port + " need: " + srv[1]
-		return errors.New("[TARGET-SYSLOG-SERVER-PORT] " + details)
-	}
-	return nil
 }

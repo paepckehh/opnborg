@@ -88,7 +88,7 @@ please see:
 
 - The internal webserver is listening to on [any] interface port 6464 -> 0.0.0.0:6464 (http://localhost:6464) (daemon mode only) 
 - Enviroment Variables bools will always be true if defined (the value you set is not relevant)
-- OPN_TARGETS must hold the (reachable) WebUI Interface(s) [example: 192.168.0.1] including the port, if not 443 (example: 192.168.0.1:8443)
+- OPN_TARGETS & OPN_MASTER must hold the (reachable) WebUI Interface(s) [example: 192.168.0.1] including the port, if not 443 (example: 192.168.0.1:8443)
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
