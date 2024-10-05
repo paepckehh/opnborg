@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -19,14 +20,8 @@ const (
 	_userAgent          = "opnborg"
 	_apiBackupXML       = "/api/core/backup/download/this" // no support for legacy backup api endpoints
 	_apiInstallPKG      = "/api/core/firmware/install/"    // install packages
-	_apiFirmwareVersion = "/api/core/firmware/info"        // firmware version
+	_apiFirmwareVersion = "/api/core/firmware/status/"     // firmware version
 )
-
-// firmware
-type fw struct {
-	product_id      string
-	product_version string
-}
 
 // getFirmwareVersion
 func getFirmwareVersion(config *OPNCall, server string) string {
@@ -70,24 +65,13 @@ func getFirmwareVersion(config *OPNCall, server string) string {
 		return "fail"
 	}
 
-	// parse json [TODO: verify why parser fails]
-	// var firmware fw
-	// if err = json.Unmarshal(data, &firmware); err != nil {
-	//	displayChan <- []byte("[PARSE-VERSION][FAIL:JSON-PARSER] " + targetURL + err.Error())
-	//	return "fail"
-	// }
-	// fmt.Println(firmware)
-	// return firmware.product_version
-
-	// parse raw
-	p := strings.Split(string(data), ",")
-	if len(p) > 1 {
-		ps := strings.Split(p[1], ":")
-		if len(ps) > 1 {
-			return strings.ReplaceAll(ps[1], "\"", _empty)
-		}
+	// parse json
+	var fw firmwareStatus
+	if err = json.Unmarshal(data, &fw); err != nil {
+		displayChan <- []byte("[PARSE-VERSION][FAIL:JSON-PARSER] " + targetURL + err.Error())
+		return "fail"
 	}
-	return "fail"
+	return fw.Product.ProductVersion
 }
 
 // installPKG
