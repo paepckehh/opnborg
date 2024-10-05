@@ -13,9 +13,9 @@ import (
 )
 
 // global
-const _version = "v0.0.19"
+const _version = "v0.0.20"
 
-var sleep string
+var sleep, prometheusWebUI string
 
 // OPNCall
 type OPNCall struct {
@@ -38,6 +38,11 @@ type OPNCall struct {
 		CAcert   string // httpd server certificate (path to pem encoded x509 file - full certificate chain)
 		CAkey    string // httpd server key (path to pem encoded tls server key file)
 		CAClient string // httpd client CA (path to pem endcoded x509 file - if set, it will enforce mTLS-only mode)
+	}
+	Prometheus struct {
+		Enable bool
+		Server string
+		WebUI  string
 	}
 	RSysLog struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)
@@ -137,6 +142,13 @@ func Setup() (*OPNCall, error) {
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
 		}
+	}
+	// promethes
+	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
+		config.Prometheus.Enable = true
+		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
+		config.Prometheus.WebUI = config.Prometheus.WebUI + "/targets?search="
+		prometheusWebUI = config.Prometheus.WebUI
 	}
 	// configure eMail default
 	if config.Email == "" {

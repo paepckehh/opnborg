@@ -52,6 +52,7 @@ please see:
 # OPN Operations 
 - OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, monitor all hive members log config (bool, default: false)
 - OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
+- OPN_PROMETHEUS_WEBUI - optional promometheus web console target & port [example: http://localhost:9090]
 
 # OPN WebConsole 
 - OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: false)

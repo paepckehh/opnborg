@@ -67,6 +67,7 @@ func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_startHTML)
 	s.WriteString(_bodyHTML)
+	s.WriteString(getNavi())
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
 	s.WriteString(_gitLogLink)
@@ -90,14 +91,14 @@ func headHTML(r http.ResponseWriter) http.ResponseWriter {
 	return r
 }
 
-// headSVG
+// headSVG ...
 func headSVG(r http.ResponseWriter) http.ResponseWriter {
 	r.Header().Set(_ctype, _svg)
 	r.Header().Set(_title, _app)
 	return r
 }
 
-// addSecurityHeader
+// addSecurityHeader ...
 func addSecurityHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
@@ -106,20 +107,43 @@ func addSecurityHeader(next http.Handler) http.Handler {
 	})
 }
 
-// getPKG
+// getPKG ...
 func getPKG() string {
 	if len(syncPKG) < 5 {
 		return _empty
 	}
-	return "<br><br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>" + strings.ReplaceAll(syncPKG, ",", " ") + "<br><br>"
+	var s strings.Builder
+	s.WriteString("<br><br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>")
+	s.WriteString(strings.ReplaceAll(syncPKG, ",", " "))
+	s.WriteString("<br><br>")
+	return s.String()
 }
 
-// getPKG
+// getHive ...
 func getHive() string {
-	return "<br><br><b>HIVE</b><br><b>Module:Backup:Active<br>[ checking state every " + sleep + " seconds ]</b><br>" + strings.Join(hive, "\n") + "<br><br>"
+	var s strings.Builder
+	s.WriteString("<br><br><b>HIVE</b><br><b>Module:Backup:Active<br>[ checking state every ")
+	s.WriteString(sleep)
+	s.WriteString(" seconds ]</b><br>")
+	s.WriteString(strings.Join(hive, "\n"))
+	s.WriteString("<br><br>")
+	return s.String()
 }
 
-// getGitLog
+// getNavi provides the central top navigation links
+func getNavi() string {
+	var s strings.Builder
+	if prometheusWebUI != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(prometheusWebUI)
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button type=\"button\"><b>[ Prometheus WebUI ]</b></button></a>")
+	}
+	return s.String()
+}
+
+// getGitLog ...
 func getGitLog() string {
 	cgit := true
 	if cgit {
