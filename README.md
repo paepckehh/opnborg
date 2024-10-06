@@ -107,10 +107,13 @@ please see:
 If you run OPNBORG on NixOS
 - adapt target IPs and import opnborg-prometheus-grafana.nix
 - add to you configuration.nix:
+
   imports = [
     ./opnborg-prometheus-grafana.nix
   ];
-- import into your grafan instance this dashboards and the he OPN_GRAFANA_DASHBOARD_*='id/names'
+
+- import into your grafana instance this dashboards 
+- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
     - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
     - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
     - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
