@@ -134,11 +134,38 @@ func getHive() string {
 func getNavi() string {
 	var s strings.Builder
 	if prometheusWebUI != "" {
-		s.WriteString("<a href=\"")
+		s.WriteString(" <a href=\"")
 		s.WriteString(prometheusWebUI)
+		s.WriteString("/targets?search=")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button type=\"button\"><b>[ Prometheus WebUI ]</b></button></a>")
+		s.WriteString("><button type=\"button\"><b>[ PrometheusDB ]</b></button></a> ")
+	}
+	if grafanaWebUI != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(grafanaWebUI)
+		s.WriteString("/dashboards")
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button type=\"button\"><b>[ Grafana Overview ]</b></button></a> ")
+	}
+	if grafanaFreeBSD != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(grafanaWebUI)
+		s.WriteString("/d/")
+		s.WriteString(grafanaFreeBSD)
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button type=\"button\"><b>[ Grafana OPNSenseOS Dashboards ]</b></button></a> ")
+	}
+	if grafanaHAProxy != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(grafanaWebUI)
+		s.WriteString("/d/")
+		s.WriteString(grafanaHAProxy)
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button type=\"button\"><b>[ Grafana HAProxy Dashboards ]</b></button></a> ")
 	}
 	return s.String()
 }
@@ -185,13 +212,6 @@ func getGitLog() string {
 	var s strings.Builder
 	s.WriteString("<pre>")
 	_ = objIter.ForEach(func(c *object.Commit) error {
-		// hash := c.Hash.String()
-		// line := strings.Split(c.Message, "\n")
-		// s.WriteString(hash[:8])
-		// s.WriteString(c.Message)
-		// s.WriteString(_linefeed)
-		// s.WriteString(_linefeed)
-		// s.WriteString(c.String())
 		s.WriteString(_linefeed)
 		s.WriteString(_linefeed)
 		obj, _ := repo.CommitObject(c.Hash)

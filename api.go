@@ -12,10 +12,11 @@ import (
 	"time"
 )
 
-// global
-const _version = "v0.0.20"
+// global const
+const _version = "v0.0.22"
 
-var sleep, prometheusWebUI string
+// global var
+var sleep, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
 
 // OPNCall
 type OPNCall struct {
@@ -41,8 +42,13 @@ type OPNCall struct {
 	}
 	Prometheus struct {
 		Enable bool
-		Server string
 		WebUI  string
+	}
+	Grafana struct {
+		Enable  bool
+		WebUI   string
+		FreeBSD string
+		HAProxy string
 	}
 	RSysLog struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)
@@ -143,12 +149,27 @@ func Setup() (*OPNCall, error) {
 			config.Sync.PKG.Enable = true
 		}
 	}
-	// promethes
+	// prometheus
 	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
 		config.Prometheus.Enable = true
 		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
-		config.Prometheus.WebUI = config.Prometheus.WebUI + "/targets?search="
+		config.Prometheus.WebUI = config.Prometheus.WebUI
 		prometheusWebUI = config.Prometheus.WebUI
+	}
+	// grafana
+	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {
+		config.Grafana.Enable = true
+		config.Grafana.WebUI = os.Getenv("OPN_GRAFANA_WEBUI")
+		config.Grafana.WebUI = config.Grafana.WebUI
+		grafanaWebUI = config.Grafana.WebUI
+		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_FREEBSD"); ok {
+			config.Grafana.FreeBSD = os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD")
+			grafanaFreeBSD = config.Grafana.FreeBSD
+		}
+		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_HAPROXY"); ok {
+			config.Grafana.HAProxy = os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY")
+			grafanaHAProxy = config.Grafana.HAProxy
+		}
 	}
 	// configure eMail default
 	if config.Email == "" {

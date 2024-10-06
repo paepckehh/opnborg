@@ -49,10 +49,17 @@ please see:
 - OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
-# OPN Operations 
+# OPN Remote Syslog Collector
 - OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, monitor all hive members log config (bool, default: false)
 - OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
-- OPN_PROMETHEUS_WEBUI - optional promometheus web console target & port [example: http://localhost:9090]
+
+# OPN Prometheus 
+- OPN_PROMETHEUS_WEBUI - promometheus web console target & port [example: http://localhost:9191]
+
+# OPN Grafana Dashboards
+- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:9090]
+- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
 
 # OPN WebConsole 
 - OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: false)
@@ -94,15 +101,24 @@ please see:
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
 
+# PROMETHEUS AND GRAFANA INTEGRATION (Linux/NixOS)
+
+```
+If you run OPNBORG on NixOS
+- adapt target IPs and import opn-prometheus-grafana.nix
+- add to you configuration.nix:
+  imports = [
+    ./opn-prometheus-grafana.nix
+  ];
+- pending: opnborg pkg & declarative systemd integration (will be around at v1.0.0 release ) 
+
+```
+
 # HOW TO INSTALL
 
 ```
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
-
-### DOWNLOAD (prebuild)
-
-[github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
 
 
 # STATUS
