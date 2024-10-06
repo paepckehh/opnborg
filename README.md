@@ -101,7 +101,7 @@ please see:
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
 
-# PROMETHEUS AND GRAFANA INTEGRATION (Linux/NixOS)
+# PROMETHEUS AND GRAFANA INTEGRATION (NixOS)
 
 ```
 If you run OPNBORG on NixOS
