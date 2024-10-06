@@ -110,6 +110,10 @@ If you run OPNBORG on NixOS
   imports = [
     ./opn-prometheus-grafana.nix
   ];
+- import into your grafan instance this dashboards and the he OPN_GRAFANA_DASHBOARD_*='id/names'
+    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
+    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
+    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
 - pending: opnborg pkg & declarative systemd integration (will be around at v1.0.0 release ) 
 
 ```
