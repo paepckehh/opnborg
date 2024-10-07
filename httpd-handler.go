@@ -75,15 +75,6 @@ func getStartHTML() string {
 	return s.String()
 }
 
-// getGitHTML is the git changelog page
-func getGitHTML() string {
-	var s strings.Builder
-	s.WriteString(_startHTML)
-	s.WriteString(getGitLog())
-	s.WriteString(_endHTML)
-	return s.String()
-}
-
 // headHTML
 func headHTML(r http.ResponseWriter) http.ResponseWriter {
 	r.Header().Set(_ctype, _utf8)
@@ -171,18 +162,18 @@ func getNavi() string {
 }
 
 // getGitLog ...
-func getGitLog() string {
+func getGitHTML() string {
 	cgit := true
 	if cgit {
 		// native c lib git log
 		var buf bytes.Buffer
-		cmd := exec.Command("git", "log", "-c", "--since=14d")
-		o, err := cmd.Output()
+		cmd := exec.Command("git", "log", "-c", "--since=14days")
+		gitLog, err := cmd.CombinedOutput()
 		if err != nil {
-			_, _ = buf.WriteString("<br>GIT REPO ERROR - GIT REPO DOES NOT EXIST BEFORE FIRST SUCCESSFUL FETCH/COMMIT<br>")
-			_, _ = buf.WriteString(err.Error())
+			_ = quick.Highlight(&buf, err.Error(), "diff", "html", "github")
+			return buf.String()
 		}
-		_ = quick.Highlight(&buf, string(o), "diff", "html", "github")
+		_ = quick.Highlight(&buf, string(gitLog), "diff", "html", "github")
 		return buf.String()
 	}
 

@@ -13,7 +13,7 @@ import (
 )
 
 // global const
-const _version = "v0.0.22"
+const _version = "v0.0.23"
 
 // global var
 var sleep, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
