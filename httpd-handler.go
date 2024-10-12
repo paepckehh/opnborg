@@ -66,6 +66,7 @@ func getGitHandler() http.Handler {
 func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_startHTML)
+	s.WriteString(_headHTML)
 	s.WriteString(_bodyHTML)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
