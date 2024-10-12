@@ -86,6 +86,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 const (
 	_dash = "/ui/core/dashboard"
 	_fwup = "/ui/core/firmware#status"
+	_srvc = "/ui/core/service"
 	_nwin = "target=\"_blank\""
 )
 
@@ -100,10 +101,11 @@ func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded
 		}
 		seen := ts.Format(time.RFC3339)
 		ver := getFirmwareVersion(config, server)
-		linkUI := "<a href=\"https://" + server + _dash + "\" " + _nwin + "><button type=\"button\"><b>[" + server + "]</b></button></a>"
-		linkUP := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button type=\"button\"><b>[" + ver + "]</b></button></a>"
-		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button type=\"button\"><b>[current.xml]</b></button></a>"
-		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button type=\"button\"><b>[archive]</b></button></a>"
+		borgSC := "<a href=\"https://" + server + _srvc + "\" " + _nwin + "><button><img src=\"favicon.ico\" width=\"12\" height=\"12\"></button></a>"
+		linkUI := "<a href=\"https://" + server + _dash + "\" " + _nwin + "><button><b>[" + server + "]</b></button></a> " + borgSC
+		linkUP := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button><b>[" + ver + "]</b></button></a>"
+		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button><b>[current.xml]</b></button></a>"
+		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
 		links := linkCurrent + " " + linkArchive
 		status := state + " <b>Member: </b> " + linkUI + " <b>Version: </b>" + linkUP + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
 		hiveMutex.Lock()

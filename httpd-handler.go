@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,16 +19,22 @@ const (
 	_utf8  = "text/html;charset=utf-8"
 	_txt   = "text/plain"
 	_svg   = "image/svg+xml"
+	_png   = "image/png"
 	_ctype = "Content-Type"
-	_title = "Title"
-	_app   = "OPNBORG"
+	_title = " [ OPNBORG ] "
+	_app   = " [ OPNBORG ] "
 )
 
-// getIconHandler
-func getIconHandler() http.Handler {
+// getFavIconHandler
+func getFavIconHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		r = headSVG(r)
-		compress.WriteTransportCompressedPage(_icon, r, q, true)
+		// img, _ := png.Decode(bytes.NewReader(_favicon))
+		// var b bytes.Buffer
+		// _ = png.Encode(&b, img)
+		// w.Header().Set("Content-Length", strconv.Itoa(len(b.Bytes())))
+		r.Header().Set("Content-Type", "image/png")
+		r.Header().Set("Content-Length", strconv.Itoa(len(_favicon)))
+		_, _ = r.Write(_favicon)
 	}
 	return http.HandlerFunc(h)
 }
@@ -67,7 +74,9 @@ func getStartHTML() string {
 	var s strings.Builder
 	s.WriteString(_startHTML)
 	s.WriteString(_headHTML)
-	s.WriteString(_bodyHTML)
+	s.WriteString(_bodyHTML1)
+	s.WriteString(borg)
+	s.WriteString(_bodyHTML2)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
@@ -79,13 +88,6 @@ func getStartHTML() string {
 // headHTML
 func headHTML(r http.ResponseWriter) http.ResponseWriter {
 	r.Header().Set(_ctype, _utf8)
-	r.Header().Set(_title, _app)
-	return r
-}
-
-// headSVG ...
-func headSVG(r http.ResponseWriter) http.ResponseWriter {
-	r.Header().Set(_ctype, _svg)
 	r.Header().Set(_title, _app)
 	return r
 }

@@ -149,5 +149,5 @@ Yes, Please! PRs Welcome!
 
 # SPONSORS 
 
-
-
+- [pvz.digital](https://pvz.digital)
+- UI Borg Design: Torben & Jonas

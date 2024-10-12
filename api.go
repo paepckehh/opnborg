@@ -13,10 +13,10 @@ import (
 )
 
 // global const
-const _version = "v0.0.23"
+const _version = "v0.0.25"
 
 // global var
-var sleep, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+var sleep, borg, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
 
 // OPNCall
 type OPNCall struct {
