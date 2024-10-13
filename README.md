@@ -16,14 +16,14 @@
 - Secure Backup, Monitoring & Coniguration Management for [opnsense.org](https://opnsense.org/) firewall appliances
 - Central WebGUI to manage & syncronise packages, backups and provides a central RFC5442 syslog archive
   
+# SCREENSHOT WEBUI
+
+![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
+
 # EXAMPLE 
 ```
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
-
-# SCREENSHOT WEBUI
-
-![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
 
 # EXAMPLE ENV CONFIG
 ```
