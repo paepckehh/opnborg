@@ -21,6 +21,10 @@
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
+# SCREENSHOT WEBUI
+
+![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
+
 # EXAMPLE ENV CONFIG
 ```
 please see:
@@ -150,8 +154,4 @@ Yes, Please! PRs Welcome!
 # ARTWORK
 
 ![OPNBORG ICON ART](https://github.com/paepckehh/opnborg/blob/main/resources/borg.png "OPNBORG")
-
-# SCREENSHOTS
-
-![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
 
