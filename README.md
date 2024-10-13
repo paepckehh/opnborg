@@ -25,11 +25,39 @@
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
+# HOW TO INSTALL
+
+```
+go install paepcke.de/opnborg/cmd/opnborg@main
+```
+
 # EXAMPLE ENV CONFIG
 ```
 please see:
 - example.sh 
 - example-env-config.sh
+```
+
+# NIXOS: PROMETHEUS AND GRAFANA INTEGRATION
+
+```
+If you run OPNBORG on NixOS
+- adapt target IPs and import opnborg-prometheus-grafana.nix via
+
+  imports = [
+    ./opnborg-prometheus-grafana.nix
+  ];
+
+- import into your grafana instance this dashboards 
+- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
+    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
+    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
+    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
+
+todo:
+- add wazuh
+- add pre-configured optimised opnsense dashboards
+- opnborg nixpkg and declarative systemd service (services.opnborg.enable)
 ```
 
 # SUPPORTED OPTIONS 
@@ -76,6 +104,7 @@ please see:
 - OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
 
 ```
+
 # OPTIONS FAQ
 
 ```
@@ -108,31 +137,7 @@ please see:
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
 
-# PROMETHEUS AND GRAFANA INTEGRATION (NixOS)
 
-```
-If you run OPNBORG on NixOS
-- adapt target IPs and import opnborg-prometheus-grafana.nix
-- add to you configuration.nix:
-
-  imports = [
-    ./opnborg-prometheus-grafana.nix
-  ];
-
-- import into your grafana instance this dashboards 
-- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
-    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
-    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
-    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
-- pending: opnborg pkg & declarative systemd integration (will be around at v1.0.0 release ) 
-
-```
-
-# HOW TO INSTALL
-
-```
-go install paepcke.de/opnborg/cmd/opnborg@main
-```
 
 # TIMELINE 
 
