@@ -13,7 +13,7 @@ import (
 )
 
 // global const
-const _version = "v0.0.26"
+const _version = "v0.0.27"
 
 // global var
 var sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
@@ -53,6 +53,10 @@ type OPNCall struct {
 		WebUI   string
 		FreeBSD string
 		HAProxy string
+	}
+	GrayLog struct {
+		Enable bool   // enable use of graylog server
+		Server string // graylog server
 	}
 	RSysLog struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)

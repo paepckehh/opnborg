@@ -37,6 +37,17 @@ please see:
 - example-env-config.sh
 ```
 
+# FEATURES
+
+- Central Monitoring (version, status, online, offline, last seen, configuration compliance)
+- Central Package Management (Install Packages across all OPNSenses, follow one master configuration)
+- Central Configuration Audit / Change Log Trail / Backup (consolidated git repo, filesystem archive for archive & easy rapid restore)
+- Central Logs Consolidation (provides internal RFC5442 syslog collector, rotate, archive, ...)
+- One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
+- Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
+- Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
+- Free, Open Source, BSD License, feel free to contribute or fork
+
 # NIXOS: PROMETHEUS AND GRAFANA INTEGRATION
 
 ```
@@ -135,17 +146,6 @@ todo:
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
 ```
-
-# FEATURES
-
-- Central Monitoring (version, status, online, offline, last seen, configuration compliance)
-- Central Package Management (Install Packages across all OPNSenses, follow one master configuration)
-- Central Configuration Audit / Change Log Trail / Backup (consolidated git repo, filesystem archive for archive & easy rapid restore)
-- Central Logs Consolidation (provides internal RFC5442 syslog collector, rotate, archive, ...)
-- One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
-- Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
-- Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
-- Free, Open Source, BSD License, feel free to contribute or fork
 
 # TIMELINE 
 
