@@ -20,7 +20,8 @@
     - Central Logs Consolidation (provides internal RFC5442 syslog collector, rotate, archive, ...)
 - One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
 - Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
-- Complementary to OPNCentral (OPNBusiness) not a replacement 
+- Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
+- Free, Open Source, BSD License, feel free to contribute or fork
  
 # SCREENSHOT WEBUI
 
