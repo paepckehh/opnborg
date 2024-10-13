@@ -13,9 +13,15 @@
 
 # OPNBORG 
 
-- Secure Backup, Monitoring & Coniguration Management for [opnsense.org](https://opnsense.org/) firewall appliances
-- Central WebGUI to manage & syncronise packages, backups and provides a central RFC5442 syslog archive
-  
+- Selfhosted OPNSense WebGUI Portal for [opnsense.org](https://opnsense.org/) firewall appliance(s)
+    - Central Monitoring (version, status, online, offline, last seen, configuration compliance)
+    - Central Package Management (Install Packages across all OPNSenses, follow one master configuration)
+    - Central Configuration Audit / Change Log Trail / Backup (consolidated git repo, filesystem archive for archive & easy rapid restore)
+    - Central Logs Consolidation (provides internal RFC5442 syslog collector, rotate, archive, ...)
+- One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
+- Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
+- Complementary to OPNCentral (OPNBusiness) not a replacement 
+ 
 # SCREENSHOT WEBUI
 
 ![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
