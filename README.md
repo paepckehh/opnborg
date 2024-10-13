@@ -164,7 +164,3 @@ Yes, Please! PRs Welcome!
 - [pvz.digital](https://pvz.digital)
 - UX Borg Design Contrib: Torben & Jonas
 
-# ARTWORK
-
-![OPNBORG ICON ART](https://github.com/paepckehh/opnborg/blob/main/resources/borg.png "OPNBORG")
-
