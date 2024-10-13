@@ -13,7 +13,7 @@ import (
 )
 
 // global const
-const _version = "v0.0.25"
+const _version = "v0.0.26"
 
 // global var
 var sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
