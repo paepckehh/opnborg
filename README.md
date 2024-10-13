@@ -48,27 +48,6 @@ please see:
 - Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
 - Free, Open Source, BSD License, feel free to contribute or fork
 
-# NIXOS: PROMETHEUS AND GRAFANA INTEGRATION
-
-```
-If you run OPNBORG on NixOS
-- adapt target IPs and import opnborg-prometheus-grafana.nix via
-
-  imports = [
-    ./opnborg-prometheus-grafana.nix
-  ];
-
-- import into your grafana instance this dashboards 
-- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
-    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
-    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
-    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
-
-todo:
-- add wazuh
-- add pre-configured optimised opnsense dashboards
-- opnborg nixpkg and declarative systemd service (services.opnborg.enable)
-```
 
 # SUPPORTED OPTIONS 
 
@@ -145,6 +124,27 @@ todo:
 - OPN_TARGETS & OPN_MASTER must hold the (reachable) WebUI Interface(s) [example: 192.168.0.1] including the port, if not 443 (example: 192.168.0.1:8443)
 - Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
 - ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
+```
+# NIXOS: PROMETHEUS AND GRAFANA INTEGRATION
+
+```
+If you run OPNBORG on NixOS
+- adapt target IPs and import opnborg-prometheus-grafana.nix via
+
+  imports = [
+    ./opnborg-prometheus-grafana.nix
+  ];
+
+- import into your grafana instance this dashboards 
+- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
+    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
+    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
+    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
+
+todo:
+- add wazuh
+- add pre-configured optimised opnsense dashboards
+- opnborg nixpkg and declarative systemd service (services.opnborg.enable)
 ```
 
 # TIMELINE 
