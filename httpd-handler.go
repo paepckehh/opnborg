@@ -18,20 +18,14 @@ const (
 	_ua    = "User-Agent"
 	_utf8  = "text/html;charset=utf-8"
 	_txt   = "text/plain"
-	_svg   = "image/svg+xml"
-	_png   = "image/png"
 	_ctype = "Content-Type"
-	_title = " [ OPNBORG ] "
-	_app   = " [ OPNBORG ] "
+	_title = "title"
+	_app   = " [ -= OPNBORG =- ] "
 )
 
 // getFavIconHandler
 func getFavIconHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		// img, _ := png.Decode(bytes.NewReader(_favicon))
-		// var b bytes.Buffer
-		// _ = png.Encode(&b, img)
-		// w.Header().Set("Content-Length", strconv.Itoa(len(b.Bytes())))
 		r.Header().Set("Content-Type", "image/png")
 		r.Header().Set("Content-Length", strconv.Itoa(len(_favicon)))
 		_, _ = r.Write(_favicon)
@@ -79,8 +73,8 @@ func getStartHTML() string {
 	s.WriteString(_bodyHTML2)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
-	s.WriteString(getPKG())
 	s.WriteString(_gitLogLink)
+	s.WriteString(getPKG())
 	s.WriteString(_endHTML)
 	return s.String()
 }
@@ -107,20 +101,22 @@ func getPKG() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<br><br><b>BorgSYNC</b><br><b>Module:Package-Sync:Active</b><br>")
-	s.WriteString(strings.ReplaceAll(syncPKG, ",", " "))
-	s.WriteString("<br><br>")
+	s.WriteString("<br><br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
+	s.WriteString("<a href=\"" + pkgmaster + "\"><Button><b> [ Manage Package Plugin Master ] </b></Button></a><br><br>")
+	s.WriteString("<table><tr><td>")
+	s.WriteString(strings.ReplaceAll(syncPKG, ",", "</td></tr>\n <tr><td>"))
+	s.WriteString("</td></tr></table><br>\n")
 	return s.String()
 }
 
 // getHive ...
 func getHive() string {
 	var s strings.Builder
-	s.WriteString("<br><br><b>HIVE</b><br><b>Module:Backup:Active<br>[ checking state every ")
+	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Backup:Active<br>[ checking state every ")
 	s.WriteString(sleep)
-	s.WriteString(" seconds ]</b><br>")
+	s.WriteString(" seconds ]</b><br>\n")
 	s.WriteString(strings.Join(hive, "\n"))
-	s.WriteString("<br><br>")
+	s.WriteString("<br><br>\n")
 	return s.String()
 }
 
@@ -133,7 +129,7 @@ func getNavi() string {
 		s.WriteString("/targets?search=")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button type=\"button\"><b>[ PrometheusDB ]</b></button></a> ")
+		s.WriteString("><button><b>[ PrometheusDB ]</b></button></a> ")
 	}
 	if grafanaWebUI != "" {
 		s.WriteString("<a href=\"")
@@ -141,7 +137,7 @@ func getNavi() string {
 		s.WriteString("/dashboards")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button type=\"button\"><b>[ Grafana Overview ]</b></button></a> ")
+		s.WriteString("><button><b>[ Grafana Overview ]</b></button></a> ")
 	}
 	if grafanaFreeBSD != "" {
 		s.WriteString("<a href=\"")
@@ -150,7 +146,7 @@ func getNavi() string {
 		s.WriteString(grafanaFreeBSD)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button type=\"button\"><b>[ Grafana OPNSenseOS Dashboards ]</b></button></a> ")
+		s.WriteString("><button><b>[ Grafana OPNSenseOS Dashboards ]</b></button></a> ")
 	}
 	if grafanaHAProxy != "" {
 		s.WriteString("<a href=\"")
@@ -159,7 +155,15 @@ func getNavi() string {
 		s.WriteString(grafanaHAProxy)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button type=\"button\"><b>[ Grafana HAProxy Dashboards ]</b></button></a> ")
+		s.WriteString("><button><b>[ Grafana HAProxy Dashboards ]</b></button></a> ")
+	}
+	if wazuhWebUI != "" {
+		s.WriteString(" <a href=\"")
+		s.WriteString(wazuhWebUI)
+		s.WriteString("/")
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button><b>[ Wazuh ]</b></button></a> ")
 	}
 	return s.String()
 }

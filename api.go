@@ -16,7 +16,7 @@ import (
 const _version = "v0.0.25"
 
 // global var
-var sleep, borg, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+var sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
 
 // OPNCall
 type OPNCall struct {
@@ -39,6 +39,10 @@ type OPNCall struct {
 		CAcert   string // httpd server certificate (path to pem encoded x509 file - full certificate chain)
 		CAkey    string // httpd server key (path to pem encoded tls server key file)
 		CAClient string // httpd client CA (path to pem endcoded x509 file - if set, it will enforce mTLS-only mode)
+	}
+	Wazuh struct {
+		Enable bool
+		WebUI  string
 	}
 	Prometheus struct {
 		Enable bool
@@ -147,6 +151,7 @@ func Setup() (*OPNCall, error) {
 		config.Sync.Master = os.Getenv("OPN_MASTER")
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
+			pkgmaster = "https://" + config.Sync.Master + _plug
 		}
 	}
 	// prometheus
@@ -155,6 +160,13 @@ func Setup() (*OPNCall, error) {
 		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
 		config.Prometheus.WebUI = config.Prometheus.WebUI
 		prometheusWebUI = config.Prometheus.WebUI
+	}
+	// wazuh
+	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
+		config.Wazuh.Enable = true
+		config.Wazuh.WebUI = os.Getenv("OPN_WAZUH_WEBUI")
+		config.Wazuh.WebUI = config.Wazuh.WebUI
+		wazuhWebUI = config.Wazuh.WebUI
 	}
 	// grafana
 	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {

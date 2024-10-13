@@ -31,12 +31,12 @@ please see:
 # SUPPORTED OPTIONS 
 
 ```
-# REQUIRED: 
+# Required
 - OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
 - OPN_APIKEY      - OPNsense Backup User APIKEY [string, base64 encoded]
 - OPN_APISECRET   - OPNsense Backup User APISECRET [string, base64 encoded]
 
-# OPTIONAL:
+# Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
 - OPN_TLSKEYPIN   - OPNsense TLS MitM proof Certificate Keypin [string]
 - OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
@@ -45,28 +45,31 @@ please see:
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
-# OPN Orchestrator 
+# PKG Installation Sync
 - OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
 - OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
 
-# OPN Remote Syslog Collector
+# Internal Remote Syslog Collector
 - OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, monitor all hive members log config (bool, default: false)
 - OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
 
-# OPN Prometheus 
-- OPN_PROMETHEUS_WEBUI - promometheus web console target & port [example: http://localhost:9191]
-
-# OPN Grafana Dashboards
-- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:9090]
-- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-
-# OPN WebConsole 
+# WebConsole 
 - OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: false)
 - OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80] 
 - OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
 - OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
 - OPN_HTTPD_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
+
+# Prometheus 
+- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:9191]
+
+# Wazuh 
+- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:9292]
+
+# Grafana
+- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:9090]
+- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
 
 ```
 # OPTIONS FAQ
@@ -127,17 +130,9 @@ If you run OPNBORG on NixOS
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-
-# STATUS
-
- - -=# WORK IN PROGRESS - USABLE - BUT ENV VAR SYNTAX API IS NOT (!) FIXED YET #=- 
- - -=# YOU HAVE TO TRACK ENV VAR CHANGES VIA CHANGELOG TILL v1.0.0 RELEASE API FREEZE #=- 
-
 # TIMELINE 
 
  - 2024
-    - September -> Internal Use Only (codesamples)
-    - October   -> Kickoff Offical Testphase 
     - November  -> Offical Pilot Phase
     - December  -> Release Candidate
  - 2025
@@ -147,7 +142,16 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 
 Yes, Please! PRs Welcome! 
 
-# SPONSORS 
+# SPONSORS & SPECIAL THANKS
 
 - [pvz.digital](https://pvz.digital)
-- UI Borg Design: Torben & Jonas
+- UX Borg Design Contrib: Torben & Jonas
+
+# ARTWORK
+
+![OPNBORG ICON ART](https://github.com/paepckehh/opnborg/blob/main/resources/borg.png "OPNBORG")
+
+# SCREENSHOTS
+
+![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
+

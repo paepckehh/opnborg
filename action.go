@@ -86,6 +86,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 const (
 	_dash = "/ui/core/dashboard"
 	_fwup = "/ui/core/firmware#status"
+	_plug = "/ui/core/firmware#plugins"
 	_srvc = "/ui/core/service"
 	_nwin = "target=\"_blank\""
 )

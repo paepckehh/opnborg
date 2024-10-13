@@ -8,13 +8,12 @@ var _favicon []byte
 const (
 	_lf        = "\n"
 	_startHTML = `<!-- index.html --><!doctype html><html>` + _lf
-	_headHTML  = `<head><meta http-equiv="refresh" content="15"><link rel="icon" type="image/png" href="favicon.ico"></head>` + _lf
+	_headHTML  = `<head><meta http-equiv="refresh" content="15"><link rel="icon" type="image/png" href="favicon.ico"><style>table{font-family:arial,sans-serif;border-collapse:collapse;}td,th{border: 1px solid #dddddd;text-align:left;padding: 8px;}tr:nth-child(even){background-color: #dddddd;}</style></head>` + _lf
 	_endHTML   = `</center></body></html>`
-
 	_bodyHTML1 = "<body style=\"background-color:orange;\"><center>"
 	_bodyHTML2 = "<h1 style=\"color:white;\"> [ OPNBORG ] </h1><h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
 
-	_gitLogLink = "<br><br><a href=\"./gitlog/\"><button type=\"button\"><b> [ CENTRAL CHANGELOG LAST 14 DAYS ] </b></button></a><br><br>"
+	_gitLogLink = "<b>BorgAUDIT</b><br><b> [ Module:Changelog:Active ] </b><br><a href=\"./gitlog/\"><button type=\"button\"><b> [ Hive Audit-Changelog last 14 days ] </b></button></a><br>"
 
 	_git = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-brand-github"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" /></svg>`
 
