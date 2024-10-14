@@ -8,18 +8,19 @@
 # OVERVIEW 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg) 
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg) 
+[![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
 
 [paepcke.de/opnborg](https://paepcke.de/opnborg/)
 
 # OPNBORG 
 
-- Selfhosted OPNSense WebGUI Portal for [opnsense.org](https://opnsense.org/) firewall appliance(s)
+- Selfhosted OPNSense WebGUI portal to configure, monitor and backup [opnsense.org](https://opnsense.org/) firewall appliance(s)
  
 # SCREENSHOT WEBUI
 
 ![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
 
-# EXAMPLE 
+# ⚡️QUICK START
 ```
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
@@ -166,7 +167,7 @@ This project is licensed under the terms of the `BSD 3-Clause License` license. 
 ```bibtex
 @misc{OPNBorg,
   author = {Michael Paepcke},
-  title = {An application to securely configure and monitor OPNSense Appliances as corporate cluster},
+  title = {An application to securely configure, monitor and backup OPNSense Appliances as corporate cluster},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
