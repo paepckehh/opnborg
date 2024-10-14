@@ -147,13 +147,32 @@ todo:
 - opnborg nixpkg and declarative systemd service (services.opnborg.enable)
 ```
 
-# TIMELINE 
+# RELEASE CYCLE / TIMELINE
 
  - 2024
-    - November  -> Offical Pilot Phase
-    - December  -> Release Candidate
+    - November  -> (BETA) (v0.0.x)    Pilot Phase - define project scope
+    - December  -> (RC)   (v0.1.0)    Release Candidate
  - 2025
-    - January - > First Public Release & Native [NixOS](https://github.com/nixos) support
+    - January   -> (RELEASE) (v1.0.0) Public Release  
+
+# 🛡 License
+
+[![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
+
+This project is licensed under the terms of the `BSD 3-Clause License` license. See [LICENSE](https://github.com/paepckehh/opnborg/blob/master/LICENSE) for more details.
+
+# 📃 Citation
+
+```bibtex
+@misc{OPNBorg,
+  author = {Michael Paepcke},
+  title = {An application to securely configure and monitor OPNSense Appliances as corporate cluster},
+  year = {2024},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://paepcke.de/opnborg}}
+}
+```
 
 # CONTRIBUTION
 
@@ -163,4 +182,3 @@ Yes, Please! PRs Welcome!
 
 - [pvz.digital](https://pvz.digital)
 - UX Borg Design Contrib: Torben & Jonas
-
