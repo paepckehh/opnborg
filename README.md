@@ -153,9 +153,9 @@ todo:
 
  - 2024
     - November  -> (BETA) (v0.0.x)    Pilot Phase - define project scope
-    - December  -> (RC)   (v0.1.0)    Release Candidate
+    - December  -> (RC) Release Candidate(s)
  - 2025
-    - January   -> (RELEASE) (v1.0.0) Public Release  
+    - January   -> (RELEASE) (v1.0.0) First Public Release  
 
 # 🛡 License
 
