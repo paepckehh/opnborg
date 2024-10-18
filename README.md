@@ -54,9 +54,10 @@ please see:
 
 ```
 # Required
-- OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
 - OPN_APIKEY      - OPNsense Backup User APIKEY [string, base64 encoded]
 - OPN_APISECRET   - OPNsense Backup User APISECRET [string, base64 encoded]
+- OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
+- OPN_TARGETS_*   - alternative: group OPNSense Target server by categories
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
