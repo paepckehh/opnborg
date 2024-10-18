@@ -183,4 +183,4 @@ Yes, Please! PRs Welcome!
 # SPONSORS & SPECIAL THANKS
 
 - [pvz.digital](https://pvz.digital)
-- UX Borg Design Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://igithub.com/Jones71190)
+- UX Borg Design Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)
