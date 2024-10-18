@@ -76,7 +76,7 @@ please see:
 - OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
 
 # WebConsole 
-- OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: false)
+- OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: true)
 - OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80] 
 - OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
 - OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)

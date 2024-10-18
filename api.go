@@ -13,14 +13,24 @@ import (
 )
 
 // global const
-const _version = "v0.0.27"
+const _version = "v0.0.28"
 
 // global var
-var sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+var (
+	tg                                                                                                []OPNGroup
+	sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+)
+
+// OPNGroup Type
+type OPNGroup struct {
+	Name   string   // group name
+	Member []string // group member
+}
 
 // OPNCall
 type OPNCall struct {
 	Targets   string      // list of OPNSense Appliances, csv comma seperated
+	TGroups   []OPNGroup  // list of OPNSense Appliances Target Groups and Member
 	Key       string      // OPNSense Backup User API Key (required)
 	Secret    string      // OPNSense Backup User API Secret (required)
 	Path      string      // OPNSense Backup Files Target Path, default:'.'
@@ -77,7 +87,7 @@ type OPNCall struct {
 func Setup() (*OPNCall, error) {
 
 	// check if setup requirements are meet
-	if err := checkRequired(); err != nil {
+	if err := checkSetRequired(); err != nil {
 		return nil, err
 	}
 
@@ -128,7 +138,7 @@ func Setup() (*OPNCall, error) {
 		}
 	}
 	// configure httpd
-	config.Httpd.Enable = false
+	config.Httpd.Enable = true
 	if config.Daemon {
 		if _, ok := os.LookupEnv("OPN_HTTPD_ENABLE"); ok {
 			if _, ok := os.LookupEnv("OPN_HTTPD_SERVER"); ok {

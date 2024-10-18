@@ -109,14 +109,36 @@ func getPKG() string {
 	return s.String()
 }
 
-// getHive ...
+// getHive
 func getHive() string {
 	var s strings.Builder
-	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Backup:Active<br>[ checking state every ")
+	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Monitor:Backup:Active<br>[ checking state every ")
 	s.WriteString(sleep)
-	s.WriteString(" seconds ]</b><br>\n")
-	s.WriteString(strings.Join(hive, "\n"))
-	s.WriteString("<br><br>\n")
+	s.WriteString(" seconds ]</b><br><br>\n")
+	s.WriteString(_lf)
+	hiveMutex.Lock() // snapshot (freeze) state
+	for _, grp := range tg {
+		s.WriteString("<b>" + grp.Name + "</b><br>")
+		s.WriteString(" <table>")
+		s.WriteString(_lf)
+		for _, srv := range grp.Member {
+			s.WriteString("  <tr><td>")
+			for _, line := range hive {
+				if strings.Contains(line, srv) {
+					s.WriteString(line)
+					break
+				}
+			}
+			s.WriteString("  </tr></td>")
+			s.WriteString(_lf)
+		}
+		s.WriteString(" </table>")
+		s.WriteString(" <br>")
+		s.WriteString(_lf)
+	}
+	hiveMutex.Unlock()
+	s.WriteString("<br>")
+	s.WriteString(_lf)
 	return s.String()
 }
 

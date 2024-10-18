@@ -108,7 +108,7 @@ func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded
 		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button><b>[current.xml]</b></button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
 		links := linkCurrent + " " + linkArchive
-		status := state + " <b>Member: </b> " + linkUI + " <b>Version: </b>" + linkUP + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
+		status := state + " " + linkUI + " <b>Version: </b>" + linkUP + " <b>Last Seen: </b>" + seen + " <b>Files: </b>" + links + "<br>"
 		hiveMutex.Lock()
 		hive[id] = status
 		hiveMutex.Unlock()

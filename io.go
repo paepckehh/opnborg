@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -52,10 +54,7 @@ func padMonth(in string) string {
 }
 
 // checkRequired env input
-func checkRequired() error {
-	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
-		return errors.New(fmt.Sprintf("Add at least one target server to env var 'OPN_TARGETS' (multi valued, comma seperated)"))
-	}
+func checkSetRequired() error {
 
 	if _, ok := os.LookupEnv("OPN_APIKEY"); !ok {
 		return errors.New(fmt.Sprintf("Set env var 'OPN_APIKEY' to your opnsense api key"))
@@ -64,5 +63,30 @@ func checkRequired() error {
 	if _, ok := os.LookupEnv("OPN_APISECRET"); !ok {
 		return errors.New(fmt.Sprintf("Set env var 'OPN_APISECRET' to your opnsense api key secret"))
 	}
+	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
+		member := ""
+		env := os.Environ()
+		if len(env) > 1 {
+			sort.Strings(env)
+			for _, value := range env {
+				if len(value) > 15 {
+					if value[0:12] == "OPN_TARGETS_" {
+						grp := strings.Split(value, "=")
+						if len(member) > 0 {
+							member = member + ","
+						}
+						member = member + grp[1]
+						tg = append(tg, OPNGroup{Name: grp[0][12:], Member: strings.Split(grp[1], ",")})
+					}
+				}
+			}
+			if len(member) > 0 {
+				os.Setenv("OPN_TARGETS", member)
+				return nil
+			}
+		}
+		return errors.New(fmt.Sprintf("Add at least one target server to env var 'OPN_TARGETS' or 'OPN_TARGETS_* '(multi valued, comma seperated)"))
+	}
+	tg = append(tg, OPNGroup{Name: "Hive", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
 	return nil
 }
