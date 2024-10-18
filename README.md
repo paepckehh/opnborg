@@ -18,7 +18,7 @@
  
 # SCREENSHOT WEBUI
 
-![OPNBORG SAMPLE SCREENSHOT 01](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot01.png "SCREEN01")
+![OPNBORG SAMPLE SCREENSHOT](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot02.png "SCREEN")
 
 # ⚡️QUICK START
 ```
