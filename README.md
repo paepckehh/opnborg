@@ -57,7 +57,7 @@ please see:
 - OPN_APIKEY      - OPNsense Backup User APIKEY [string, base64 encoded]
 - OPN_APISECRET   - OPNsense Backup User APISECRET [string, base64 encoded]
 - OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
-- OPN_TARGETS_*   - alternative: group OPNSense Target server by categories
+- OPN_TARGETS_*   - alternative: group OPNSense Target server by freeform named categories [examples: OPN_TARGETS_INTRANET="...", OPN_TARGETS_SITE_BERLIN="..."]
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
