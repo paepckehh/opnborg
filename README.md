@@ -134,7 +134,7 @@ If you run OPNBORG on NixOS
 - adapt target IPs and import opnborg-prometheus-grafana.nix via
 
   imports = [
-    ./opnborg-prometheus-grafana.nix
+    ./opnborg-prometheus-grafana-wazuh.nix
   ];
 
 - import into your grafana instance this dashboards 
@@ -146,16 +146,8 @@ If you run OPNBORG on NixOS
 todo:
 - add wazuh
 - add pre-configured optimised opnsense dashboards
-- opnborg nixpkg and declarative systemd service (services.opnborg.enable)
+- opnborg nixpkg and declarative systemd service ( services.opnborg = { enable = true; } ... )
 ```
-
-# RELEASE CYCLE / TIMELINE
-
- - 2024
-    - November  -> (BETA) (v0.0.x)    Pilot Phase - define project scope
-    - December  -> (RC) Release Candidate(s)
- - 2025
-    - January   -> (RELEASE) (v1.0.0) First Public Release  
 
 # 🛡 License
 
@@ -183,4 +175,4 @@ Yes, Please! PRs Welcome!
 # SPONSORS & SPECIAL THANKS
 
 - [pvz.digital](https://pvz.digital)
-- UX Borg Design Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)
+- UX Borg Design & Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)
