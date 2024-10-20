@@ -33,5 +33,5 @@ func main() {
 	}
 
 	// Finish
-	fmt.Println(_app + "[END][RUNTIME]:" + time.Now().Sub(t0).String())
+	fmt.Println(_app + "[END][RUNTIME]:" + time.Since(t0).String())
 }

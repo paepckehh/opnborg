@@ -44,8 +44,14 @@ func startRSysLog(config *OPNCall) {
 	server := syslog.NewServer()
 	server.SetFormat(syslog.RFC5424)
 	server.SetHandler(handler)
-	server.ListenUDP(config.RSysLog.Server)
-	server.Boot()
+	err := server.ListenUDP(config.RSysLog.Server)
+	if err != nil {
+		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER][FAIL] listen interface (udp): " + err.Error())
+	}
+	err = server.Boot()
+	if err != nil {
+		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER][FAIL] server " + err.Error())
+	}
 
 	go func(channel syslog.LogPartsChannel) {
 		for line := range channel {

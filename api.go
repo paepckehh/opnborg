@@ -12,7 +12,7 @@ import (
 )
 
 // global const
-const _version = "v0.1.6"
+const _version = "v0.1.7"
 
 // global var
 var (
