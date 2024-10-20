@@ -9,6 +9,8 @@ builds:
       - linux
       - freebsd
       - darwin
+      - netbsd
+      - openbsd
       - windows
     goarch:
       - amd64
