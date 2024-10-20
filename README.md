@@ -154,6 +154,10 @@ todo:
 - opnborg nixpkg and declarative systemd service ( services.opnborg = { enable = true; } ... )
 ```
 
+# DOCS
+
+[pkg.go.dev/paepcke.de/opnborg](https://pkg.go.dev/paepcke.de/opnborg)
+
 # 🛡 License
 
 [![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
@@ -163,9 +167,9 @@ This project is licensed under the terms of the `BSD 3-Clause License` license. 
 # 📃 Citation
 
 ```bibtex
-@misc{OPNBorg,
+@misc{opnborg,
   author = {Michael Paepcke},
-  title = {An application to securely configure, monitor and backup OPNSense Appliances as corporate cluster},
+  title = {selfhostable opnsense appliance configuration managenment & backup portal},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
