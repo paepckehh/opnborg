@@ -32,6 +32,9 @@ OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run pa
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
+# PRE-BUILD BINARIES (DOWNLOAD)
+[https://github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
+
 # EXAMPLE ENV CONFIG
 ```
 please see:
