@@ -9,6 +9,7 @@ import (
 func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 
 	// setup target
+	_ = getLogConf(strings.Split(config.RSysLog.Server, ":"))
 	srv := strings.Split(config.RSysLog.Server, ":")
 
 	// compare

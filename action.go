@@ -120,5 +120,4 @@ func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded
 	status = _fail + status
 	hive[id] = status
 	hiveMutex.Unlock()
-	return
 }

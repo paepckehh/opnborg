@@ -3,7 +3,6 @@ package opnborg
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -25,7 +24,10 @@ const (
 // lastSum check last XML file sha256 checksum
 func lastSum(config *OPNCall, server string) [32]byte {
 	fileName := filepath.Join(config.Path, server, _current)
-	data, _ := ioutil.ReadFile(fileName)
+	data, err := os.ReadFile(fileName)
+	if err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-READ-HASHSHUM-FILE] " + server)
+	}
 	return sha256.Sum256(data)
 }
 

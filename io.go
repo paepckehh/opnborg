@@ -2,7 +2,6 @@ package opnborg
 
 import (
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -32,8 +31,6 @@ func startLog(config *OPNCall) {
 		}
 		display.Done()
 	}()
-	return
-
 }
 
 //
@@ -57,11 +54,11 @@ func padMonth(in string) string {
 func checkSetRequired() error {
 
 	if _, ok := os.LookupEnv("OPN_APIKEY"); !ok {
-		return errors.New(fmt.Sprintf("Set env var 'OPN_APIKEY' to your opnsense api key"))
+		return fmt.Errorf("set env variable 'OPN_APIKEY' to your opnsense api key")
 	}
 
 	if _, ok := os.LookupEnv("OPN_APISECRET"); !ok {
-		return errors.New(fmt.Sprintf("Set env var 'OPN_APISECRET' to your opnsense api key secret"))
+		return fmt.Errorf("set env variable 'OPN_APISECRET' to your opnsense api key secret")
 	}
 	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
 		member := ""
@@ -85,7 +82,7 @@ func checkSetRequired() error {
 				return nil
 			}
 		}
-		return errors.New(fmt.Sprintf("Add at least one target server to env var 'OPN_TARGETS' or 'OPN_TARGETS_* '(multi valued, comma seperated)"))
+		return fmt.Errorf("add at least one target server to env var 'OPN_TARGETS' or 'OPN_TARGETS_* '(multi valued, comma seperated)")
 	}
 	tg = append(tg, OPNGroup{Name: "Hive", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
 	return nil

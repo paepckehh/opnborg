@@ -1,7 +1,6 @@
 package opnborg
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +12,7 @@ import (
 )
 
 // global const
-const _version = "v0.1.3"
+const _version = "v0.1.4"
 
 // global var
 var (
@@ -132,7 +131,7 @@ func Setup() (*OPNCall, error) {
 				config.RSysLog.Enable = true
 				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SERVER")
 				if len(strings.Split(config.RSysLog.Server, ":")) < 1 {
-					return nil, errors.New(fmt.Sprintf("env var 'OPN_RSYSLOG_SRV' format error, example \"192.168.0.100:5140\""))
+					return nil, fmt.Errorf("env variable 'OPN_RSYSLOG_SRV' format error, example \"192.168.0.100:5140\"")
 				}
 			}
 		}
@@ -148,7 +147,7 @@ func Setup() (*OPNCall, error) {
 					config.Httpd.Server = "127.0.0.1:6464"
 				}
 				if len(strings.Split(config.Httpd.Server, ":")) < 1 {
-					return nil, errors.New(fmt.Sprintf("env var 'OPN_HTTPD_SRV' format error, example \"127.0.0.1:6464\""))
+					return nil, fmt.Errorf("env variable 'OPN_HTTPD_SRV' format error, example \"127.0.0.1:6464\"")
 				}
 				config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
 				config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
@@ -172,21 +171,18 @@ func Setup() (*OPNCall, error) {
 	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
 		config.Prometheus.Enable = true
 		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
-		config.Prometheus.WebUI = config.Prometheus.WebUI
 		prometheusWebUI = config.Prometheus.WebUI
 	}
 	// wazuh
 	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
 		config.Wazuh.Enable = true
 		config.Wazuh.WebUI = os.Getenv("OPN_WAZUH_WEBUI")
-		config.Wazuh.WebUI = config.Wazuh.WebUI
 		wazuhWebUI = config.Wazuh.WebUI
 	}
 	// grafana
 	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {
 		config.Grafana.Enable = true
 		config.Grafana.WebUI = os.Getenv("OPN_GRAFANA_WEBUI")
-		config.Grafana.WebUI = config.Grafana.WebUI
 		grafanaWebUI = config.Grafana.WebUI
 		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_FREEBSD"); ok {
 			config.Grafana.FreeBSD = os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD")
@@ -209,7 +205,7 @@ func Setup() (*OPNCall, error) {
 			var err error
 			config.Sleep, err = strconv.ParseInt(sleep, 10, 64)
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("env var 'OPN_SLEEP' must contain a number in seconds without prefix or suffix"))
+				return nil, fmt.Errorf("env variable 'OPN_SLEEP' must contain a number in seconds without prefix or suffix")
 			}
 		}
 		if config.Sleep < 10 {
