@@ -169,7 +169,7 @@ This project is licensed under the terms of the `BSD 3-Clause License` license. 
 ```bibtex
 @misc{opnborg,
   author = {Michael Paepcke},
-  title = {selfhostable opnsense appliance configuration managenment & backup portal},
+  title = {Selfhost-able OPNSense Appliance Configuration Managenment & Backup Portal},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
