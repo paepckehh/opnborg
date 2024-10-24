@@ -118,7 +118,11 @@ func getHive() string {
 	s.WriteString(_lf)
 	hiveMutex.Lock() // snapshot (freeze) state
 	for _, grp := range tg {
-		s.WriteString("<b>" + grp.Name + "</b><br>")
+		if grp.Img {
+			s.WriteString("<img alt=\"" + grp.Name + "\" src=\"" + grp.ImgURL + "\"><br>")
+		} else {
+			s.WriteString("<b>" + grp.Name + "</b><br>")
+		}
 		s.WriteString(" <table>")
 		s.WriteString(_lf)
 		for _, srv := range grp.Member {

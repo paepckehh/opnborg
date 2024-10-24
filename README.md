@@ -59,10 +59,11 @@ please see:
 
 ```
 # Required
-- OPN_APIKEY      - OPNsense Backup User APIKEY [string, base64 encoded]
-- OPN_APISECRET   - OPNsense Backup User APISECRET [string, base64 encoded]
-- OPN_TARGETS     - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
-- OPN_TARGETS_*   - alternative: group OPNSense Target server by freeform named categories [examples: OPN_TARGETS_INTRANET="...", OPN_TARGETS_SITE_BERLIN="..."]
+- OPN_APIKEY           - OPNsense Backup User APIKEY [string, base64 encoded]
+- OPN_APISECRET        - OPNsense Backup User APISECRET [string, base64 encoded]
+- OPN_TARGETS          - list of OPNSense Target Server to Backup [string, hostnames, comma separated]
+- OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."]
+- OPN_TARGETS_IMGURL_* - alternative: custom image url for customs groups within WebUI [example: OPN_TARGETS_IMG_INTRANET="https://paepcke.de/img/intra.png"]
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
