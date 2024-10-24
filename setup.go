@@ -90,7 +90,7 @@ func Setup() (*OPNCall, error) {
 
 				var s strings.Builder
 				s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
-				s.WriteString("<meta http-equiv=\"refresh\" content=\"10\">" + _lf)
+				s.WriteString("<meta http-equiv=\"refresh\" content=\"20\">" + _lf)
 				s.WriteString("<meta charset=\"UTF-8\">" + _lf)
 				s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
 				s.WriteString("<style>body{color: ")
