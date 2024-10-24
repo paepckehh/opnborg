@@ -16,8 +16,10 @@ const _version = "v0.1.12"
 
 // global var
 var (
-	tg                                                                                                []OPNGroup
-	sleep, borg, pkgmaster, wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+	tg                                                                        []OPNGroup
+	sleep, borg, pkgmaster                                                    string
+	colorFG, colorBG                                                          string
+	wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
 )
 
 // OPNGroup Type
@@ -48,6 +50,10 @@ type OPNCall struct {
 		CAcert   string // httpd server certificate (path to pem encoded x509 file - full certificate chain)
 		CAkey    string // httpd server key (path to pem encoded tls server key file)
 		CAClient string // httpd client CA (path to pem endcoded x509 file - if set, it will enforce mTLS-only mode)
+		Color    struct {
+			FG string // color theme background
+			BG string // color theme foreground
+		}
 	}
 	Wazuh struct {
 		Enable bool
@@ -152,6 +158,37 @@ func Setup() (*OPNCall, error) {
 				config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
 				config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
 				config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
+				config.Httpd.Color.FG = "black"
+				config.Httpd.Color.BG = "orange"
+				if _, ok := os.LookupEnv("OPN_HTTPD_COLOR_FG"); ok {
+					config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
+				}
+				if _, ok := os.LookupEnv("OPN_HTTPD_COLOR_BG"); ok {
+					config.Httpd.Color.BG = os.Getenv("OPN_HTTPD_COLOR_BG")
+				}
+
+				var s strings.Builder
+				s.WriteString("<head>")
+				s.WriteString("<title>")
+				s.WriteString(_app)
+				s.WriteString("</title>")
+				s.WriteString("<meta http-equiv=\"refresh\" content=\"10\">")
+				s.WriteString(_lf)
+				s.WriteString("<meta charset=\"UTF-8\">")
+				s.WriteString(_lf)
+				s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">")
+				s.WriteString(_lf)
+				s.WriteString("<style>body{color: ")
+				s.WriteString(config.Httpd.Color.FG)
+				s.WriteString(";background-color: ")
+				s.WriteString(config.Httpd.Color.BG)
+				s.WriteString(";}")
+				s.WriteString(_lf)
+				s.WriteString("</style>")
+				s.WriteString(_lf)
+				s.WriteString("</head>")
+				s.WriteString(_lf)
+				_headHTML = s.String()
 			}
 		}
 	}

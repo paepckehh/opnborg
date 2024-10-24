@@ -83,10 +83,13 @@ please see:
 
 # WebConsole 
 - OPN_HTTPD_ENABLE      - spin up internal httpd server (bool, default: true)
-- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80] 
-- OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
-- OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
-- OPN_HTTPD_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
+- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80]
+- Optional 
+  - OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
+  - OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
+  - OPN_HTTPD_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
+  - OPN_HTTPD_COLOR_FG    - WebUI Foreground (html) color code (example: "black" or "#000000", ) 
+  - OPN_HTTPD_COLOR_BG    - WebUI Background (html) color code (example: "orange" or "#ffa500")
 
 # Prometheus 
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:9191]

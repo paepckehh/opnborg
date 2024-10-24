@@ -5,13 +5,15 @@ import _ "embed"
 //go:embed resources/borg.png
 var _favicon []byte
 
+// see api.go
+var _headHTML string
+
 const (
 	_lf        = "\n"
 	_startHTML = `<!-- index.html --><!doctype html><html>` + _lf
-	_headHTML  = `<head><meta http-equiv="refresh" content="15"><link rel="icon" type="image/png" href="favicon.ico"><style>table{font-family:arial,sans-serif;border-collapse:collapse;}td,th{border: 1px solid #dddddd;text-align:left;padding: 8px;}tr:nth-child(even){background-color: #dddddd;}</style></head>` + _lf
 	_endHTML   = `</center></body></html>`
-	_bodyHTML1 = "<body style=\"background-color:orange;\"><center>"
-	_bodyHTML2 = "<h1 style=\"color:white;\"> [ OPNBORG ] </h1><h5 style=\"color:white;\"> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
+	_bodyHTML1 = "<body><center>"
+	_bodyHTML2 = "<h1>" + _app + "</h1><h5> [ " + _version + " ] <br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
 
 	_gitLogLink = "<b>BorgAUDIT</b><br><b> [ Module:Changelog:Active ] </b><br><a href=\"./gitlog/\"><button type=\"button\"><b> [ Hive Audit-Changelog last 14 days ] </b></button></a><br>"
 
