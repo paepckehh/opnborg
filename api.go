@@ -18,7 +18,6 @@ const _version = "v0.1.14"
 var (
 	tg                                                                        []OPNGroup
 	sleep, borg, pkgmaster                                                    string
-	colorFG, colorBG                                                          string
 	wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
 )
 
