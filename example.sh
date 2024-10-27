@@ -10,7 +10,7 @@
 # opnborg 
 
 # run via local repository mode
-# go mod tidy
+go mod tidy
 go run cmd/opnborg/main.go
 
 # run via latest commit online
