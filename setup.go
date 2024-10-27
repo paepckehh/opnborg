@@ -39,22 +39,22 @@ func Setup() (*OPNCall, error) {
 
 	// validate bools, set defaults
 	config.Debug = false
-	if _, ok := os.LookupEnv("OPN_DEBUG"); ok {
+	if isEnv("OPN_DEBUG") {
 		config.Debug = true
 	}
 	config.Git = true
-	if _, ok := os.LookupEnv("OPN_NOGIT"); ok {
+	if isEnv("OPN_NOGIT") {
 		config.Git = false
 	}
 	config.Daemon = true
-	if _, ok := os.LookupEnv("OPN_NODAEMON"); ok {
+	if isEnv("OPN_NODAEMON") {
 		config.Daemon = false
 	}
 	// configure remote syslog server
 	config.RSysLog.Enable = false
 	if config.Daemon {
-		if _, ok := os.LookupEnv("OPN_RSYSLOG_ENABLE"); ok {
-			if _, ok := os.LookupEnv("OPN_RSYSLOG_SERVER"); ok {
+		if isEnv("OPN_RSYSLOG_ENABLE") {
+			if isEnv("OPN_RSYSLOG_SERVER") {
 				config.RSysLog.Enable = true
 				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SERVER")
 				if len(strings.Split(config.RSysLog.Server, ":")) < 1 {
@@ -66,8 +66,8 @@ func Setup() (*OPNCall, error) {
 	// configure httpd
 	config.Httpd.Enable = true
 	if config.Daemon {
-		if _, ok := os.LookupEnv("OPN_HTTPD_ENABLE"); ok {
-			if _, ok := os.LookupEnv("OPN_HTTPD_SERVER"); ok {
+		if !isEnv("OPN_HTTPD_DISABLE") {
+			if isEnv("OPN_HTTPD_SERVER") {
 				config.Httpd.Enable = true
 				config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
 				if config.Httpd.Server == "" {
@@ -93,13 +93,13 @@ func Setup() (*OPNCall, error) {
 				s.WriteString("<meta http-equiv=\"refresh\" content=\"20\">" + _lf)
 				s.WriteString("<meta charset=\"UTF-8\">" + _lf)
 				s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
-				s.WriteString("<style>body{color: ")
-				s.WriteString(config.Httpd.Color.FG)
-				s.WriteString(";background-color: ")
-				s.WriteString(config.Httpd.Color.BG)
-				s.WriteString(";}" + _lf)
-				s.WriteString("</style>" + _lf + "</head>" + _lf)
-				_headHTML = s.String()
+				s.WriteString(" <style>" + _lf)
+				s.WriteString("  table,th,td{" + _lf)
+				s.WriteString("   border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
+				s.WriteString("  body{color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
+				s.WriteString(" </style>" + _lf)
+				s.WriteString("</head>" + _lf)
+				_head = s.String()
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func Setup() (*OPNCall, error) {
 	config.Sync.Enable = false
 	config.Sync.validConf = false
 	config.Sync.PKG.Enable = false
-	if _, ok := os.LookupEnv("OPN_MASTER"); ok {
+	if isEnv("OPN_MASTER") {
 		config.Sync.Enable = true
 		config.Sync.Master = os.Getenv("OPN_MASTER")
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
@@ -169,14 +169,14 @@ func Setup() (*OPNCall, error) {
 // checkRequired env input
 func checkSetRequired() error {
 
-	if _, ok := os.LookupEnv("OPN_APIKEY"); !ok {
+	if !isEnv("OPN_APIKEY") {
 		return fmt.Errorf("set env variable 'OPN_APIKEY' to your opnsense api key")
 	}
 
-	if _, ok := os.LookupEnv("OPN_APISECRET"); !ok {
+	if !isEnv("OPN_APISECRET") {
 		return fmt.Errorf("set env variable 'OPN_APISECRET' to your opnsense api key secret")
 	}
-	if _, ok := os.LookupEnv("OPN_TARGETS"); !ok {
+	if !isEnv("OPN_TARGETS") {
 		member := ""
 		env := os.Environ()
 		if len(env) > 1 {
@@ -192,7 +192,7 @@ func checkSetRequired() error {
 							member = member + ","
 						}
 						member = member + grp[1]
-						if _, ok := os.LookupEnv("OPN_TARGETS_IMGURL_" + grp[0][12:]); ok {
+						if isEnv("OPN_TARGETS_IMGURL_" + grp[0][12:]) {
 							tg = append(tg, OPNGroup{
 								Name:   grp[0][12:],
 								Img:    true,

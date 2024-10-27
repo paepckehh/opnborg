@@ -66,16 +66,19 @@ func getGitHandler() http.Handler {
 // getStartHTML is the root page
 func getStartHTML() string {
 	var s strings.Builder
-	s.WriteString(_startHTML)
-	s.WriteString(_headHTML)
-	s.WriteString(_bodyHTML1)
+	s.WriteString(_htmlStart)
+	s.WriteString(_head)
+	s.WriteString(_bodyStart)
+	s.WriteString(_bodyHead)
 	s.WriteString(borg)
-	s.WriteString(_bodyHTML2)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
 	s.WriteString(_gitLogLink)
 	s.WriteString(getPKG())
-	s.WriteString(_endHTML)
+	s.WriteString(_bodySemVer)
+	s.WriteString(_bodyFooter)
+	s.WriteString(_bodyEnd)
+	s.WriteString(_htmlEnd)
 	return s.String()
 }
 
@@ -103,9 +106,10 @@ func getPKG() string {
 	var s strings.Builder
 	s.WriteString("<br><br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
 	s.WriteString("<a href=\"" + pkgmaster + "\"><Button><b> [ Manage Package Plugin Master ] </b></Button></a><br><br>")
-	s.WriteString("<table><tr><td>")
-	s.WriteString(strings.ReplaceAll(syncPKG, ",", "</td></tr>\n <tr><td>"))
-	s.WriteString("</td></tr></table><br>\n")
+	s.WriteString("<table><tr><td><small>")
+	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
+	s.WriteString("</small></td></tr></table>")
+	s.WriteString("<br>\n")
 	return s.String()
 }
 

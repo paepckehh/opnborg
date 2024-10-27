@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// global const
-const _version = "v0.1.18"
+// global exported consts
+const SemVer = "v0.1.21"
 
 // global var
 var (
@@ -114,7 +114,7 @@ func Start(config *OPNCall) error {
 	if config.Daemon {
 		suffix = "[DAEMON-MODE][SLEEP:" + sleep + " SECONDS]"
 	}
-	displayChan <- []byte("[STARTING][" + _app + "][" + _version + "]" + suffix)
+	displayChan <- []byte("[STARTING][" + _app + "][" + SemVer + "]" + suffix)
 
 	// loop
 	for {

@@ -34,6 +34,16 @@ func startLog(config *OPNCall) {
 // Little Helper
 //
 
+// isEnv
+func isEnv(check string) bool {
+	if content, ok := os.LookupEnv(check); ok {
+		if content != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // isValidXML
 func isValidXML(s string) bool {
 	return xml.Unmarshal([]byte(s), new(interface{})) == nil

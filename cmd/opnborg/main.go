@@ -16,7 +16,7 @@ func main() {
 
 	// Startup
 	t0 := time.Now()
-	fmt.Println(_app + "[STARTUP]")
+	fmt.Println(_app + "[STARTUP][API-VERSION]" + opnborg.SemVer)
 
 	// Configure
 	config, err := opnborg.Setup()
