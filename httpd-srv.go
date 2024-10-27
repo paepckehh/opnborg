@@ -9,10 +9,6 @@ import (
 // httpd spinup the http internal web server
 func startWeb(config *OPNCall) {
 
-	// terminate if not in daemon mode
-	if !config.Daemon {
-		return
-	}
 	// create store structure
 	if err := os.MkdirAll(config.Path, 0770); err != nil {
 		fmt.Println(err)
@@ -47,9 +43,7 @@ func startWeb(config *OPNCall) {
 	}
 
 	// info
-	if config.Debug {
-		displayChan <- []byte("[HTTPD-SRV][SPIN-UP-SERVER] " + config.Httpd.Server)
-	}
+	displayChan <- []byte("[HTTPD-SRV][SPIN-UP-SERVER] " + config.Httpd.Server)
 
 	// serve requestes, print err after httpd crash
 	fmt.Println(httpsrv.Serve(listener))

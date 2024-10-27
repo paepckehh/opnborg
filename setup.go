@@ -67,40 +67,39 @@ func Setup() (*OPNCall, error) {
 	config.Httpd.Enable = true
 	if config.Daemon {
 		if !isEnv("OPN_HTTPD_DISABLE") {
+			config.Httpd.Enable = true
+			config.Httpd.Server = "127.0.0.1:6464"
 			if isEnv("OPN_HTTPD_SERVER") {
-				config.Httpd.Enable = true
 				config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
-				if config.Httpd.Server == "" {
-					config.Httpd.Server = "127.0.0.1:6464"
-				}
 				if len(strings.Split(config.Httpd.Server, ":")) < 1 {
 					return nil, fmt.Errorf("env variable 'OPN_HTTPD_SRV' format error, example \"127.0.0.1:6464\"")
 				}
-				config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
-				config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
-				config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
-				config.Httpd.Color.FG = "white"
-				config.Httpd.Color.BG = "grey"
-				if _, ok := os.LookupEnv("OPN_HTTPD_COLOR_FG"); ok {
-					config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
-				}
-				if _, ok := os.LookupEnv("OPN_HTTPD_COLOR_BG"); ok {
-					config.Httpd.Color.BG = os.Getenv("OPN_HTTPD_COLOR_BG")
-				}
-
-				var s strings.Builder
-				s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
-				s.WriteString("<meta http-equiv=\"refresh\" content=\"20\">" + _lf)
-				s.WriteString("<meta charset=\"UTF-8\">" + _lf)
-				s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
-				s.WriteString(" <style>" + _lf)
-				s.WriteString("  table,th,td{" + _lf)
-				s.WriteString("   border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
-				s.WriteString("  body{color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
-				s.WriteString(" </style>" + _lf)
-				s.WriteString("</head>" + _lf)
-				_head = s.String()
 			}
+			config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
+			config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
+			config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
+			config.Httpd.Color.FG = "white"
+			config.Httpd.Color.BG = "grey"
+			if isEnv("OPN_HTTPD_COLOR_FG") {
+				config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
+			}
+			if isEnv("OPN_HTTPD_COLOR_BG") {
+				config.Httpd.Color.BG = os.Getenv("OPN_HTTPD_COLOR_BG")
+			}
+
+			var s strings.Builder
+			s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
+			s.WriteString("<meta http-equiv=\"refresh\" content=\"20\">" + _lf)
+			s.WriteString("<meta charset=\"UTF-8\">" + _lf)
+			s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
+			s.WriteString(" <style>" + _lf)
+			s.WriteString("  table,th,td{" + _lf)
+			s.WriteString("   border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
+			s.WriteString("  body{color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
+			s.WriteString(" </style>" + _lf)
+			s.WriteString("</head>" + _lf)
+			_head = s.String()
+
 		}
 	}
 	// config Master
@@ -216,6 +215,6 @@ func checkSetRequired() error {
 		}
 		return fmt.Errorf("add at least one target server to env var 'OPN_TARGETS' or 'OPN_TARGETS_* '(multi valued, comma seperated)")
 	}
-	tg = append(tg, OPNGroup{Name: "Hive", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
+	tg = append(tg, OPNGroup{Name: "", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
 	return nil
 }

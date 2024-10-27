@@ -8,7 +8,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.21"
+const SemVer = "v0.1.24"
 
 // global var
 var (
@@ -94,13 +94,25 @@ func Start(config *OPNCall) error {
 
 	// spin up Log/Display Engine
 	display.Add(1)
+
+	// spin up internal log / display engine
 	go startLog(config)
 
 	// spin up internal webserver
-	go startWeb(config)
+	state := "[DISABLED]"
+	if config.Httpd.Enable {
+		go startWeb(config)
+		state = "[ENABLED]"
+	}
+	displayChan <- []byte("[SERVICE][HTTPD]" + state)
 
 	// spin up internal rsyslog server
-	go startRSysLog(config)
+	state = "[DISABLED]"
+	if config.RSysLog.Enable {
+		go startRSysLog(config)
+		state = "[ENABLED]"
+	}
+	displayChan <- []byte("[SERVICE][RSYSLOG]" + state)
 
 	// setup hive
 	servers := strings.Split(config.Targets, ",")

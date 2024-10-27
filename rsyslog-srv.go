@@ -12,12 +12,6 @@ import (
 // httpd spinup the internal rsyslog server
 func startRSysLog(config *OPNCall) {
 
-	// terminate if not in daemon mode
-	if !config.Daemon || !config.RSysLog.Enable {
-		displayChan <- []byte("[RSYSLOG][TERMINATED)")
-		return
-	}
-
 	// create store structure
 	logStore := filepath.Join(config.Path, "Logs")
 	if err := os.MkdirAll(logStore, 0770); err != nil {

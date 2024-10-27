@@ -1,8 +1,8 @@
 #!/bin/sh
-# export OPN_TARGETS='opn01.lan:8443,opn02.lan:8443,opn03.lan:8443,opn04.lan:8443,opn05.lan:8443'
 export OPN_TARGETS_HOTSTANDBY='opn00.lan:8443'
-export OPN_TARGETS_IMGURL_HOTSTANDBY='https://avatars.githubusercontent.com/u/120342602?s=96&v=4'
 export OPN_TARGETS_PRODUCTION='opn01.lan:8443,opn02.lan:8443'
+export OPN_TARGETS_IMGURL_HOTSTANDBY='https://icon-library.com/images/freebsd-icon/freebsd-icon-16.jpg'
+export OPN_TARGETS_IMGURL_PRODUCTION='https://icon-library.com/images/freebsd-icon/freebsd-icon-16.jpg'
 export OPN_MASTER='opn01.lan:8443'
 export OPN_APIKEY='+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD'
 export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p'

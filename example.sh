@@ -1,10 +1,20 @@
 #!/bin/sh
-# include ('source') configuration from example-env-config.sh
-. ./example-env-config.sh
 
-# local repository mode
-go mod tidy
+# include simple ('source') configuration from example-env-config-simple.sh
+# . ./example-env-config-simple.sh
+
+# include complex ('source') configuration from example-env-config-complex.sh
+. ./example-env-config-complex.sh
+
+# run via local installed binary
+# opnborg 
+
+# run via local repository mode
+# go mod tidy
 go run cmd/opnborg/main.go
 
-# if not in local repository, use:
+# run via latest commit online
 # go run paepcke.de/opnborg/cmd/opnborg@main
+
+# run via latest release online
+# go run paepcke.de/opnborg/cmd/opnborg@latest
