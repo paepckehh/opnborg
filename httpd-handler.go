@@ -131,7 +131,7 @@ func getPKG() string {
 // getHive
 func getHive() string {
 	var s strings.Builder
-	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Monitor:Backup:Active<br>[ checking state every ")
+	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Monitor:Backup:Active<br>[ Automatic check every ")
 	s.WriteString(sleep)
 	s.WriteString(" seconds ]</b><br>" + _lf)
 	s.WriteString(_forceButton + "<br>" + _lf)

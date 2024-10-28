@@ -97,7 +97,7 @@ func Setup() (*OPNCall, error) {
 			s.WriteString("  body{color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
 			s.WriteString(" </style>" + _lf)
 			_head = s.String() + "<meta http-equiv=\"refresh\" contenti=\"15\">" + _lf + "</head>" + _lf
-			_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"4; url='../'\">" + _lf + "</head>" + _lf
+			_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
 			_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceInfo + _bodyEnd + _htmlEnd
 
 		}
