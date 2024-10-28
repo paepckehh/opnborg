@@ -88,9 +88,12 @@ type OPNCall struct {
 // global
 var hive []string
 var hiveMutex sync.Mutex
+var update = make(chan bool, 1)
 
 // Start Application
 func Start(config *OPNCall) error {
+	// init
+	var err error
 
 	// spin up Log/Display Engine
 	display.Add(1)
@@ -128,10 +131,14 @@ func Start(config *OPNCall) error {
 	}
 	displayChan <- []byte("[STARTING][" + _app + "][" + SemVer + "]" + suffix)
 
-	// loop
+	// spin up timer
+	go func() {
+		time.Sleep(time.Duration(config.Sleep) * time.Second)
+		update <- true
+	}()
+
+	// main loop
 	for {
-		// init
-		var err error
 
 		// fetch target configuration from master server
 		if config.Sync.Enable {
@@ -184,7 +191,10 @@ func Start(config *OPNCall) error {
 			return nil
 		}
 
-		// wait loop
-		time.Sleep(time.Duration(config.Sleep) * time.Second)
+		// set loop wait
+		select {
+		case <-update:
+			break
+		}
 	}
 }

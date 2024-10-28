@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alecthomas/chroma/v2/quick"
@@ -22,6 +23,20 @@ const (
 	_title = "title"
 	_app   = " [ -= OPNBORG =- ] "
 )
+
+// global
+var force bool
+var forceMutex sync.Mutex
+
+// getForceHandler
+func getForceHandler() http.Handler {
+	h := func(r http.ResponseWriter, q *http.Request) {
+		update <- true
+		r = headHTML(r)
+		_, _ = r.Write([]byte(_forceRedirect))
+	}
+	return http.HandlerFunc(h)
+}
 
 // getFavIconHandler
 func getFavIconHandler() http.Handler {
@@ -118,8 +133,8 @@ func getHive() string {
 	var s strings.Builder
 	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Monitor:Backup:Active<br>[ checking state every ")
 	s.WriteString(sleep)
-	s.WriteString(" seconds ]</b><br><br>\n")
-	s.WriteString(_lf)
+	s.WriteString(" seconds ]</b><br>" + _lf)
+	s.WriteString(_forceButton + "<br>" + _lf)
 	hiveMutex.Lock() // snapshot (freeze) state
 	for _, grp := range tg {
 		if grp.Img {

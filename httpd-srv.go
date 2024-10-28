@@ -35,6 +35,7 @@ func startWeb(config *OPNCall) {
 	mux.Handle("/", addSecurityHeader(getIndexHandler()))
 	mux.Handle("/gitlog/", addSecurityHeader(getGitHandler()))
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(config.Path)))))
+	mux.Handle("/force", getForceHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())
 
 	// httpsrv
