@@ -131,14 +131,11 @@ func getPKG() string {
 // getHive
 func getHive() string {
 	var s strings.Builder
-	s.WriteString("<br><br><b>BorgHIVE</b><br><b>Module:Monitor:Backup:Active<br>[ Automatic check every ")
-	s.WriteString(sleep)
-	s.WriteString(" seconds ]</b><br>" + _lf)
-	s.WriteString(_forceButton + "<br>" + _lf)
+	s.WriteString("<br><br><br>")
 	hiveMutex.Lock() // snapshot (freeze) state
 	for _, grp := range tg {
 		if grp.Img {
-			s.WriteString("<img alt=\"" + grp.Name + "\" src=\"" + grp.ImgURL + "\"><br>")
+			s.WriteString("<b><img alt=\"" + grp.Name + "\" src=\"" + grp.ImgURL + "\"></b><br>")
 		} else {
 			s.WriteString("<b>" + grp.Name + "</b><br>")
 		}
@@ -160,8 +157,11 @@ func getHive() string {
 		s.WriteString(_lf)
 	}
 	hiveMutex.Unlock()
-	s.WriteString("<br>")
 	s.WriteString(_lf)
+	s.WriteString("<b>BorgBACKUP</b><br><b>Module:Monitor:Backup:Active<br>[ Automatic check every ")
+	s.WriteString(sleep)
+	s.WriteString(" seconds ]</b><br>" + _lf)
+	s.WriteString(_forceButton + "<br><br>" + _lf)
 	return s.String()
 }
 

@@ -20,7 +20,7 @@ const (
 	_bodyFooter = "<br> [ RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ] [ <a href=\"https://paepcke.de/opnborg\">" + _git + "</a> <a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a> ] [ SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> ] </h5>"
 
 	_forceInfo   = "<br><br><h1>[ performing backup ] <br> [ wait for redirect ]</h1><br><br>"
-	_forceButton = "<a href=\"./force\"><button><b> [ BACKUP NOW ] </b></button></a>"
+	_forceButton = "<a href=\"./force\"><button><b> [ Backup NOW ] </b></button></a>"
 
 	_gitLogLink = "<b>BorgAUDIT</b><br><b> [ Module:Changelog:Active ] </b><br><a href=\"./gitlog/\"><button type=\"button\"><b> [ Hive Audit-Changelog last 14 days ] </b></button></a><br>"
 
