@@ -28,20 +28,62 @@
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-# HOW TO INSTALL
+# ⚡️HOW TO INSTALL
 
 ```
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-# PRE-BUILD BINARIES (DOWNLOAD)
+# ⚡️PRE-BUILD BINARIES (DOWNLOAD)
 [https://github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
 
-# EXAMPLE ENV CONFIG
+# ⚡️EXAMPLE CONFIGURATION VIA ENV 
 ```
 please see:
 - example.sh 
 - example-env-config.sh
+```
+
+# ⚡️DOCKER
+```
+docker pull ghcr.io/paepckehh/opnborg:latest
+```
+
+# ⚡️NIXOS SYSTEM SERVICE VIA DOCKER
+see opnborg-docker.nix
+see opnborg-docker-complex.nix
+see opnborg-prometheus-grafana.nix
+
+```
+{config, ...}: {
+  ####################
+  #-=# NETWORKING #=-#
+  ####################
+  networking = {
+    firewall = {
+      allowedTCPPorts = [6464]; # open tcp port 6464
+    };
+  };
+  ########################
+  #-=# VIRTUALISATION #=-#
+  ########################
+  virtualisation = {
+    oci-containers = {
+      backend = "podman";
+      containers = {
+        opnborg = {
+          image = "ghcr.io/paepckehh/opnborg";
+          extraOptions = ["--network=host"];
+          environment = {
+            "OPN_TARGETS" = "opn01.lan,opn02.lan";
+            "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD";
+            "OPN_APISECRET" = "8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p";
+          };
+        };
+      };
+    };
+  };
+}
 ```
 
 # FEATURES
