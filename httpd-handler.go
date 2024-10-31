@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/alecthomas/chroma/v2/quick"
@@ -23,10 +22,6 @@ const (
 	_title = "title"
 	_app   = " [ -= OPNBORG =- ] "
 )
-
-// global
-var force bool
-var forceMutex sync.Mutex
 
 // getForceHandler
 func getForceHandler() http.Handler {
