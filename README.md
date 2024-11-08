@@ -138,15 +138,19 @@ see opnborg-prometheus-grafana.nix
   - OPN_HTTPD_COLOR_BG    - WebUI Background (html) color code (example: "orange" or "#ffa500")
 
 # Prometheus 
-- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:9191]
+- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
+
+# Unifi 
+- OPN_UNIFI_WEBUI  - Unifi Web Console target & port [example: http://localhost:8444]
 
 # Wazuh 
-- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:9292]
+- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
 
 # Grafana
-- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:9090]
-- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:8446]
+- OPN_GRAFANA_DASHBOARD_FREEBSD  - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_DASHBOARD_HAPROXY  - grafana haproxy node dashboard id / dashboard name (example: P4zs3-ces/haproxy-2-full)
+- OPN_GRAFANA_DASHBOARD_UNPOLLER - grafana unpoller dashboard id / dashboard name (example: g3kd0-3ds/unpoller)
 
 ```
 

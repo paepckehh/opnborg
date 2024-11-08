@@ -8,13 +8,14 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.28"
+const SemVer = "v0.1.29"
 
 // global var
 var (
-	tg                                                                        []OPNGroup
-	sleep, borg, pkgmaster                                                    string
-	wazuhWebUI, prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy string
+	tg                                                            []OPNGroup
+	sleep, borg, pkgmaster                                        string
+	wazuhWebUI, unifiWebUI, prometheusWebUI                       string
+	grafanaWebUI, grafanaFreeBSD, grafanaUnpoller, grafanaHAProxy string
 )
 
 // OPNGroup Type
@@ -52,6 +53,10 @@ type OPNCall struct {
 			BG string // color theme foreground
 		}
 	}
+	Unifi struct {
+		Enable bool
+		WebUI  string
+	}
 	Wazuh struct {
 		Enable bool
 		WebUI  string
@@ -61,10 +66,11 @@ type OPNCall struct {
 		WebUI  string
 	}
 	Grafana struct {
-		Enable  bool
-		WebUI   string
-		FreeBSD string
-		HAProxy string
+		Enable   bool
+		WebUI    string
+		FreeBSD  string
+		HAProxy  string
+		Unpoller string
 	}
 	GrayLog struct {
 		Enable bool   // enable use of graylog server

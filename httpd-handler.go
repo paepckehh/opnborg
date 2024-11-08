@@ -177,7 +177,7 @@ func getNavi() string {
 		s.WriteString("/dashboards")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Grafana Overview ]</b></button></a> ")
+		s.WriteString("><button><b>[ Grafana ]</b></button></a> ")
 	}
 	if grafanaFreeBSD != "" {
 		s.WriteString("<a href=\"")
@@ -186,7 +186,7 @@ func getNavi() string {
 		s.WriteString(grafanaFreeBSD)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Grafana OPNSenseOS Dashboards ]</b></button></a> ")
+		s.WriteString("><button><b>[ OPNSense OS Dashboard ]</b></button></a> ")
 	}
 	if grafanaHAProxy != "" {
 		s.WriteString("<a href=\"")
@@ -195,7 +195,24 @@ func getNavi() string {
 		s.WriteString(grafanaHAProxy)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Grafana HAProxy Dashboards ]</b></button></a> ")
+		s.WriteString("><button><b>[ HAProxy Dashboard ]</b></button></a> ")
+	}
+	if grafanaUnpoller != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(grafanaUnpoller)
+		s.WriteString("/d/")
+		s.WriteString(grafanaUnpoller)
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
+	}
+	if unifiWebUI != "" {
+		s.WriteString(" <a href=\"")
+		s.WriteString(unifiWebUI)
+		s.WriteString("/")
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button><b>[ Unifi ]</b></button></a> ")
 	}
 	if wazuhWebUI != "" {
 		s.WriteString(" <a href=\"")
@@ -210,7 +227,7 @@ func getNavi() string {
 
 // getGitLog ...
 func getGitHTML() string {
-	cgit := true
+	cgit := false
 	if cgit {
 		// native c lib git log
 		var buf bytes.Buffer

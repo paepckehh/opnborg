@@ -120,6 +120,12 @@ func Setup() (*OPNCall, error) {
 		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
 		prometheusWebUI = config.Prometheus.WebUI
 	}
+	// unifi
+	if _, ok := os.LookupEnv("OPN_UNIFI_WEBUI"); ok {
+		config.Unifi.Enable = true
+		config.Unifi.WebUI = os.Getenv("OPN_UNIFI_WEBUI")
+		unifiWebUI = config.Unifi.WebUI
+	}
 	// wazuh
 	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
 		config.Wazuh.Enable = true
@@ -138,6 +144,10 @@ func Setup() (*OPNCall, error) {
 		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_HAPROXY"); ok {
 			config.Grafana.HAProxy = os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY")
 			grafanaHAProxy = config.Grafana.HAProxy
+		}
+		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_UNPOLLER"); ok {
+			config.Grafana.Unpoller = os.Getenv("OPN_GRAFANA_DASHBOARD_UNPOLLER")
+			grafanaUnpoller = config.Grafana.Unpoller
 		}
 	}
 	// configure eMail default
