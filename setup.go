@@ -79,7 +79,7 @@ func Setup() (*OPNCall, error) {
 			config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
 			config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
 			config.Httpd.Color.FG = "white"
-			config.Httpd.Color.BG = "grey"
+			config.Httpd.Color.BG = "#333333"
 			if isEnv("OPN_HTTPD_COLOR_FG") {
 				config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
 			}

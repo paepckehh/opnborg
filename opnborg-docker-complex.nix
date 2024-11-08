@@ -39,7 +39,9 @@
             "OPN_RSYSLOG_SERVER" = "192.168.122.1:5140";
             "OPN_GRAFANA_WEBUI" = "http://localhost:9090";
             "OPN_GRAFANA_DASHBOARD_FREEBSD" = "Kczn-jPZz/node-exporter-freebsd";
-            "OPN_GRAFANA_DASHBOARD_HAPROXY" = "rEqu1u5ue/haproxy-2-full";
+            "OPN_GRAFANA_DASHBOARD_HAPROXY" = "rEqu1u-5ue/haproxy-2-full";
+            "OPN_GRAFANA_DASHBOARD_UNPOLLER" = "bbtr-sdzvfd/unpoller";
+            "OPN_UNIFI_WEBUI" = "http://localhost:9494";
             "OPN_WAZUH_WEBUI" = "http://localhost:9292";
             "OPN_PROMETHEUS_WEBUI" = "http://localhost:9191";
           };

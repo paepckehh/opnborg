@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"html"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,13 +17,16 @@ const (
 )
 
 // setOPNStatus
-func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, degraded, ok bool) {
+func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, notice string, degraded, ok bool) {
 	year, month, _ := ts.Date()
 	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	if ok {
 		state := _ok
 		if degraded {
 			state = _degraded
+			if notice != "" {
+				state = strings.ReplaceAll(state, "DEGRADED", html.EscapeString(notice))
+			}
 		}
 		seen := ts.Format(time.RFC3339)
 		ver := getFirmwareVersion(config, server)

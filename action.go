@@ -20,7 +20,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	ts := time.Now()
 
 	// get current opn config via xml
-	fetchFail, degraded := false, false
+	fetchFail, degraded, notice := false, false, ""
 	opn := new(Opnsense)
 	if config.Sync.Enable || config.RSysLog.Enable {
 		if opn, err = fetchOPN(server, config); err != nil {
@@ -41,7 +41,8 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	// check for pending BorgOPS Operations Tasks
 	if config.RSysLog.Enable && !fetchFail {
 		if err = checkRSysLogConfig(server, config, opn); err != nil {
-			displayChan <- []byte("[RSYSLOG][CLIENT-CONF][FAIL]" + err.Error())
+			notice = "[RSYSLOG][CLIENT-CONF][FAIL]" + err.Error()
+			displayChan <- []byte(notice)
 			degraded = true
 		}
 	}
@@ -50,7 +51,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	serverXML, err := fetchXML(server, config)
 	if err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-XML] " + server + err.Error())
-		setOPNStatus(config, server, id, ts, degraded, false)
+		setOPNStatus(config, server, id, ts, notice, degraded, false)
 		return
 	}
 
@@ -61,7 +62,7 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 		if config.Debug {
 			displayChan <- []byte("[BACKUP][SERVER][NO-CHANGE] " + server)
 		}
-		setOPNStatus(config, server, id, ts, degraded, true)
+		setOPNStatus(config, server, id, ts, notice, degraded, true)
 		return
 	}
 
@@ -73,9 +74,9 @@ func actionSrv(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	// check xml file into storage
 	if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
-		setOPNStatus(config, server, id, ts, degraded, false)
+		setOPNStatus(config, server, id, ts, notice, degraded, false)
 		return
 	}
 	displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-STORE-CHECKIN-OF-MODIFIED-XML]")
-	setOPNStatus(config, server, id, ts, degraded, true)
+	setOPNStatus(config, server, id, ts, notice, degraded, true)
 }
