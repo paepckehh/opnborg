@@ -1,10 +1,16 @@
 package opnborg
 
 import (
+	"bytes"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"paepcke.de/npad/compress"
 )
 
@@ -52,6 +58,21 @@ func getIndexHandler() http.Handler {
 	return http.HandlerFunc(h)
 }
 
+// getGitHandler
+func getGitHandler() http.Handler {
+	h := func(r http.ResponseWriter, q *http.Request) {
+		r = headHTML(r)
+		switch q.Method {
+		case "GET":
+			compress.WriteTransportCompressedPage(getGitHTML(), r, q, true)
+		default:
+			inf := "Error: Method Not Allowed (405) [" + q.Method + "]"
+			http.Error(r, inf, http.StatusMethodNotAllowed)
+		}
+	}
+	return http.HandlerFunc(h)
+}
+
 // getStartHTML is the root page
 func getStartHTML() string {
 	var s strings.Builder
@@ -62,6 +83,7 @@ func getStartHTML() string {
 	s.WriteString(borg)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
+	s.WriteString(_gitLogLink)
 	s.WriteString(getPKG())
 	s.WriteString(_bodySemVer)
 	s.WriteString(_bodyFooter)
@@ -200,5 +222,58 @@ func getNavi() string {
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ Wazuh ]</b></button></a> ")
 	}
+	return s.String()
+}
+
+// getGitLog ...
+func getGitHTML() string {
+	cgit := false
+	if cgit {
+		// native c lib git log
+		var buf bytes.Buffer
+		cmd := exec.Command("git", "log", "-c", "--since=14days")
+		gitLog, err := cmd.CombinedOutput()
+		if err != nil {
+			_ = quick.Highlight(&buf, err.Error(), "diff", "html", "github")
+			return buf.String()
+		}
+		_ = quick.Highlight(&buf, string(gitLog), "diff", "html", "github")
+		return buf.String()
+	}
+
+	// open git repo
+	repo, err := git.PlainOpen(_currentDir)
+	if err != nil {
+		return err.Error()
+	}
+
+	// identify repo head
+	ref, err := repo.Head()
+	if err != nil {
+		return err.Error()
+	}
+
+	// Fetch Log
+	now := time.Now()
+	since := time.Now().AddDate(0, -14, 0)
+	objIter, err := repo.Log(&git.LogOptions{
+		From:  ref.Hash(),
+		Since: &since,
+		Until: &now,
+	})
+	if err != nil {
+		return err.Error()
+	}
+	var s strings.Builder
+	s.WriteString("<pre>")
+	_ = objIter.ForEach(func(c *object.Commit) error {
+		s.WriteString(_linefeed)
+		s.WriteString(_linefeed)
+		obj, _ := repo.CommitObject(c.Hash)
+		s.WriteString(obj.String())
+		s.WriteString(_linefeed)
+		return nil
+	})
+	s.WriteString("</pre>")
 	return s.String()
 }
