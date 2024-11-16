@@ -6,13 +6,13 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.31"
+const SemVer = "v0.1.32"
 
 // global var
 var (
 	tg                                                            []OPNGroup
 	sleep, borg, pkgmaster                                        string
-	wazuhWebUI, unifiWebUI, prometheusWebUI                       string
+	wazuhWebUI, unifiWebUI, unifiDash, prometheusWebUI            string
 	grafanaWebUI, grafanaFreeBSD, grafanaUnpoller, grafanaHAProxy string
 )
 
@@ -38,7 +38,7 @@ type OPNCall struct {
 	Daemon    bool        // daemonize (run in background), default: true
 	Debug     bool        // verbose debug logs, defaults to false
 	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
-	extGIT    bool        // when available, use external git for verification
+	GitPush   bool        // push .git repo to configured upstream, default: false
 	dirty     atomic.Bool // git global (atomic) worktree state
 	Httpd     struct {
 		Enable   bool   // enable internal web server
@@ -52,8 +52,9 @@ type OPNCall struct {
 		}
 	}
 	Unifi struct {
-		Enable bool
-		WebUI  string
+		Enable    bool
+		WebUI     string
+		Dashboard string
 	}
 	Wazuh struct {
 		Enable bool
@@ -64,15 +65,10 @@ type OPNCall struct {
 		WebUI  string
 	}
 	Grafana struct {
-		Enable   bool
-		WebUI    string
-		FreeBSD  string
-		HAProxy  string
-		Unpoller string
-	}
-	GrayLog struct {
-		Enable bool   // enable use of graylog server
-		Server string // graylog server
+		Enable  bool
+		WebUI   string
+		FreeBSD string
+		HAProxy string
 	}
 	RSysLog struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)

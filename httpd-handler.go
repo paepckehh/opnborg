@@ -175,15 +175,6 @@ func getNavi() string {
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ HAProxy Dashboard ]</b></button></a> ")
 	}
-	if grafanaUnpoller != "" {
-		s.WriteString("<a href=\"")
-		s.WriteString(grafanaUnpoller)
-		s.WriteString("/d/")
-		s.WriteString(grafanaUnpoller)
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
-	}
 	if unifiWebUI != "" {
 		s.WriteString(" <a href=\"")
 		s.WriteString(unifiWebUI)
@@ -191,6 +182,15 @@ func getNavi() string {
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ Unifi ]</b></button></a> ")
+	}
+	if unifiDash != "" {
+		s.WriteString("<a href=\"")
+		s.WriteString(unifiDash)
+		s.WriteString("/d/")
+		s.WriteString(unifiDash)
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
 	}
 	if wazuhWebUI != "" {
 		s.WriteString(" <a href=\"")

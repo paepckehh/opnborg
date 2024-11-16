@@ -141,7 +141,8 @@ see opnborg-prometheus-grafana.nix
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
 
 # Unifi 
-- OPN_UNIFI_WEBUI  - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_WEBUI     - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_DASHBOARD - Unifi Dashboard (Unpoller) [example: http://localhost:8449]
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
