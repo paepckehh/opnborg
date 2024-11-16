@@ -22,7 +22,7 @@ func srv(config *OPNCall) error {
 		go startWeb(config)
 		state = "[ENABLED]"
 	}
-	displayChan <- []byte("[SERVICE][HTTPD]" + state)
+	displayChan <- []byte("[SERVICE][HTTPD]" + state + "[" + config.Httpd.Server + "]")
 
 	// spin up internal rsyslog server
 	state = "[DISABLED]"
@@ -76,8 +76,12 @@ func srv(config *OPNCall) error {
 		}
 		for id, server := range servers {
 			wg.Add(1)
-			go actionSrv(server, config, id, &wg)
+			go actionOPN(server, config, id, &wg)
 		}
+
+		// spinup unifi backup engine
+		wg.Add(1)
+		go actionUnifi(config, &wg)
 
 		// wait till all worker done
 		wg.Wait()

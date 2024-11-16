@@ -117,6 +117,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
 - OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
+- OPN_GITPUSH     - push all changes to upstream git repo (needs upstream setting via .git/config)
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
 # PKG Installation Sync
@@ -141,8 +142,8 @@ see opnborg-prometheus-grafana.nix
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
 
 # Unifi 
-- OPN_UNIFI_WEBUI     - Unifi Web Console target & port [example: http://localhost:8444]
-- OPN_UNIFI_DASHBOARD - Unifi Dashboard (Unpoller) [example: http://localhost:8449]
+- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_DASHBOARD     - Unifi Dashboard (Unpoller) [example: http://localhost:8449]
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]

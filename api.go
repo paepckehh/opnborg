@@ -6,7 +6,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.32"
+const SemVer = "v0.1.35"
 
 // global var
 var (
@@ -55,6 +55,11 @@ type OPNCall struct {
 		Enable    bool
 		WebUI     string
 		Dashboard string
+		Backup    struct {
+			Enable bool
+			User   string
+			Secret string
+		}
 	}
 	Wazuh struct {
 		Enable bool

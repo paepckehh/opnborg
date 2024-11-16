@@ -46,6 +46,10 @@ func Setup() (*OPNCall, error) {
 	if isEnv("OPN_NOGIT") {
 		config.Git = false
 	}
+	config.GitPush = false
+	if isEnv("OPN_GITPUSH") {
+		config.GitPush = true
+	}
 	config.Daemon = true
 	if isEnv("OPN_NODAEMON") {
 		config.Daemon = false
@@ -125,11 +129,20 @@ func Setup() (*OPNCall, error) {
 		config.Unifi.Enable = true
 		config.Unifi.WebUI = os.Getenv("OPN_UNIFI_WEBUI")
 		unifiWebUI = config.Unifi.WebUI
-	}
-	// unifi dashboard
-	if _, ok := os.LookupEnv("OPN_UNIFI_DASHBOARD"); ok {
-		config.Unifi.Dashboard = os.Getenv("OPN_UNIFI_DASHBOARD")
-		unifiDash = config.Unifi.Dashboard
+		if _, ok := os.LookupEnv("OPN_UNIFI_DASHBOARD"); ok {
+			config.Unifi.Dashboard = os.Getenv("OPN_UNIFI_DASHBOARD")
+			unifiDash = config.Unifi.Dashboard
+		}
+		config.Unifi.Backup.Enable = false
+		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_USER"); ok {
+			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_BACKUP_USER")
+		}
+		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_SECRET"); ok {
+			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_BACKUP_SECRET")
+		}
+		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
+			config.Unifi.Backup.Enable = true
+		}
 	}
 	// wazuh
 	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {

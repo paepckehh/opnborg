@@ -9,6 +9,7 @@ export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1
 export OPN_TLSKEYPIN='SG95BZoovDVQtclwEhINMitua05ZP9NfuI0mzzj0fXI='
 export OPN_PATH='/tmp/opn'
 export OPN_SLEEP='60'
+export OPN_GITPUSH='false'
 export OPN_DEBUG='true'
 export OPN_SYNC_PKG='true'
 export OPN_HTTPD_SERVER='127.0.0.1:6464'

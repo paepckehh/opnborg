@@ -84,5 +84,14 @@ func gitCheckIn(config *OPNCall) error {
 	if err != nil {
 		return err
 	}
+	if config.GitPush {
+
+		// Push to (Remote) Upstream Repo
+		if err := repo.Push(&git.PushOptions{}); err != nil {
+			displayChan <- []byte("[GIT][REPO][PUSH][FAIL]")
+			return err
+		}
+		displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][PUSH][FINISH]")
+	}
 	return nil
 }
