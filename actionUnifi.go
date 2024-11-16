@@ -36,12 +36,12 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 		displayChan <- []byte("[BACKUP][UNIFI][NO-CHANGE]")
 	}
 	//	setOPNStatus(config, server, id, ts, notice, degraded, true)
-	return
+	//      return
 	//}
 
 	// set git global (atomic) worktree state tracker
 	if config.Git {
-		config.dirty.Store(true)
+		// config.dirty.Store(true)
 	}
 
 	// check xml file into storage
@@ -50,6 +50,7 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	//	setOPNStatus(config, server, id, ts, notice, degraded, false)
 	//	return
 	// }
-	displayChan <- []byte("[BACKUP][OK][SUCCESS:UNIFI-STORE-CHECKIN-OF-MODIFIED-XML]")
+	// displayChan <- []byte("[BACKUP][OK][SUCCESS:UNIFI-STORE-CHECKIN-OF-MODIFIED-XML]")
 	// setOPNStatus(config, server, id, ts, notice, degraded, true)
+	return
 }
