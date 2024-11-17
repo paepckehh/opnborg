@@ -2,6 +2,8 @@ package opnborg
 
 import (
 	"encoding/xml"
+	"errors"
+	"net/url"
 	"os"
 	"sync"
 )
@@ -33,6 +35,27 @@ func startLog(config *OPNCall) {
 //
 // Little Helper
 //
+
+// checkURL
+func checkURL(env string) (*url.URL, error) {
+	if _, ok := os.LookupEnv(env); ok {
+		out, err := url.Parse(os.Getenv(env))
+		if err != nil {
+			return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
+		}
+		return out, nil
+	}
+	return nil, nil
+}
+
+// checkPreURL check prefixed url
+func checkPreURL(base *url.URL, prefix, env string) (*url.URL, error) {
+	out, err := url.Parse(base.String() + prefix + os.Getenv(env))
+	if err != nil {
+		return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
+	}
+	return out, nil
+}
 
 // isEnv
 func isEnv(check string) bool {

@@ -1,9 +1,7 @@
 package opnborg
 
 import (
-	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -123,22 +121,26 @@ func Setup() (*OPNCall, error) {
 			pkgmaster = "https://" + config.Sync.Master + _plug
 		}
 	}
+
+	//
+	// WebUI Section
+	//
+
 	// prometheus
-	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
-		config.Prometheus.WebUI, err = url.Parse(os.Getenv("OPN_PROMETHEUS_WEBUI"))
-		if err != nil {
-			return config, errors.New("[SETUP][PROMETHEUS][INVALID-URL]" + err.Error())
-		}
-		config.Prometheus.Enable = true
-		prometheusWebUI = config.Prometheus.WebUI
+	if config.Prometheus.WebUI, err = checkURL("OPN_PROMETHEUS_WEBUI"); err != nil {
+		return config, err
 	}
-	// unifi management
-	if _, ok := os.LookupEnv("OPN_UNIFI_WEBUI"); ok {
-		config.Unifi.WebUI, err = url.Parse(os.Getenv("OPN_UNIFI_WEBUI"))
-		if err != nil {
-			return config, errors.New("[SETUP][UNIFI][INVALID-URL]" + err.Error())
-		}
-		config.Unifi.Enable = true
+	prometheusWebUI = config.Prometheus.WebUI
+	// wazuh
+	if config.Wazuh.WebUI, err = checkURL("OPN_WAZUH_WEBUI"); err != nil {
+		return config, err
+	}
+	wazuhWebUI = config.Wazuh.WebUI
+	// unifi
+	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
+		return config, err
+	}
+	if config.Unifi.WebUI != nil {
 		unifiWebUI = config.Unifi.WebUI
 		config.Unifi.Backup.Enable = false
 		if _, ok := os.LookupEnv("OPN_UNIFI_USER"); ok {
@@ -151,44 +153,24 @@ func Setup() (*OPNCall, error) {
 			config.Unifi.Backup.Enable = true
 		}
 	}
-	// wazuh
-	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
-		config.Wazuh.WebUI, err = url.Parse(os.Getenv("OPN_WAZUH_WEBUI"))
-		if err != nil {
-			return config, errors.New("[SETUP][WAZUH][INVALID-URL]" + err.Error())
-		}
-		config.Wazuh.Enable = true
-		wazuhWebUI = config.Wazuh.WebUI
-	}
 	// grafana
-	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {
-		config.Grafana.WebUI, err = url.Parse(os.Getenv("OPN_GRAFANA_WEBUI"))
-		if err != nil {
-			return config, errors.New("[SETUP][WAZUH][INVALID-URL]" + err.Error())
-		}
-		config.Grafana.Enable = true
+	if config.Grafana.WebUI, err = checkURL("OPN_GRAFANA_WEBUI"); err != nil {
+		return config, err
+	}
+	if config.Grafana.WebUI != nil {
 		grafanaWebUI = config.Grafana.WebUI
-		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_FREEBSD"); ok {
-			config.Grafana.FreeBSD, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD"))
-			if err != nil {
-				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_FREEBSD][INVALID-URL]" + err.Error())
-			}
-			grafanaFreeBSD = config.Grafana.FreeBSD
+		if config.Grafana.FreeBSD, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_FREEBSD"); err != nil {
+			return config, err
 		}
-		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_HAPROXY"); ok {
-			config.Grafana.HAProxy, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY"))
-			if err != nil {
-				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_HAPROXY][INVALID-URL]" + err.Error())
-			}
-			grafanaHAProxy = config.Grafana.HAProxy
+		grafanaFreeBSD = config.Grafana.FreeBSD
+		if config.Grafana.HAProxy, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_HAPROXY"); err != nil {
+			return config, err
 		}
-		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_UNIFI"); ok {
-			config.Grafana.Unifi, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_UNIFI"))
-			if err != nil {
-				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_UNIFI][INVALID-URL]" + err.Error())
-			}
-			grafanaUnifi = config.Grafana.Unifi
+		grafanaHAProxy = config.Grafana.HAProxy
+		if config.Grafana.Unifi, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_UNIFI"); err != nil {
+			return config, err
 		}
+		grafanaUnifi = config.Grafana.Unifi
 	}
 	// configure eMail default
 	if config.Email == "" {

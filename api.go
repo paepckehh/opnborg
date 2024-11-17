@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.38"
+const SemVer = "v0.1.40"
 
 // global var
 var (
@@ -53,7 +53,6 @@ type OPNCall struct {
 		}
 	}
 	Unifi struct {
-		Enable bool
 		WebUI  *url.URL
 		Backup struct {
 			Enable bool
@@ -62,15 +61,12 @@ type OPNCall struct {
 		}
 	}
 	Wazuh struct {
-		Enable bool
-		WebUI  *url.URL
+		WebUI *url.URL
 	}
 	Prometheus struct {
-		Enable bool
-		WebUI  *url.URL
+		WebUI *url.URL
 	}
 	Grafana struct {
-		Enable  bool
 		WebUI   *url.URL
 		FreeBSD *url.URL
 		HAProxy *url.URL
