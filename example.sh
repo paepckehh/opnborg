@@ -4,7 +4,9 @@
 # . ./example-env-config-simple.sh
 
 # include complex ('source') configuration from example-env-config-complex.sh
-. ./example-env-config-complex.sh
+# . ./example-env-config-complex.sh
+. ./example-env-config-dev.sh
+
 
 # run via local installed binary
 # opnborg 

@@ -1,19 +1,20 @@
 package opnborg
 
 import (
+	"net/url"
 	"sync"
 	"sync/atomic"
 )
 
 // global exported consts
-const SemVer = "v0.1.35"
+const SemVer = "v0.1.38"
 
 // global var
 var (
-	tg                                                            []OPNGroup
-	sleep, borg, pkgmaster                                        string
-	wazuhWebUI, unifiWebUI, unifiDash, prometheusWebUI            string
-	grafanaWebUI, grafanaFreeBSD, grafanaUnpoller, grafanaHAProxy string
+	tg                                                         []OPNGroup
+	sleep, borg, pkgmaster                                     string
+	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL
+	grafanaWebUI, grafanaFreeBSD, grafanaUnifi, grafanaHAProxy *url.URL
 )
 
 // OPNGroup Type
@@ -52,10 +53,9 @@ type OPNCall struct {
 		}
 	}
 	Unifi struct {
-		Enable    bool
-		WebUI     string
-		Dashboard string
-		Backup    struct {
+		Enable bool
+		WebUI  *url.URL
+		Backup struct {
 			Enable bool
 			User   string
 			Secret string
@@ -63,17 +63,18 @@ type OPNCall struct {
 	}
 	Wazuh struct {
 		Enable bool
-		WebUI  string
+		WebUI  *url.URL
 	}
 	Prometheus struct {
 		Enable bool
-		WebUI  string
+		WebUI  *url.URL
 	}
 	Grafana struct {
 		Enable  bool
-		WebUI   string
-		FreeBSD string
-		HAProxy string
+		WebUI   *url.URL
+		FreeBSD *url.URL
+		HAProxy *url.URL
+		Unifi   *url.URL
 	}
 	RSysLog struct {
 		Enable bool   // enable RFC5424 compliant remote syslog store server (default: false)

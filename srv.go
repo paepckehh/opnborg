@@ -80,8 +80,10 @@ func srv(config *OPNCall) error {
 		}
 
 		// spinup unifi backup engine
-		wg.Add(1)
-		go actionUnifi(config, &wg)
+		if config.Unifi.Backup.Enable {
+			wg.Add(1)
+			go actionUnifi(config, &wg)
+		}
 
 		// wait till all worker done
 		wg.Wait()

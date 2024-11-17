@@ -141,60 +141,54 @@ func getHive() string {
 // getNavi provides the central top navigation links
 func getNavi() string {
 	var s strings.Builder
-	if prometheusWebUI != "" {
+	if prometheusWebUI != nil {
 		s.WriteString(" <a href=\"")
-		s.WriteString(prometheusWebUI)
+		s.WriteString(prometheusWebUI.String())
 		s.WriteString("/targets?search=")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ PrometheusDB ]</b></button></a> ")
 	}
-	if grafanaWebUI != "" {
+	if grafanaWebUI != nil {
 		s.WriteString("<a href=\"")
-		s.WriteString(grafanaWebUI)
+		s.WriteString(grafanaWebUI.String())
 		s.WriteString("/dashboards")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ Grafana ]</b></button></a> ")
 	}
-	if grafanaFreeBSD != "" {
+	if grafanaFreeBSD != nil {
 		s.WriteString("<a href=\"")
-		s.WriteString(grafanaWebUI)
-		s.WriteString("/d/")
-		s.WriteString(grafanaFreeBSD)
+		s.WriteString(grafanaFreeBSD.String())
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ OPNSense OS Dashboard ]</b></button></a> ")
 	}
-	if grafanaHAProxy != "" {
+	if grafanaHAProxy != nil {
 		s.WriteString("<a href=\"")
-		s.WriteString(grafanaWebUI)
-		s.WriteString("/d/")
-		s.WriteString(grafanaHAProxy)
+		s.WriteString(grafanaHAProxy.String())
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ HAProxy Dashboard ]</b></button></a> ")
 	}
-	if unifiWebUI != "" {
+	if grafanaUnifi != nil {
+		s.WriteString("<a href=\"")
+		s.WriteString(grafanaUnifi.String())
+		s.WriteString("\" ")
+		s.WriteString(_nwin)
+		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
+	}
+	if unifiWebUI != nil {
 		s.WriteString(" <a href=\"")
-		s.WriteString(unifiWebUI)
+		s.WriteString(unifiWebUI.String())
 		s.WriteString("/")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ Unifi ]</b></button></a> ")
 	}
-	if unifiDash != "" {
-		s.WriteString("<a href=\"")
-		s.WriteString(unifiDash)
-		s.WriteString("/d/")
-		s.WriteString(unifiDash)
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
-	}
-	if wazuhWebUI != "" {
+	if wazuhWebUI != nil {
 		s.WriteString(" <a href=\"")
-		s.WriteString(wazuhWebUI)
+		s.WriteString(wazuhWebUI.String())
 		s.WriteString("/")
 		s.WriteString("\" ")
 		s.WriteString(_nwin)

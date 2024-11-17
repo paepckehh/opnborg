@@ -143,16 +143,15 @@ see opnborg-prometheus-grafana.nix
 
 # Unifi 
 - OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
-- OPN_UNIFI_DASHBOARD     - Unifi Dashboard (Unpoller) [example: http://localhost:8449]
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
 
 # Grafana
-- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:8446]
-- OPN_GRAFANA_DASHBOARD_FREEBSD  - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-- OPN_GRAFANA_DASHBOARD_HAPROXY  - grafana haproxy node dashboard id / dashboard name (example: P4zs3-ces/haproxy-2-full)
-- OPN_GRAFANA_DASHBOARD_UNPOLLER - grafana unpoller dashboard id / dashboard name (example: g3kd0-3ds/unpoller)
+- OPN_GRAFANA_WEBUI             - grafana web console target & port [example: http://localhost:8446]
+- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: P4zs3-ces/haproxy-2-full)
+- OPN_GRAFANA_DASHBOARD_UNIFI   - grafana unpoller dashboard id / dashboard name (example: g3kd0-3ds/unpoller)
 
 ```
 

@@ -2,6 +2,7 @@ package opnborg
 
 import (
 	"sync"
+	"time"
 )
 
 // actionUnifi, perform unifi backup
@@ -11,29 +12,29 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// var err error
 	if config.Debug {
-		displayChan <- []byte("[BACKUP][START][UNIFI]")
+		displayChan <- []byte("[UNIFI][BACKUP][START]" + config.Unifi.WebUI.Hostname())
 	}
 
 	// timestamp
-	// ts := time.Now()
+	ts := time.Now()
 
 	// get current opn config via xml
-	// fetchFail, degraded, notice := false, false, ""
+	fetchFail, degraded, notice := false, false, ""
 
-	// fetch current XML backup from server
-	// serverUnifi, err := fetchUnifi(config)
-	// if err != nil {
-	//	displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-UNIFI] "+ err.Error())
-	//	setOPNStatus(config, server, id, ts, notice, degraded, false)
-	//	return
-	// }
+	// fetch current unifi backup from server
+	serverUnifi, err := fetchUnifi(config)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-UNIFI] " + err.Error())
+		// setOPNStatus(config, server, id, ts, notice, degraded, false)
+		return
+	}
 
 	// check for changes
 	// sum := sha256.Sum256(serverXML)
 	// last := lastSum(config, server)
 	// if sum == last {
 	if config.Debug {
-		displayChan <- []byte("[BACKUP][UNIFI][NO-CHANGE]")
+		displayChan <- []byte("[UNIFI][BACKUP][NO-CHANGE]")
 	}
 	//	setOPNStatus(config, server, id, ts, notice, degraded, true)
 	//      return
@@ -52,5 +53,10 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	// }
 	// displayChan <- []byte("[BACKUP][OK][SUCCESS:UNIFI-STORE-CHECKIN-OF-MODIFIED-XML]")
 	// setOPNStatus(config, server, id, ts, notice, degraded, true)
+	_ = serverUnifi
+	_ = ts
+	_ = degraded
+	_ = notice
+	_ = fetchFail
 	return
 }

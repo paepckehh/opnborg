@@ -1,7 +1,9 @@
 package opnborg
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,8 +14,11 @@ import (
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
 func Setup() (*OPNCall, error) {
 
+	// var
+	var err error
+
 	// check if setup requirements are meet
-	if err := checkSetRequired(); err != nil {
+	if err = checkSetRequired(); err != nil {
 		return nil, err
 	}
 
@@ -120,25 +125,27 @@ func Setup() (*OPNCall, error) {
 	}
 	// prometheus
 	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
+		config.Prometheus.WebUI, err = url.Parse(os.Getenv("OPN_PROMETHEUS_WEBUI"))
+		if err != nil {
+			return config, errors.New("[SETUP][PROMETHEUS][INVALID-URL]" + err.Error())
+		}
 		config.Prometheus.Enable = true
-		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
 		prometheusWebUI = config.Prometheus.WebUI
 	}
 	// unifi management
 	if _, ok := os.LookupEnv("OPN_UNIFI_WEBUI"); ok {
+		config.Unifi.WebUI, err = url.Parse(os.Getenv("OPN_UNIFI_WEBUI"))
+		if err != nil {
+			return config, errors.New("[SETUP][UNIFI][INVALID-URL]" + err.Error())
+		}
 		config.Unifi.Enable = true
-		config.Unifi.WebUI = os.Getenv("OPN_UNIFI_WEBUI")
 		unifiWebUI = config.Unifi.WebUI
-		if _, ok := os.LookupEnv("OPN_UNIFI_DASHBOARD"); ok {
-			config.Unifi.Dashboard = os.Getenv("OPN_UNIFI_DASHBOARD")
-			unifiDash = config.Unifi.Dashboard
-		}
 		config.Unifi.Backup.Enable = false
-		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_USER"); ok {
-			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_BACKUP_USER")
+		if _, ok := os.LookupEnv("OPN_UNIFI_USER"); ok {
+			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_USER")
 		}
-		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_SECRET"); ok {
-			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_BACKUP_SECRET")
+		if _, ok := os.LookupEnv("OPN_UNIFI_SECRET"); ok {
+			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_SECRET")
 		}
 		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
 			config.Unifi.Backup.Enable = true
@@ -146,22 +153,41 @@ func Setup() (*OPNCall, error) {
 	}
 	// wazuh
 	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
+		config.Wazuh.WebUI, err = url.Parse(os.Getenv("OPN_WAZUH_WEBUI"))
+		if err != nil {
+			return config, errors.New("[SETUP][WAZUH][INVALID-URL]" + err.Error())
+		}
 		config.Wazuh.Enable = true
-		config.Wazuh.WebUI = os.Getenv("OPN_WAZUH_WEBUI")
 		wazuhWebUI = config.Wazuh.WebUI
 	}
 	// grafana
 	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {
+		config.Grafana.WebUI, err = url.Parse(os.Getenv("OPN_GRAFANA_WEBUI"))
+		if err != nil {
+			return config, errors.New("[SETUP][WAZUH][INVALID-URL]" + err.Error())
+		}
 		config.Grafana.Enable = true
-		config.Grafana.WebUI = os.Getenv("OPN_GRAFANA_WEBUI")
 		grafanaWebUI = config.Grafana.WebUI
 		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_FREEBSD"); ok {
-			config.Grafana.FreeBSD = os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD")
+			config.Grafana.FreeBSD, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD"))
+			if err != nil {
+				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_FREEBSD][INVALID-URL]" + err.Error())
+			}
 			grafanaFreeBSD = config.Grafana.FreeBSD
 		}
 		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_HAPROXY"); ok {
-			config.Grafana.HAProxy = os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY")
+			config.Grafana.HAProxy, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY"))
+			if err != nil {
+				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_HAPROXY][INVALID-URL]" + err.Error())
+			}
 			grafanaHAProxy = config.Grafana.HAProxy
+		}
+		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_UNIFI"); ok {
+			config.Grafana.Unifi, err = url.Parse(config.Grafana.WebUI.String() + "/d/" + os.Getenv("OPN_GRAFANA_DASHBOARD_UNIFI"))
+			if err != nil {
+				return config, errors.New("[SETUP][OPN_GRAFANA_DASHBOARD_UNIFI][INVALID-URL]" + err.Error())
+			}
+			grafanaUnifi = config.Grafana.Unifi
 		}
 	}
 	// configure eMail default
