@@ -113,9 +113,10 @@ func srv(config *OPNCall) error {
 		}
 
 		// set loop wait
-		select {
-		case <-update:
-			break
-		}
+		// select {
+		// case <-update:
+		//	break
+		// }
+		<-update
 	}
 }

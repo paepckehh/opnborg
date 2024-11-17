@@ -30,7 +30,7 @@ func Setup() (*OPNCall, error) {
 		Email:     os.Getenv("OPN_EMAIL"),
 	}
 
-	// setup app
+	// setup app name
 	if config.AppName == "" {
 		config.AppName = "[OPNBORG-API]"
 	}
@@ -40,23 +40,12 @@ func Setup() (*OPNCall, error) {
 		config.Path = filepath.Dir("./")
 	}
 
-	// validate bools, set defaults
-	config.Debug = false
-	if isEnv("OPN_DEBUG") {
-		config.Debug = true
-	}
-	config.Git = true
-	if isEnv("OPN_NOGIT") {
-		config.Git = false
-	}
-	config.GitPush = false
-	if isEnv("OPN_GITPUSH") {
-		config.GitPush = true
-	}
-	config.Daemon = true
-	if isEnv("OPN_NODAEMON") {
-		config.Daemon = false
-	}
+	// validate bools
+	config.Daemon = !isEnv("OPN_NODAEMON")
+	config.Debug = isEnv("OPN_DEBUG")
+	config.Git = !isEnv("OPN_NOGIT")
+	config.GitPush = isEnv("OPN_GITPUSH")
+
 	// configure remote syslog server
 	config.RSysLog.Enable = false
 	if config.Daemon {

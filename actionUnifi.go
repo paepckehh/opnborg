@@ -41,9 +41,9 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	//}
 
 	// set git global (atomic) worktree state tracker
-	if config.Git {
-		// config.dirty.Store(true)
-	}
+	// if config.Git {
+	// config.dirty.Store(true)
+	// }
 
 	// check xml file into storage
 	// if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {
@@ -58,5 +58,4 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	_ = degraded
 	_ = notice
 	_ = fetchFail
-	return
 }
