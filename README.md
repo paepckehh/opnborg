@@ -28,20 +28,64 @@
 OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-# HOW TO INSTALL
+# ⚡️HOW TO INSTALL
 
 ```
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-# PRE-BUILD BINARIES (DOWNLOAD)
+# ⚡️PRE-BUILD BINARIES (DOWNLOAD)
 [https://github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
 
-# EXAMPLE ENV CONFIG
+# ⚡️EXAMPLE CONFIGURATION VIA ENV 
 ```
 please see:
 - example.sh 
 - example-env-config.sh
+```
+
+# ⚡️DOCKER
+```
+docker pull ghcr.io/paepckehh/opnborg:latest
+```
+
+# ⚡️NIXOS SYSTEM SERVICE VIA DOCKER
+see opnborg-docker.nix
+see opnborg-docker-complex.nix
+see opnborg-prometheus-grafana.nix
+
+```
+{config, ...}: {
+  ####################
+  #-=# NETWORKING #=-#
+  ####################
+  networking = {
+    firewall = {
+      allowedTCPPorts = [6464]; # open tcp port 6464
+    };
+  };
+  ########################
+  #-=# VIRTUALISATION #=-#
+  ########################
+  virtualisation = {
+    oci-containers = {
+      backend = "podman";
+      containers = {
+        opnborg = {
+          image = "ghcr.io/paepckehh/opnborg";
+          volumes = ["/var/opnborg:/var/opnborg"];
+          extraOptions = ["--network=host"];
+          environment = {
+            "OPN_PATH" = "/var/opnborg";
+            "OPN_TARGETS" = "opn01.lan,opn02.lan";
+            "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD";
+            "OPN_APISECRET" = "8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p";
+          };
+        };
+      };
+    };
+  };
+}
 ```
 
 # FEATURES
@@ -73,6 +117,7 @@ please see:
 - OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
 - OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
+- OPN_GITPUSH     - push all changes to upstream git repo (needs upstream setting via .git/config)
 - OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
 
 # PKG Installation Sync
@@ -94,15 +139,19 @@ please see:
   - OPN_HTTPD_COLOR_BG    - WebUI Background (html) color code (example: "orange" or "#ffa500")
 
 # Prometheus 
-- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:9191]
+- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
+
+# Unifi 
+- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
 
 # Wazuh 
-- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:9292]
+- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
 
 # Grafana
-- OPN_GRAFANA_WEBUI    - grafana web console target & port [example: http://localhost:9090]
+- OPN_GRAFANA_WEBUI             - grafana web console target & port [example: http://localhost:8446]
 - OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
+- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: P4zs3-ces/haproxy-2-full)
+- OPN_GRAFANA_DASHBOARD_UNIFI   - grafana unpoller dashboard id / dashboard name (example: g3kd0-3ds/unpoller)
 
 ```
 

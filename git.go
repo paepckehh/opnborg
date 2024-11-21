@@ -1,9 +1,7 @@
 package opnborg
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/alecthomas/chroma/v2/quick"
@@ -15,11 +13,6 @@ const (
 	_currentDir = "."
 	_gitignore  = ".gitignore"
 	_ignore     = ".archive\nCONFIG*\nLogs\n"
-	// optional verification via classic git
-	_extGIT     = "git"
-	_extGITOPT1 = "show"
-	_extGITOPT2 = "-c"
-	_extGITOPT3 = "--color=always"
 )
 
 // gitCheckIn commits all config files into a local repository
@@ -85,19 +78,20 @@ func gitCheckIn(config *OPNCall) error {
 	if err != nil {
 		return err
 	}
-	if config.extGIT {
-		cmd := exec.Command(_extGIT, _extGITOPT1, _extGITOPT2, _extGITOPT3)
-		o, err := cmd.Output()
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(string(o))
-	} else {
-		// TODO: add patch details (go-native)
-		err = quick.Highlight(os.Stdout, obj.String(), "diff", "TTY265", "github")
-		if err != nil {
+
+	// add patch details
+	err = quick.Highlight(os.Stdout, obj.String(), "diff", "TTY265", "github")
+	if err != nil {
+		return err
+	}
+	if config.GitPush {
+
+		// Push to (Remote) Upstream Repo
+		if err := repo.Push(&git.PushOptions{}); err != nil {
+			displayChan <- []byte("[GIT][REPO][PUSH][FAIL]")
 			return err
 		}
+		displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][PUSH][FINISH]")
 	}
 	return nil
 }

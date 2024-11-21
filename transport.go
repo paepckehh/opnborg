@@ -209,6 +209,47 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	return nil, errors.New("[INVALID-XML-FILE]")
 }
 
+// fetchUnifi file from unifi appliance
+func fetchUnifi(config *OPNCall) (data []byte, err error) {
+
+	// parse & assemble target url
+	targetURL := config.Unifi.WebUI.String() + "/backup"
+
+	// setup request
+	req, err := getRequest(targetURL, _userAgent)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][FETCH][FAIL:SETUP-URL] " + targetURL)
+		return nil, errors.New("[UNIFI][UNABLE-TO-SETUP-TARGET-URL] " + err.Error())
+	}
+	req.SetBasicAuth(config.Key, config.Secret)
+
+	// setup transport layer
+	tlsconf := getTlsConf(config)
+	transport := getTransport(tlsconf)
+	client := getClient(transport)
+
+	// connect
+	client.Timeout = time.Duration(4 * time.Second)
+	body, err := client.Do(req)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][FETCH][FAIL:TLS-CONNECT] " + targetURL)
+		return nil, errors.New("[UNIFI][UNABLE-TO-TLS-CONNECT-SERVER] " + err.Error())
+	}
+
+	// read, validate & return full body
+	defer body.Body.Close()
+	data, err = io.ReadAll(body.Body)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][FETCH][FAIL:READ-BODY] " + targetURL)
+		return nil, errors.New("[UNIFI][UNABLE-TO-READ-XML-BODY]" + err.Error())
+	}
+	if isValidXML(string(data)) {
+		return data, nil
+	}
+	displayChan <- []byte("[UNIFI][FETCH][ERROR][FAIL:XML-VALIDATION] " + targetURL)
+	return nil, errors.New("[UNIFI][INVALID-XML-FILE]")
+}
+
 // getTlsConf harden tls object settings
 func getTlsConf(config *OPNCall) *tls.Config {
 	tlsConfig := &tls.Config{

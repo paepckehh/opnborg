@@ -12,8 +12,11 @@ import (
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
 func Setup() (*OPNCall, error) {
 
+	// var
+	var err error
+
 	// check if setup requirements are meet
-	if err := checkSetRequired(); err != nil {
+	if err = checkSetRequired(); err != nil {
 		return nil, err
 	}
 
@@ -27,7 +30,7 @@ func Setup() (*OPNCall, error) {
 		Email:     os.Getenv("OPN_EMAIL"),
 	}
 
-	// setup app
+	// setup app name
 	if config.AppName == "" {
 		config.AppName = "[OPNBORG-API]"
 	}
@@ -37,19 +40,12 @@ func Setup() (*OPNCall, error) {
 		config.Path = filepath.Dir("./")
 	}
 
-	// validate bools, set defaults
-	config.Debug = false
-	if isEnv("OPN_DEBUG") {
-		config.Debug = true
-	}
-	config.Git = true
-	if isEnv("OPN_NOGIT") {
-		config.Git = false
-	}
-	config.Daemon = true
-	if isEnv("OPN_NODAEMON") {
-		config.Daemon = false
-	}
+	// validate bools
+	config.Daemon = !isEnv("OPN_NODAEMON")
+	config.Debug = isEnv("OPN_DEBUG")
+	config.Git = !isEnv("OPN_NOGIT")
+	config.GitPush = isEnv("OPN_GITPUSH")
+
 	// configure remote syslog server
 	config.RSysLog.Enable = false
 	if config.Daemon {
@@ -79,7 +75,7 @@ func Setup() (*OPNCall, error) {
 			config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
 			config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
 			config.Httpd.Color.FG = "white"
-			config.Httpd.Color.BG = "grey"
+			config.Httpd.Color.BG = "#333333"
 			if isEnv("OPN_HTTPD_COLOR_FG") {
 				config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
 			}
@@ -114,31 +110,56 @@ func Setup() (*OPNCall, error) {
 			pkgmaster = "https://" + config.Sync.Master + _plug
 		}
 	}
+
+	//
+	// WebUI Section
+	//
+
 	// prometheus
-	if _, ok := os.LookupEnv("OPN_PROMETHEUS_WEBUI"); ok {
-		config.Prometheus.Enable = true
-		config.Prometheus.WebUI = os.Getenv("OPN_PROMETHEUS_WEBUI")
-		prometheusWebUI = config.Prometheus.WebUI
+	if config.Prometheus.WebUI, err = checkURL("OPN_PROMETHEUS_WEBUI"); err != nil {
+		return config, err
 	}
+	prometheusWebUI = config.Prometheus.WebUI
 	// wazuh
-	if _, ok := os.LookupEnv("OPN_WAZUH_WEBUI"); ok {
-		config.Wazuh.Enable = true
-		config.Wazuh.WebUI = os.Getenv("OPN_WAZUH_WEBUI")
-		wazuhWebUI = config.Wazuh.WebUI
+	if config.Wazuh.WebUI, err = checkURL("OPN_WAZUH_WEBUI"); err != nil {
+		return config, err
+	}
+	wazuhWebUI = config.Wazuh.WebUI
+	// unifi
+	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
+		return config, err
+	}
+	if config.Unifi.WebUI != nil {
+		unifiWebUI = config.Unifi.WebUI
+		config.Unifi.Backup.Enable = false
+		if _, ok := os.LookupEnv("OPN_UNIFI_USER"); ok {
+			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_USER")
+		}
+		if _, ok := os.LookupEnv("OPN_UNIFI_SECRET"); ok {
+			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_SECRET")
+		}
+		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
+			config.Unifi.Backup.Enable = true
+		}
 	}
 	// grafana
-	if _, ok := os.LookupEnv("OPN_GRAFANA_WEBUI"); ok {
-		config.Grafana.Enable = true
-		config.Grafana.WebUI = os.Getenv("OPN_GRAFANA_WEBUI")
+	if config.Grafana.WebUI, err = checkURL("OPN_GRAFANA_WEBUI"); err != nil {
+		return config, err
+	}
+	if config.Grafana.WebUI != nil {
 		grafanaWebUI = config.Grafana.WebUI
-		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_FREEBSD"); ok {
-			config.Grafana.FreeBSD = os.Getenv("OPN_GRAFANA_DASHBOARD_FREEBSD")
-			grafanaFreeBSD = config.Grafana.FreeBSD
+		if config.Grafana.FreeBSD, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_FREEBSD"); err != nil {
+			return config, err
 		}
-		if _, ok := os.LookupEnv("OPN_GRAFANA_DASHBOARD_HAPROXY"); ok {
-			config.Grafana.HAProxy = os.Getenv("OPN_GRAFANA_DASHBOARD_HAPROXY")
-			grafanaHAProxy = config.Grafana.HAProxy
+		grafanaFreeBSD = config.Grafana.FreeBSD
+		if config.Grafana.HAProxy, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_HAPROXY"); err != nil {
+			return config, err
 		}
+		grafanaHAProxy = config.Grafana.HAProxy
+		if config.Grafana.Unifi, err = checkPreURL(config.Grafana.WebUI, "/d/", "OPN_GRAFANA_DASHBOARD_UNIFI"); err != nil {
+			return config, err
+		}
+		grafanaUnifi = config.Grafana.Unifi
 	}
 	// configure eMail default
 	if config.Email == "" {
@@ -160,7 +181,6 @@ func Setup() (*OPNCall, error) {
 		}
 		sleep = strconv.FormatInt(config.Sleep, 10)
 	}
-	config.extGIT = true
 	return config, nil
 
 }
