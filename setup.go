@@ -86,11 +86,11 @@ func Setup() (*OPNCall, error) {
 			var s strings.Builder
 			s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
 			s.WriteString("<meta charset=\"UTF-8\">" + _lf)
+			s.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" + _lf)
 			s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
 			s.WriteString(" <style>" + _lf)
-			s.WriteString("  table,th,td{" + _lf)
-			s.WriteString("   border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
-			s.WriteString("  body{color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
+			s.WriteString("  table,th,td{border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
+			s.WriteString("  body{font-family:sans-serif;color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
 			s.WriteString(" </style>" + _lf)
 			_head = s.String() + "<meta http-equiv=\"refresh\" contenti=\"15\">" + _lf + "</head>" + _lf
 			_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
