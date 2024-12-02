@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,6 +141,16 @@ func Setup() (*OPNCall, error) {
 		}
 		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
 			config.Unifi.Backup.Enable = true
+			config.Unifi.Backup.Hour = 20
+			if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_HOUR"); ok {
+				hour, err := strconv.Atoi(os.Getenv("OPN_UNIFI_HOUR"))
+				if err != nil {
+					return config, err
+				}
+				if hour < 0 || hour > 23 {
+					return config, errors.New("OPN_UNIFI_BACKUP_HOUR must be an integer between 0-23")
+				}
+			}
 		}
 	}
 	// grafana

@@ -58,6 +58,7 @@ type OPNCall struct {
 			Enable bool
 			User   string
 			Secret string
+			Hour   int
 		}
 	}
 	Wazuh struct {

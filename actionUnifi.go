@@ -29,10 +29,6 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 		return
 	}
 
-	// check for changes
-	// sum := sha256.Sum256(serverXML)
-	// last := lastSum(config, server)
-	// if sum == last {
 	if config.Debug {
 		displayChan <- []byte("[UNIFI][BACKUP][NO-CHANGE]")
 	}
@@ -41,11 +37,11 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	//}
 
 	// set git global (atomic) worktree state tracker
-	// if config.Git {
-	// config.dirty.Store(true)
-	// }
+	if config.Git {
+		config.dirty.Store(true)
+	}
 
-	// check xml file into storage
+	// check backup file into storage
 	// if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {
 	//	displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
 	//	setOPNStatus(config, server, id, ts, notice, degraded, false)
@@ -53,6 +49,7 @@ func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
 	// }
 	// displayChan <- []byte("[BACKUP][OK][SUCCESS:UNIFI-STORE-CHECKIN-OF-MODIFIED-XML]")
 	// setOPNStatus(config, server, id, ts, notice, degraded, true)
+
 	_ = serverUnifi
 	_ = ts
 	_ = degraded
