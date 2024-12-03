@@ -72,7 +72,7 @@ func actionOPN(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	}
 
 	// check xml file into storage
-	if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {
+	if err = checkIntoStore(config, server, "xml", serverXML, ts, sum); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
 		setOPNStatus(config, server, id, ts, notice, degraded, false)
 		return

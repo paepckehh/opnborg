@@ -1,58 +1,115 @@
 package opnborg
 
 import (
-	"sync"
+	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/json"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/cookiejar"
 	"time"
 )
 
-// actionUnifi, perform unifi backup
-func actionUnifi(config *OPNCall, wg *sync.WaitGroup) {
+// perform unifi backup
+func unifiBackupServer(config *OPNCall) {
+
+	// info
+	displayChan <- []byte("[UNIFI][BACKUP][START][CONTROLLER] " + config.Unifi.WebUI.Hostname())
+
+	// setup session
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][UNABLE-TO-SETUP-COOKIE-JAR]" + err.Error())
+		return // unrecoverable
+	}
+
+	// setup tls secure transport
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	client := http.Client{
+		Jar:       jar,
+		Transport: transport,
+	}
+
+	// prep login
+	login := map[string]string{"username": config.Unifi.Backup.User, "password": config.Unifi.Backup.Secret}
+	postLogin, err := json.Marshal(login)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][CREDENTIALS-JSON-ENCODING-FAIL]" + err.Error())
+		return // unrecoverable
+	}
+
+	// prep system test
+	system := map[string]interface{}{"cmd": "async-backup", "days": 0}
+	postSystem, err := json.Marshal(system)
+	if err != nil {
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-SYSTEM-TEST-JSON-ENCODING-FAIL]" + err.Error())
+		return // unrecoverable
+	}
 
 	// setup
-	defer wg.Done()
-	// var err error
-	if config.Debug {
-		displayChan <- []byte("[UNIFI][BACKUP][START]" + config.Unifi.WebUI.Hostname())
-	}
+	reachable := true
 
-	// timestamp
-	ts := time.Now()
-
-	// get current opn config via xml
-	fetchFail, degraded, notice := false, false, ""
-
-	// fetch current unifi backup from server
-	serverUnifi, err := fetchUnifi(config)
+	// perform actual login
+	res, err := client.Post(config.Unifi.WebUI.String()+"/api/login", "application/json", bytes.NewBuffer(postLogin))
 	if err != nil {
-		displayChan <- []byte("[UNIFI][BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-UNIFI] " + err.Error())
-		// setOPNStatus(config, server, id, ts, notice, degraded, false)
-		return
+		reachable = false
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE]" + err.Error())
+	}
+	if res.StatusCode != 200 {
+		reachable = false
+		body, _ := ioutil.ReadAll(res.Body)
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] ")
+		displayChan <- body
 	}
 
-	if config.Debug {
-		displayChan <- []byte("[UNIFI][BACKUP][NO-CHANGE]")
+	// perform actual system reachable test
+	res, err = client.Post(config.Unifi.WebUI.String()+"/api/s/default/cmd/system", "application/json", bytes.NewBuffer(postSystem))
+	if err != nil {
+		reachable = false
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL] " + err.Error())
 	}
-	//	setOPNStatus(config, server, id, ts, notice, degraded, true)
-	//      return
-	//}
-
-	// set git global (atomic) worktree state tracker
-	if config.Git {
-		config.dirty.Store(true)
+	if res.StatusCode != 200 {
+		reachable = false
+		body, _ := ioutil.ReadAll(res.Body)
+		displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL][BODY] ")
+		displayChan <- body
 	}
 
-	// check backup file into storage
-	// if err = checkIntoStore(config, server, serverXML, ts, sum); err != nil {
-	//	displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
-	//	setOPNStatus(config, server, id, ts, notice, degraded, false)
-	//	return
-	// }
-	// displayChan <- []byte("[BACKUP][OK][SUCCESS:UNIFI-STORE-CHECKIN-OF-MODIFIED-XML]")
-	// setOPNStatus(config, server, id, ts, notice, degraded, true)
+	// perform backup
+	ts := time.Now()
+	if reachable {
 
-	_ = serverUnifi
-	_ = ts
-	_ = degraded
-	_ = notice
-	_ = fetchFail
+		// download backup file
+		res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + config.Unifi.Version + ".unf")
+		if err != nil {
+			displayChan <- []byte("[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error())
+		}
+		defer res.Body.Close()
+
+		// write file
+		if err == nil {
+
+			// read body
+			unf, err := io.ReadAll(res.Body)
+			if err != nil {
+				displayChan <- []byte("[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error())
+			}
+
+			// check into store
+			if err == nil {
+				checkIntoStore(config, "unifi-"+config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf))
+				displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
+
+				// flag git store as dirty
+				config.dirty.Store(true)
+			}
+		}
+		displayChan <- []byte("[UNIFI][BACKUP][FINISH]")
+	}
 }

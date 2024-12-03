@@ -53,12 +53,13 @@ type OPNCall struct {
 		}
 	}
 	Unifi struct {
-		WebUI  *url.URL
-		Backup struct {
+		WebUI   *url.URL
+		Version string
+		Backup  struct {
 			Enable bool
+			Hour   int
 			User   string
 			Secret string
-			Hour   int
 		}
 	}
 	Wazuh struct {

@@ -32,6 +32,14 @@ func srv(config *OPNCall) error {
 	}
 	displayChan <- []byte("[SERVICE][RSYSLOG]" + state)
 
+	// spin up unifi backup server
+	state = "[DISABLED]"
+	if config.Unifi.Backup.Enable {
+		go unifiBackupServer(config)
+		state = "[ENABLED]"
+	}
+	displayChan <- []byte("[SERVICE][UNIFI-BACKUP]" + state)
+
 	// setup hive
 	servers := strings.Split(config.Targets, ",")
 	for _, server := range servers {
@@ -77,12 +85,6 @@ func srv(config *OPNCall) error {
 		for id, server := range servers {
 			wg.Add(1)
 			go actionOPN(server, config, id, &wg)
-		}
-
-		// spinup unifi backup engine
-		if config.Unifi.Backup.Enable {
-			wg.Add(1)
-			go actionUnifi(config, &wg)
 		}
 
 		// wait till all worker done

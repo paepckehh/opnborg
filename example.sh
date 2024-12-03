@@ -4,7 +4,10 @@
 # . ./example-env-config-simple.sh
 
 # include complex ('source') configuration from example-env-config-complex.sh
-. ./example-env-config-complex.sh
+# . ./example-env-config-complex.sh
+
+# example with unifi backup support
+. ./example-env-config-unifi.sh
 
 # dev internal
 # . ./example-env-config-dev.sh

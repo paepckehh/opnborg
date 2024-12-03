@@ -60,6 +60,7 @@ func Setup() (*OPNCall, error) {
 			}
 		}
 	}
+
 	// configure httpd
 	config.Httpd.Enable = true
 	if config.Daemon {
@@ -99,7 +100,8 @@ func Setup() (*OPNCall, error) {
 
 		}
 	}
-	// config Master
+
+	// config master
 	config.Sync.Enable = false
 	config.Sync.validConf = false
 	config.Sync.PKG.Enable = false
@@ -112,20 +114,6 @@ func Setup() (*OPNCall, error) {
 		}
 	}
 
-	//
-	// WebUI Section
-	//
-
-	// prometheus
-	if config.Prometheus.WebUI, err = checkURL("OPN_PROMETHEUS_WEBUI"); err != nil {
-		return config, err
-	}
-	prometheusWebUI = config.Prometheus.WebUI
-	// wazuh
-	if config.Wazuh.WebUI, err = checkURL("OPN_WAZUH_WEBUI"); err != nil {
-		return config, err
-	}
-	wazuhWebUI = config.Wazuh.WebUI
 	// unifi
 	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
 		return config, err
@@ -133,14 +121,18 @@ func Setup() (*OPNCall, error) {
 	if config.Unifi.WebUI != nil {
 		unifiWebUI = config.Unifi.WebUI
 		config.Unifi.Backup.Enable = false
-		if _, ok := os.LookupEnv("OPN_UNIFI_USER"); ok {
-			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_USER")
+		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_USER"); ok {
+			config.Unifi.Backup.User = os.Getenv("OPN_UNIFI_BACKUP_USER")
 		}
-		if _, ok := os.LookupEnv("OPN_UNIFI_SECRET"); ok {
-			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_SECRET")
+		if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_SECRET"); ok {
+			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_BACKUP_SECRET")
 		}
 		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
 			config.Unifi.Backup.Enable = true
+			if _, ok := os.LookupEnv("OPN_UNIFI_VERSION"); !ok {
+				return config, errors.New("OPN_UNIFI_VERSION must contain the unifi controller version number (eg.: '5.6.9') when backup is enabled")
+			}
+			config.Unifi.Version = os.Getenv("OPN_UNIFI_VERSION")
 			config.Unifi.Backup.Hour = 20
 			if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_HOUR"); ok {
 				hour, err := strconv.Atoi(os.Getenv("OPN_UNIFI_HOUR"))
@@ -153,6 +145,23 @@ func Setup() (*OPNCall, error) {
 			}
 		}
 	}
+
+	//
+	// WebUI Section
+	//
+
+	// prometheus
+	if config.Prometheus.WebUI, err = checkURL("OPN_PROMETHEUS_WEBUI"); err != nil {
+		return config, err
+	}
+	prometheusWebUI = config.Prometheus.WebUI
+
+	// wazuh
+	if config.Wazuh.WebUI, err = checkURL("OPN_WAZUH_WEBUI"); err != nil {
+		return config, err
+	}
+	wazuhWebUI = config.Wazuh.WebUI
+
 	// grafana
 	if config.Grafana.WebUI, err = checkURL("OPN_GRAFANA_WEBUI"); err != nil {
 		return config, err
@@ -172,10 +181,12 @@ func Setup() (*OPNCall, error) {
 		}
 		grafanaUnifi = config.Grafana.Unifi
 	}
+
 	// configure eMail default
 	if config.Email == "" {
 		config.Email = "git@opnborg"
 	}
+
 	// configure sleep for daemon mode
 	sleep = "0"
 	if config.Daemon {
