@@ -20,7 +20,11 @@ const (
 // getForceHandler
 func getForceHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		update <- true
+		updateOPN <- true
+		if unifiEnable.Load() {
+			unifiBackupNow.Store(true)
+			updateUnifi <- true
+		}
 		r = headHTML(r)
 		_, _ = r.Write([]byte(_forceRedirect))
 	}

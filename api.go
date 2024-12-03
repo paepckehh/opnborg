@@ -7,11 +7,12 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.42"
+const SemVer = "v0.1.44"
 
 // global var
 var (
 	tg                                                         []OPNGroup
+	unifiEnable, unifiBackupNow                                atomic.Bool
 	sleep, borg, pkgmaster                                     string
 	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL
 	grafanaWebUI, grafanaFreeBSD, grafanaUnifi, grafanaHAProxy *url.URL
@@ -57,7 +58,6 @@ type OPNCall struct {
 		Version string
 		Backup  struct {
 			Enable bool
-			Hour   int
 			User   string
 			Secret string
 		}
@@ -92,7 +92,8 @@ type OPNCall struct {
 // global
 var hive []string
 var hiveMutex sync.Mutex
-var update = make(chan bool, 1)
+var updateOPN = make(chan bool, 1)
+var updateUnifi = make(chan bool, 1)
 
 // Start Application Server
 func Start(config *OPNCall) error {

@@ -118,6 +118,7 @@ func Setup() (*OPNCall, error) {
 	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
 		return config, err
 	}
+	unifiEnable.Store(false)
 	if config.Unifi.WebUI != nil {
 		unifiWebUI = config.Unifi.WebUI
 		config.Unifi.Backup.Enable = false
@@ -128,21 +129,12 @@ func Setup() (*OPNCall, error) {
 			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_BACKUP_SECRET")
 		}
 		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
+			unifiEnable.Store(true)
 			config.Unifi.Backup.Enable = true
 			if _, ok := os.LookupEnv("OPN_UNIFI_VERSION"); !ok {
 				return config, errors.New("OPN_UNIFI_VERSION must contain the unifi controller version number (eg.: '5.6.9') when backup is enabled")
 			}
 			config.Unifi.Version = os.Getenv("OPN_UNIFI_VERSION")
-			config.Unifi.Backup.Hour = 20
-			if _, ok := os.LookupEnv("OPN_UNIFI_BACKUP_HOUR"); ok {
-				hour, err := strconv.Atoi(os.Getenv("OPN_UNIFI_HOUR"))
-				if err != nil {
-					return config, err
-				}
-				if hour < 0 || hour > 23 {
-					return config, errors.New("OPN_UNIFI_BACKUP_HOUR must be an integer between 0-23")
-				}
-			}
 		}
 	}
 

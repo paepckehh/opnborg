@@ -57,7 +57,10 @@ func srv(config *OPNCall) error {
 	// spin up timer
 	go func() {
 		time.Sleep(time.Duration(config.Sleep) * time.Second)
-		update <- true
+		updateOPN <- true
+		if unifiEnable.Load() {
+			updateUnifi <- true
+		}
 	}()
 
 	// main loop
@@ -113,12 +116,6 @@ func srv(config *OPNCall) error {
 			display.Wait()
 			return nil
 		}
-
-		// set loop wait
-		// select {
-		// case <-update:
-		//	break
-		// }
-		<-update
+		<-updateOPN
 	}
 }
