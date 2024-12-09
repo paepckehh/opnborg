@@ -3,11 +3,22 @@ package opnborg
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+)
+
+// global
+var (
+	hive                  []string
+	hiveMutex, unifiMutex sync.Mutex
+	updateOPN             = make(chan bool, 1)
+	updateUnifi           = make(chan bool, 1)
+	unifiStatus           string
 )
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -16,19 +27,21 @@ func Setup() (*OPNCall, error) {
 	// var
 	var err error
 
-	// check if setup requirements are meet
-	if err = checkSetRequired(); err != nil {
-		return nil, err
-	}
-
 	// setup from env
 	config := &OPNCall{
+		Enable:    checkSetRequiredOPN(),
 		Targets:   os.Getenv("OPN_TARGETS"),
 		Key:       os.Getenv("OPN_APIKEY"),
 		Secret:    os.Getenv("OPN_APISECRET"),
 		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
 		Path:      os.Getenv("OPN_PATH"),
 		Email:     os.Getenv("OPN_EMAIL"),
+	}
+
+	// check if we meet basic requirements
+	config.Unifi.Backup.Enable = checkSetRequiredUnifi()
+	if !config.Enable && !config.Unifi.Backup.Enable {
+		return nil, errors.New("Please enable either OPN or Unifi backup. Please set OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_BACKUP_USER & SECRET")
 	}
 
 	// setup app name
@@ -199,16 +212,13 @@ func Setup() (*OPNCall, error) {
 
 }
 
-// checkRequired env input
-func checkSetRequired() error {
+// checkRequired OPN env
+func checkSetRequiredOPN() bool {
 
-	if !isEnv("OPN_APIKEY") {
-		return fmt.Errorf("set env variable 'OPN_APIKEY' to your opnsense api key")
+	if !isEnv("OPN_APIKEY") || !isEnv("OPN_APISECRET") {
+		return false
 	}
 
-	if !isEnv("OPN_APISECRET") {
-		return fmt.Errorf("set env variable 'OPN_APISECRET' to your opnsense api key secret")
-	}
 	if !isEnv("OPN_TARGETS") {
 		member := ""
 		env := os.Environ()
@@ -229,6 +239,8 @@ func checkSetRequired() error {
 							tg = append(tg, OPNGroup{
 								Name:   grp[0][12:],
 								Img:    true,
+								OPN:    true,
+								Unifi:  false,
 								ImgURL: os.Getenv("OPN_TARGETS_IMGURL_" + grp[0][12:]),
 								Member: strings.Split(grp[1], ","),
 							})
@@ -236,6 +248,8 @@ func checkSetRequired() error {
 							tg = append(tg, OPNGroup{
 								Name:   grp[0][12:],
 								Img:    false,
+								OPN:    true,
+								Unifi:  false,
 								Member: strings.Split(grp[1], ","),
 							})
 						}
@@ -244,11 +258,45 @@ func checkSetRequired() error {
 			}
 			if len(member) > 0 {
 				os.Setenv("OPN_TARGETS", member)
-				return nil
+				return true
 			}
 		}
-		return fmt.Errorf("add at least one target server to env var 'OPN_TARGETS' or 'OPN_TARGETS_* '(multi valued, comma seperated)")
+		return false
 	}
 	tg = append(tg, OPNGroup{Name: "", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
-	return nil
+	return true
+}
+
+// checkRequired Unifi env
+func checkSetRequiredUnifi() bool {
+
+	unifiURL, err := url.Parse(os.Getenv("OPN_UNIFI_WEBUI"))
+	if err != nil {
+		return false // detailed checks & err analysis later
+	}
+
+	if !isEnv("OPN_UNIFI_BACKUP_USER") || !isEnv("OPN_UNIFI_BACKUP_SECRET") {
+		return false
+	}
+
+	// add unifi group
+	if isEnv("OPN_UNIFI_BACKUP_IMGURL") {
+		tg = append(tg, OPNGroup{
+			Name:   "UNIFI CONTROLLER",
+			Img:    true,
+			OPN:    false,
+			Unifi:  true,
+			ImgURL: os.Getenv("OPN_UNIFI_BACKUP_IMGURL"),
+			Member: strings.Split(unifiURL.Hostname(), ","),
+		})
+	} else {
+		tg = append(tg, OPNGroup{
+			Name:   "UNIFI CONTROLLER",
+			Img:    false,
+			OPN:    false,
+			Unifi:  true,
+			Member: strings.Split(unifiURL.Hostname(), ","),
+		})
+	}
+	return true
 }

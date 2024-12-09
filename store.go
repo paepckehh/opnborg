@@ -34,7 +34,8 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 
 	// prep storage
 	ext = "." + ext
-	current := "current" + ext
+
+	//current := "current" + ext
 	year, month, _ := ts.Date()
 
 	// create store structure
@@ -52,18 +53,19 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 		return err
 	}
 
-	// remove pre-existing last symlink (if any exist)
-	_ = os.Remove(current)
-
-	// write server XML file(s)
+	// write archive file
 	name := ts.UTC().Format("20060102T150405Z") + "-" + server + ext
 	archiveFile := filepath.Join(store, name)
-	if err := os.WriteFile(current, serverXML, 0660); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-CURRENTFILE] " + server)
+	if err := os.WriteFile(archiveFile, serverXML, 0660); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-ARCHIVE-FILE] " + server)
 		return err
 	}
-	if err := os.WriteFile(archiveFile, serverXML, 0660); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE] " + archiveFile)
+
+	// remove pre-existing current.xml file & write again
+	file := "current" + ext
+	_ = os.Remove(file)
+	if err := os.WriteFile(file, serverXML, 0660); err != nil {
+		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-CURRENT-FILE] " + archiveFile)
 		return err
 	}
 
@@ -87,7 +89,7 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	_ = os.Remove(_last)
 
 	// rename current link pointer to last (if any exist)
-	_ = os.Rename(current, _last)
+	_ = os.Rename(_current, _last)
 
 	// write current symlink pointer
 	if err = os.Symlink(archiveFile, _current); err != nil {

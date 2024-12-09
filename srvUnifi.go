@@ -54,83 +54,130 @@ func unifiBackupServer(config *OPNCall) {
 
 	// init
 	ts := time.Now()
-	isReachable := true
+	isReachable, backupOK, notice := true, false, ""
 
 	// enfore init backup
 	unifiBackupNow.Store(true)
 
 	// loop
 	for {
-		// reset
-		isReachable = true
+		// reset default state
+		isReachable, backupOK, notice = true, false, "status:ok"
 
-		// perform actual login
+		// perform authentication
 		res, err := client.Post(config.Unifi.WebUI.String()+"/api/login", "application/json", bytes.NewBuffer(postLogin))
 		if err != nil {
 			isReachable = false
-			displayChan <- []byte("[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE]" + err.Error())
-		}
-		if res.StatusCode != 200 {
-			isReachable = false
-			body, _ := ioutil.ReadAll(res.Body)
-			displayChan <- []byte("[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] ")
-			displayChan <- body
+			notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE]" + err.Error()
+			displayChan <- []byte(notice)
 		}
 
-		// perform actual system reachable test
-		res, err = client.Post(config.Unifi.WebUI.String()+"/api/s/default/cmd/system", "application/json", bytes.NewBuffer(postSystem))
-		if err != nil {
-			isReachable = false
-			displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL] " + err.Error())
-		}
-		if res.StatusCode != 200 {
-			isReachable = false
-			body, _ := ioutil.ReadAll(res.Body)
-			displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL][BODY] ")
-			displayChan <- body
-		}
+		// was authentication ok?
+		if isReachable {
 
-		// isReachable && last backup > 6 hours
-		if isReachable && time.Now().Sub(ts) < time.Duration(6*time.Hour) {
-			unifiBackupNow.Store(true)
-		}
-
-		// perform backup
-		if unifiBackupNow.Load() {
-
-			// reset unifiBackupNow
-			unifiBackupNow.Store(false)
-
-			// update timestamp
-			ts = time.Now()
-
-			// download backup file
-			res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + config.Unifi.Version + ".unf")
-			if err != nil {
-				displayChan <- []byte("[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error())
+			// check http status code
+			if res.StatusCode != 200 {
+				isReachable = false
+				body, _ := ioutil.ReadAll(res.Body)
+				notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] "
+				displayChan <- []byte(notice)
+				displayChan <- body
 			}
-			defer res.Body.Close()
 
-			// write file
-			if err == nil {
+			// was authentication and status code ok?
+			if isReachable {
 
-				// read body
-				unf, err := io.ReadAll(res.Body)
+				// perform actual fetch test
+				res, err = client.Post(config.Unifi.WebUI.String()+"/api/s/default/cmd/system", "application/json", bytes.NewBuffer(postSystem))
 				if err != nil {
-					displayChan <- []byte("[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error())
+					isReachable = false
+					notice = "[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL] " + err.Error()
+					displayChan <- []byte(notice)
 				}
+				if isReachable {
+					// was fetch sucessfull, check http code
+					if res.StatusCode != 200 {
+						isReachable = false
+						notice = "[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL][BODY] "
+						body, _ := ioutil.ReadAll(res.Body)
+						displayChan <- []byte(notice)
+						displayChan <- body
 
-				// check into store
-				if err == nil {
-					checkIntoStore(config, "unifi-"+config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf))
-					displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
-
-					// flag git store as dirty
-					config.dirty.Store(true)
+					}
 				}
 			}
-			displayChan <- []byte("[UNIFI][BACKUP][FINISH]")
 		}
+
+		// if reachable, proceed with backup
+		if isReachable {
+
+			// if last backup > 6 hours
+			if time.Now().Sub(ts) < time.Duration(6*time.Hour) {
+				unifiBackupNow.Store(true)
+			}
+
+			// perform backup
+			if unifiBackupNow.Load() {
+
+				// reset unifiBackupNow
+				unifiBackupNow.Store(false)
+
+				// update timestamp
+				ts = time.Now()
+
+				// setup
+				backupOK = true
+
+				// download backup file
+				res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + config.Unifi.Version + ".unf")
+				if err != nil {
+					backupOK = false
+					notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error()
+					displayChan <- []byte(notice)
+				}
+				defer res.Body.Close()
+
+				// proceed
+				if backupOK {
+
+					// read body
+					unf, err := io.ReadAll(res.Body)
+					if err != nil {
+						backupOK = false
+						notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
+						displayChan <- []byte(notice)
+					}
+
+					// check file
+					if backupOK {
+						if len(unf) < 1024 {
+							backupOK = false
+							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL] " + err.Error()
+							displayChan <- []byte(notice)
+						}
+
+						// check into store
+						if backupOK {
+
+							// check into store
+							checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf))
+
+							// flag git store as dirty
+							config.dirty.Store(true)
+
+							// notify
+							displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
+
+						}
+					}
+				}
+				displayChan <- []byte("[UNIFI][BACKUP][END]")
+			}
+		}
+
+		// set unifi status
+		setUnifiStatus(config, time.Now(), notice, isReachable, backupOK)
+
 		<-updateUnifi
 	}
 }

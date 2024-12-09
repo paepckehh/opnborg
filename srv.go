@@ -9,12 +9,29 @@ import (
 func srv(config *OPNCall) error {
 	// init
 	var err error
+	var servers []string
 
 	// spin up Log/Display Engine
 	display.Add(1)
 
 	// spin up internal log / display engine
 	go startLog(config)
+
+	// startup app version & state, sleep panic gate
+	suffix := "[CLI-ONE-TIME-PASS-MODE]"
+	if config.Daemon {
+		suffix = "[DAEMON-MODE][SLEEP:" + sleep + " SECONDS]"
+	}
+	displayChan <- []byte("[STARTING][" + _app + "][" + SemVer + "]" + suffix)
+
+	// arm background timer
+	go func() {
+		time.Sleep(time.Duration(config.Sleep) * time.Second)
+		updateOPN <- true
+		if unifiEnable.Load() {
+			updateUnifi <- true
+		}
+	}()
 
 	// spin up internal webserver
 	state := "[DISABLED]"
@@ -35,63 +52,54 @@ func srv(config *OPNCall) error {
 	// spin up unifi backup server
 	state = "[DISABLED]"
 	if config.Unifi.Backup.Enable {
+		unifiStatus = _na + " <b>Member: </b> " + config.Unifi.WebUI.String() + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
 		go unifiBackupServer(config)
 		state = "[ENABLED]"
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-BACKUP]" + state)
 
-	// setup hive
-	servers := strings.Split(config.Targets, ",")
-	for _, server := range servers {
-		status := _na + " <b>Member: </b> " + server + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
-		hive = append(hive, status)
-	}
-
-	// startup app version & state, sleep panic gate
-	suffix := "[CLI-ONE-TIME-PASS-MODE]"
-	if config.Daemon {
-		suffix = "[DAEMON-MODE][SLEEP:" + sleep + " SECONDS]"
-	}
-	displayChan <- []byte("[STARTING][" + _app + "][" + SemVer + "]" + suffix)
-
-	// spin up timer
-	go func() {
-		time.Sleep(time.Duration(config.Sleep) * time.Second)
-		updateOPN <- true
-		if unifiEnable.Load() {
-			updateUnifi <- true
+	// is opnsense hive is enabled?
+	if config.Enable {
+		// setup hive
+		servers := strings.Split(config.Targets, ",")
+		for _, server := range servers {
+			status := _na + " <b>Member: </b> " + server + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
+			hive = append(hive, status)
 		}
-	}()
+	}
 
 	// main loop
 	for {
-
-		// fetch target configuration from master server
-		if config.Sync.Enable {
-			config.Sync.validConf = true
-			config, err = readMasterConf(config)
-			if err != nil {
-				config.Sync.validConf = false
-				displayChan <- []byte("[ERROR][UNABLE-TO-READ-MASTER-CONFIG]" + err.Error())
-			}
-		}
-
 		// reset global (atomic) git worktree state tracker
 		if config.Git {
 			config.dirty.Store(false)
 		}
 
-		// spinup individual worker for every server
-		if config.Debug {
-			displayChan <- []byte("[STARTING][BACKUP]")
-		}
-		for id, server := range servers {
-			wg.Add(1)
-			go actionOPN(server, config, id, &wg)
-		}
+		// is opnsense hive is enabled
+		if config.Enable {
 
-		// wait till all worker done
-		wg.Wait()
+			// fetch target configuration from master server
+			if config.Sync.Enable {
+				config.Sync.validConf = true
+				config, err = readMasterConf(config)
+				if err != nil {
+					config.Sync.validConf = false
+					displayChan <- []byte("[ERROR][UNABLE-TO-READ-MASTER-CONFIG]" + err.Error())
+				}
+			}
+
+			// spinup individual worker for every server
+			if config.Debug {
+				displayChan <- []byte("[STARTING][BACKUP]")
+			}
+			for id, server := range servers {
+				wg.Add(1)
+				go actionOPN(server, config, id, &wg)
+			}
+
+			// wait till all worker done
+			wg.Wait()
+		}
 
 		// check files into local git repo
 		if config.dirty.Load() {

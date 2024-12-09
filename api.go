@@ -2,12 +2,11 @@ package opnborg
 
 import (
 	"net/url"
-	"sync"
 	"sync/atomic"
 )
 
 // global exported consts
-const SemVer = "v0.1.44"
+const SemVer = "v0.1.45"
 
 // global var
 var (
@@ -21,6 +20,8 @@ var (
 // OPNGroup Type
 type OPNGroup struct {
 	Name   string   // group name
+	OPN    bool     // is OPNsense Appliance
+	Unifi  bool     // is Unifi Controller
 	Img    bool     // group image available
 	ImgURL string   // group image url
 	Member []string // group member
@@ -28,6 +29,7 @@ type OPNGroup struct {
 
 // OPNCall
 type OPNCall struct {
+	Enable    bool        // enable OPNsense Backup mode
 	Targets   string      // list of OPNSense Appliances, csv comma seperated
 	TGroups   []OPNGroup  // list of OPNSense Appliances Target Groups and Member
 	Key       string      // OPNSense Backup User API Key (required)
@@ -88,12 +90,6 @@ type OPNCall struct {
 		}
 	}
 }
-
-// global
-var hive []string
-var hiveMutex sync.Mutex
-var updateOPN = make(chan bool, 1)
-var updateUnifi = make(chan bool, 1)
 
 // Start Application Server
 func Start(config *OPNCall) error {

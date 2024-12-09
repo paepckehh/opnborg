@@ -120,13 +120,18 @@ func getHive() string {
 		s.WriteString(_lf)
 		for _, srv := range grp.Member {
 			s.WriteString("  <tr><td>")
-			for _, line := range hive {
-				if strings.Contains(line, srv) {
-					s.WriteString(line)
-					break
+			if grp.OPN {
+				for _, line := range hive {
+					if strings.Contains(line, srv) {
+						s.WriteString(line)
+						break
+					}
 				}
 			}
-			s.WriteString("  </tr></td>")
+			if grp.Unifi {
+				s.WriteString(unifiStatus)
+			}
+			s.WriteString("  </td></tr>")
 			s.WriteString(_lf)
 		}
 		s.WriteString(" </table>")
@@ -183,6 +188,7 @@ func getNavi() string {
 		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
 	}
 	if unifiWebUI != nil {
+		// if unifiWebUI != nil && !unifiEnable.Load() {
 		s.WriteString(" <a href=\"")
 		s.WriteString(unifiWebUI.String())
 		s.WriteString("/")
