@@ -52,21 +52,24 @@ func srv(config *OPNCall) error {
 	// spin up unifi backup server
 	state = "[DISABLED]"
 	if config.Unifi.Backup.Enable {
+		state = "[ENABLED]"
 		unifiStatus = _na + " <b>Member: </b> " + config.Unifi.WebUI.String() + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
 		go unifiBackupServer(config)
-		state = "[ENABLED]"
 	}
-	displayChan <- []byte("[SERVICE][UNIFI-BACKUP]" + state)
+	displayChan <- []byte("[SERVICE][UNIFI-BACKUP-AND-MONITORING]" + state)
 
 	// is opnsense hive is enabled?
+	state = "[DISABLED]"
 	if config.Enable {
+		state = "[ENABLED]"
 		// setup hive
-		servers := strings.Split(config.Targets, ",")
+		servers = strings.Split(config.Targets, ",")
 		for _, server := range servers {
 			status := _na + " <b>Member: </b> " + server + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
 			hive = append(hive, status)
 		}
 	}
+	displayChan <- []byte("[SERVICE][OPN-BACKUP-AND-MONITORING]" + state)
 
 	// main loop
 	for {

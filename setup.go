@@ -29,14 +29,16 @@ func Setup() (*OPNCall, error) {
 
 	// setup from env
 	config := &OPNCall{
-		Enable:    checkSetRequiredOPN(),
-		Targets:   os.Getenv("OPN_TARGETS"),
 		Key:       os.Getenv("OPN_APIKEY"),
 		Secret:    os.Getenv("OPN_APISECRET"),
 		TLSKeyPin: os.Getenv("OPN_TLSKEYPIN"),
 		Path:      os.Getenv("OPN_PATH"),
 		Email:     os.Getenv("OPN_EMAIL"),
 	}
+
+	// check if we meet basic opnsense requirements
+	config.Enable = checkSetRequiredOPN()
+	config.Targets = os.Getenv("OPN_TARGETS")
 
 	// check if we meet basic requirements
 	config.Unifi.Backup.Enable = checkSetRequiredUnifi()
@@ -219,52 +221,53 @@ func checkSetRequiredOPN() bool {
 		return false
 	}
 
-	if !isEnv("OPN_TARGETS") {
-		member := ""
-		env := os.Environ()
-		if len(env) > 1 {
-			sort.Strings(env)
-			for _, value := range env {
-				if len(value) > 15 {
-					if value[0:12] == "OPN_TARGETS_" {
-						if value[0:18] == "OPN_TARGETS_IMGURL" {
-							continue
-						}
-						grp := strings.Split(value, "=")
-						if len(member) > 0 {
-							member = member + ","
-						}
-						member = member + grp[1]
-						if isEnv("OPN_TARGETS_IMGURL_" + grp[0][12:]) {
-							tg = append(tg, OPNGroup{
-								Name:   grp[0][12:],
-								Img:    true,
-								OPN:    true,
-								Unifi:  false,
-								ImgURL: os.Getenv("OPN_TARGETS_IMGURL_" + grp[0][12:]),
-								Member: strings.Split(grp[1], ","),
-							})
-						} else {
-							tg = append(tg, OPNGroup{
-								Name:   grp[0][12:],
-								Img:    false,
-								OPN:    true,
-								Unifi:  false,
-								Member: strings.Split(grp[1], ","),
-							})
-						}
+	if isEnv("OPN_TARGETS") {
+		tg = append(tg, OPNGroup{Name: "", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
+		return true
+	}
+
+	member := ""
+	env := os.Environ()
+	if len(env) > 1 {
+		sort.Strings(env)
+		for _, value := range env {
+			if len(value) > 15 {
+				if value[0:12] == "OPN_TARGETS_" {
+					if value[0:18] == "OPN_TARGETS_IMGURL" {
+						continue
+					}
+					grp := strings.Split(value, "=")
+					if len(member) > 0 {
+						member = member + ","
+					}
+					member = member + grp[1]
+					if isEnv("OPN_TARGETS_IMGURL_" + grp[0][12:]) {
+						tg = append(tg, OPNGroup{
+							Name:   grp[0][12:],
+							Img:    true,
+							OPN:    true,
+							Unifi:  false,
+							ImgURL: os.Getenv("OPN_TARGETS_IMGURL_" + grp[0][12:]),
+							Member: strings.Split(grp[1], ","),
+						})
+					} else {
+						tg = append(tg, OPNGroup{
+							Name:   grp[0][12:],
+							Img:    false,
+							OPN:    true,
+							Unifi:  false,
+							Member: strings.Split(grp[1], ","),
+						})
 					}
 				}
 			}
-			if len(member) > 0 {
-				os.Setenv("OPN_TARGETS", member)
-				return true
-			}
 		}
-		return false
+		if len(member) > 0 {
+			os.Setenv("OPN_TARGETS", member)
+			return true
+		}
 	}
-	tg = append(tg, OPNGroup{Name: "", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
-	return true
+	return false
 }
 
 // checkRequired Unifi env
