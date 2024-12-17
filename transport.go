@@ -188,7 +188,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	client := getClient(transport)
 
 	// connect
-	client.Timeout = time.Duration(4 * time.Second)
+	client.Timeout = time.Duration(20 * time.Second)
 	body, err := client.Do(req)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + targetURL)
