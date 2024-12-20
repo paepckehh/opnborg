@@ -17,7 +17,7 @@ const (
 )
 
 // setOPNStatus sets the hive member server status
-func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, notice string, degraded, ok bool) {
+func setOPNStatus(config *OPNCall, server, tag string, id int, ts time.Time, notice string, degraded, ok bool) {
 	year, month, _ := ts.Date()
 	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	if ok {
@@ -35,8 +35,12 @@ func setOPNStatus(config *OPNCall, server string, id int, ts time.Time, notice s
 		linkVS := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button><b>[" + ver + "]</b></button></a>"
 		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button><b>[current.xml]</b></button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
-		links := linkCurrent + " " + linkArchive
-		status := state + _b + linkUI + _b + linkVS + " <button><b>Last Seen:" + seen + "</b></button> " + links + "<br>"
+		links := " " + linkCurrent + " " + linkArchive
+		tags := ""
+		if tag != "" {
+			tags = " <button><b>[" + tag + "]</b></button>"
+		}
+		status := state + _b + linkUI + _b + linkVS + " <button><b>Last Seen:" + seen + "</b></button>" + tags + links + "<br>"
 		hiveMutex.Lock()
 		hive[id] = status
 		hiveMutex.Unlock()

@@ -65,8 +65,19 @@ func srv(config *OPNCall) error {
 		// setup hive
 		servers = strings.Split(config.Targets, ",")
 		for _, server := range servers {
-			status := _na + " <b>Member: </b> " + server + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
-			hive = append(hive, status)
+			s := strings.Split(server, "#")
+			switch len(s) {
+			case 1:
+				if len(s[0]) > 0 {
+					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
+					hive = append(hive, status)
+				}
+			case 2:
+				if len(s[0]) > 0 && len(s[1]) > 0 {
+					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a <b>AssetTag: </b>" + s[1] + "<br>"
+					hive = append(hive, status)
+				}
+			}
 		}
 	}
 	displayChan <- []byte("[SERVICE][OPN-BACKUP-AND-MONITORING]" + state)
@@ -96,8 +107,15 @@ func srv(config *OPNCall) error {
 				displayChan <- []byte("[STARTING][BACKUP]")
 			}
 			for id, server := range servers {
-				wg.Add(1)
-				go actionOPN(server, config, id, &wg)
+				s := strings.Split(server, "#")
+				switch len(s) {
+				case 1:
+					wg.Add(1)
+					go actionOPN(s[0], "", config, id, &wg)
+				case 2:
+					wg.Add(1)
+					go actionOPN(s[0], s[1], config, id, &wg)
+				}
 			}
 
 			// wait till all worker done

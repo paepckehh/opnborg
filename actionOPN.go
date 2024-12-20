@@ -7,7 +7,7 @@ import (
 )
 
 // actionOPN, perform individual server backup
-func actionOPN(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
+func actionOPN(server, tag string, config *OPNCall, id int, wg *sync.WaitGroup) {
 
 	// setup
 	defer wg.Done()
@@ -51,7 +51,7 @@ func actionOPN(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	serverXML, err := fetchXML(server, config)
 	if err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-XML] " + server + err.Error())
-		setOPNStatus(config, server, id, ts, notice, degraded, false)
+		setOPNStatus(config, server, tag, id, ts, notice, degraded, false)
 		return
 	}
 
@@ -62,7 +62,7 @@ func actionOPN(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 		if config.Debug {
 			displayChan <- []byte("[BACKUP][SERVER][NO-CHANGE] " + server)
 		}
-		setOPNStatus(config, server, id, ts, notice, degraded, true)
+		setOPNStatus(config, server, tag, id, ts, notice, degraded, true)
 		return
 	}
 
@@ -74,9 +74,9 @@ func actionOPN(server string, config *OPNCall, id int, wg *sync.WaitGroup) {
 	// check xml file into storage
 	if err = checkIntoStore(config, server, "xml", serverXML, ts, sum); err != nil {
 		displayChan <- []byte("[BACKUP][ERROR][FAIL:XML-STORE-CHECKIN] " + err.Error())
-		setOPNStatus(config, server, id, ts, notice, degraded, false)
+		setOPNStatus(config, server, tag, id, ts, notice, degraded, false)
 		return
 	}
 	displayChan <- []byte("[BACKUP][OK][SUCCESS:XML-STORE-CHECKIN-OF-MODIFIED-XML]")
-	setOPNStatus(config, server, id, ts, notice, degraded, true)
+	setOPNStatus(config, server, tag, id, ts, notice, degraded, true)
 }

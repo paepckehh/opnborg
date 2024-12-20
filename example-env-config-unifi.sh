@@ -1,6 +1,7 @@
 #!/bin/sh
-export OPN_TARGETS_STANDBY='opn00.lan:8443'
-export OPN_TARGETS_INTRANET='opn01.lan:8443,opn02.lan:8443'
+# export OPN_TARGETS='opn00.lan:8443,opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
+export OPN_TARGETS_STANDBY='opn00.lan:8443#RACK-LAB'
+export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
 export OPN_TARGETS_EXTERNAL='opn03.lan:8443,opn04.lan:8443'
 export OPN_TARGETS_IMGURL_STANDBY='https://paepcke.de/res/hot.png'
 export OPN_TARGETS_IMGURL_INTRANET='https://paepcke.de/res/int.png'

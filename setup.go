@@ -222,7 +222,7 @@ func checkSetRequiredOPN() bool {
 	}
 
 	if isEnv("OPN_TARGETS") {
-		tg = append(tg, OPNGroup{Name: "", Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
+		tg = append(tg, OPNGroup{Name: "", Img: false, OPN: true, Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
 		return true
 	}
 
