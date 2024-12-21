@@ -125,6 +125,7 @@ func Setup() (*OPNCall, error) {
 		config.Sync.Master = os.Getenv("OPN_MASTER")
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
+			pkghost = config.Sync.Master
 			pkgmaster = "https://" + config.Sync.Master + _plug
 		}
 	}

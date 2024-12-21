@@ -12,7 +12,7 @@ const SemVer = "v0.1.51"
 var (
 	tg                                                         []OPNGroup
 	unifiEnable, unifiBackupNow                                atomic.Bool
-	sleep, borg, pkgmaster                                     string
+	sleep, borg, pkgmaster, pkghost                            string
 	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL
 	grafanaWebUI, grafanaFreeBSD, grafanaUnifi, grafanaHAProxy *url.URL
 )
