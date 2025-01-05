@@ -59,7 +59,7 @@ func unifiBackupServer(config *OPNCall) {
 	// enfore init backup
 	unifiBackupNow.Store(true)
 
-	// loop
+	// loop forever
 	for {
 		// reset default state
 		isReachable, backupOK, notice = true, false, "status:ok"
@@ -178,6 +178,7 @@ func unifiBackupServer(config *OPNCall) {
 		// set unifi status
 		setUnifiStatus(config, time.Now(), notice, isReachable, backupOK)
 
-		<-updateUnifi
+		// wait for next round trigger
+		<-updateUnifiBackup
 	}
 }

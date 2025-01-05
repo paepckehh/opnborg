@@ -107,9 +107,8 @@ see opnborg-prometheus-grafana.nix
 - OPN_APIKEY           - OPNsense Backup User APIKEY [string, base64 encoded]
 - OPN_APISECRET        - OPNsense Backup User APISECRET [string, base64 encoded]
 - OPN_TARGETS          - list of OPNSense Target Server to Backup [string, hostnames, comma separated] [optional: add asset-tag, via # as seprator for each host]
-- OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."]
+- OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."], add a '#' after hostname for asset tags
 - OPN_TARGETS_IMGURL_* - alternative: custom image url for customs groups within WebUI [example: OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"]
-
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
@@ -147,6 +146,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
 - OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
 - OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
+- OPN_UNIFI_MONGO_URL     - Unifi MongoDB URI [example:]
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]

@@ -17,7 +17,8 @@ var (
 	hive                  []string
 	hiveMutex, unifiMutex sync.Mutex
 	updateOPN             = make(chan bool, 1)
-	updateUnifi           = make(chan bool, 1)
+	updateUnifiBackup     = make(chan bool, 1)
+	updateUnifiExport     = make(chan bool, 1)
 	unifiStatus           string
 )
 
@@ -134,7 +135,8 @@ func Setup() (*OPNCall, error) {
 	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
 		return config, err
 	}
-	unifiEnable.Store(false)
+	unifiBackupEnable.Store(false)
+	unifiExportEnable.Store(false)
 	if config.Unifi.WebUI != nil {
 		unifiWebUI = config.Unifi.WebUI
 		config.Unifi.Backup.Enable = false
@@ -145,12 +147,22 @@ func Setup() (*OPNCall, error) {
 			config.Unifi.Backup.Secret = os.Getenv("OPN_UNIFI_BACKUP_SECRET")
 		}
 		if config.Unifi.Backup.User != "" && config.Unifi.Backup.Secret != "" {
-			unifiEnable.Store(true)
+			unifiBackupEnable.Store(true)
 			config.Unifi.Backup.Enable = true
 			if _, ok := os.LookupEnv("OPN_UNIFI_VERSION"); !ok {
 				return config, errors.New("OPN_UNIFI_VERSION must contain the unifi controller version number (eg.: '5.6.9') when backup is enabled")
 			}
 			config.Unifi.Version = os.Getenv("OPN_UNIFI_VERSION")
+			if _, ok := os.LookupEnv("OPN_UNIFI_EXPORT"); ok {
+				unifiExportEnable.Store(true)
+				config.Unifi.Export.Enable = true
+				if config.Unifi.Export.URI, err = url.Parse("mongodb://127.0.0.1:27117"); err != nil {
+					panic(err) // unreachable
+				}
+				if config.Unifi.Export.URI, err = checkURL("OPN_UNIFI_MONGODB_URI"); err != nil {
+					return config, err
+				}
+			}
 		}
 	}
 

@@ -21,9 +21,13 @@ const (
 func getForceHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
 		updateOPN <- true
-		if unifiEnable.Load() {
+		if unifiBackupEnable.Load() {
 			unifiBackupNow.Store(true)
-			updateUnifi <- true
+			updateUnifiBackup <- true
+		}
+		if unifiExportEnable.Load() {
+			unifiExportNow.Store(true)
+			updateUnifiExport <- true
 		}
 		r = headHTML(r)
 		_, _ = r.Write([]byte(_forceRedirect))
@@ -188,7 +192,7 @@ func getNavi() string {
 		s.WriteString(_nwin)
 		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
 	}
-	if unifiWebUI != nil && !unifiEnable.Load() {
+	if unifiWebUI != nil && !unifiBackupEnable.Load() {
 		s.WriteString(" <a href=\"")
 		s.WriteString(unifiWebUI.String())
 		s.WriteString("/")

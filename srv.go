@@ -28,8 +28,11 @@ func srv(config *OPNCall) error {
 	go func() {
 		time.Sleep(time.Duration(config.Sleep) * time.Second)
 		updateOPN <- true
-		if unifiEnable.Load() {
-			updateUnifi <- true
+		if unifiBackupEnable.Load() {
+			updateUnifiBackup <- true
+		}
+		if unifiExportEnable.Load() {
+			updateUnifiExport <- true
 		}
 	}()
 
