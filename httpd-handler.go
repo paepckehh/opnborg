@@ -100,7 +100,7 @@ func getPKG() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<br><br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
+	s.WriteString("<br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
 	s.WriteString("<a href=\"" + pkgmaster + "\"><Button><b> [ Manage Package Plugins via Master: " + pkghost + " ] </b></Button></a><br><br>")
 	s.WriteString("<table><tr><td><small>")
 	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
