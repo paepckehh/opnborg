@@ -142,11 +142,10 @@ see opnborg-prometheus-grafana.nix
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
 
 # Unifi 
-- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
-- OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
-- OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
-- OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
-- OPN_UNIFI_MONGO_URL     - Unifi MongoDB URI [example:]
+- OPN_UNIFI_WEBUI              - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_BACKUP_USER        - Unifi Backup User Account
+- OPN_UNIFI_BACKUP_SECRET      - Unifi Backup User Account Password
+- OPN_UNIFI_BACKUP_IMGURL      - Unifi Backup Group Image URL [example: OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
