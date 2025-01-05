@@ -6,7 +6,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.52"
+const SemVer = "v0.1.53"
 
 // global var
 var (
