@@ -72,14 +72,17 @@ func srv(config *OPNCall) error {
 			switch len(s) {
 			case 1:
 				if len(s[0]) > 0 {
-					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
+					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a"
 					hive = append(hive, status)
 				}
 			case 2:
 				if len(s[0]) > 0 && len(s[1]) > 0 {
-					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a <b>AssetTag: </b>" + s[1] + "<br>"
+					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a </td><td><b>Tag: </b>" + s[1]
 					hive = append(hive, status)
 				}
+			default:
+				status := _na + " <b>configuration error, please fix configuration line: </b> " + server
+				hive = append(hive, status)
 			}
 		}
 	}
