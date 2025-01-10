@@ -28,18 +28,18 @@ func setOPNStatus(config *OPNCall, server, tag string, id int, ts time.Time, not
 				state = strings.ReplaceAll(state, "DEGRADED", html.EscapeString(notice))
 			}
 		}
-		seen := ts.Format(time.RFC3339)
+		seen := "<td><b>Last Seen: " + ts.Format(time.RFC3339) + "</b></td>"
 		ver := getFirmwareVersion(config, server)
 		borgSC := "<a href=\"https://" + server + _srvc + "\" " + _nwin + "><button><img src=\"favicon.ico\" width=\"12\" height=\"12\"></button></a>"
 		linkUI := "<a href=\"https://" + server + _dash + "\" " + _nwin + "><button><b>[" + server + "]</b></button></a> " + borgSC
 		linkVS := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button><b>[" + ver + "]</b></button></a>"
 		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button><b>[current.xml]</b></button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
-		links := " " + linkCurrent + " " + linkArchive
+		links := " <td>" + linkCurrent + " " + linkArchive + "</td>"
 		if tag != "" {
-			tag = " </td><td><b>" + tag + "</b>"
+			tag = "</td><td><b>" + tag + "</b>"
 		}
-		status := state + _b + linkUI + _b + linkVS + " <button><b>Last Seen:" + seen + "</b></button>" + links + tag
+		status := state + " </td><td>" + linkUI + " " + linkVS + links + seen + tag
 		hiveMutex.Lock()
 		hive[id] = status
 		hiveMutex.Unlock()

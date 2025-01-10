@@ -99,7 +99,7 @@ func srv(config *OPNCall) error {
 					hive = append(hive, status)
 				}
 			default:
-				status := _na + " <b>configuration error, please fix configuration line: </b> " + server
+				status := _na + " <b>configuration error, please fix configuration line for server: </b> " + server
 				hive = append(hive, status)
 			}
 		}
