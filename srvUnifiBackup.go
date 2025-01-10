@@ -13,7 +13,7 @@ import (
 )
 
 // perform unifi backup
-func unifiBackupServer(config *OPNCall) {
+func srvUnifiBackup(config *OPNCall) {
 
 	// info
 	displayChan <- []byte("[UNIFI][BACKUP][START][CONTROLLER] " + config.Unifi.WebUI.Hostname())

@@ -26,13 +26,23 @@ func srv(config *OPNCall) error {
 
 	// arm background timer
 	go func() {
-		time.Sleep(time.Duration(config.Sleep) * time.Second)
-		updateOPN <- true
-		if unifiBackupEnable.Load() {
-			updateUnifiBackup <- true
-		}
-		if unifiExportEnable.Load() {
-			updateUnifiExport <- true
+		// intit daily clock
+		last, _, _ := time.Now().Clock()
+		// loop forever
+		for {
+			time.Sleep(time.Duration(config.Sleep) * time.Second)
+			updateOPN <- true
+			now, _, _ := time.Now().Clock()
+			// check for day rollover, perform unifi backup/export
+			if now < last {
+				if unifiBackupEnable.Load() {
+					updateUnifiBackup <- true
+				}
+				if unifiExportEnable.Load() {
+					updateUnifiExport <- true
+				}
+			}
+			last, _, _ = time.Now().Clock()
 		}
 	}()
 
@@ -57,9 +67,17 @@ func srv(config *OPNCall) error {
 	if config.Unifi.Backup.Enable {
 		state = "[ENABLED]"
 		unifiStatus = _na + " <b>Member: </b> " + config.Unifi.WebUI.String() + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
-		go unifiBackupServer(config)
+		go srvUnifiBackup(config)
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-BACKUP-AND-MONITORING]" + state)
+
+	// spin up unifi asset export server
+	state = "[DISABLED]"
+	if config.Unifi.Export.Enable {
+		state = "[ENABLED]"
+		go srvUnifiExport(config)
+	}
+	displayChan <- []byte("[SERVICE][UNIFI-EXPORT-ASSET-INVENTORY]" + state)
 
 	// is opnsense hive is enabled?
 	state = "[DISABLED]"
@@ -121,7 +139,10 @@ func srv(config *OPNCall) error {
 				case 2:
 					wg.Add(1)
 					go actionOPN(s[0], s[1], config, id, &wg)
+				default:
+					displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
 				}
+
 			}
 
 			// wait till all worker done
