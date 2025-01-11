@@ -17,7 +17,7 @@ const (
 )
 
 // setOPNStatus sets the hive member server status
-func setOPNStatus(config *OPNCall, server, tag string, id int, ts time.Time, notice string, degraded, ok bool) {
+func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.Time, degraded, ok bool) {
 	year, month, _ := ts.Date()
 	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	if ok {
@@ -54,7 +54,7 @@ func setOPNStatus(config *OPNCall, server, tag string, id int, ts time.Time, not
 }
 
 // setUnifiStatus
-func setUnifiStatus(config *OPNCall, ts time.Time, notice string, responsive, backup bool) {
+func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, responsive, backup bool) {
 	// lock
 	unifiMutex.Lock()
 	defer unifiMutex.Unlock()
@@ -63,7 +63,6 @@ func setUnifiStatus(config *OPNCall, ts time.Time, notice string, responsive, ba
 	unifiStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiStatus, _unifi, ""), _na, ""), _fail, ""), _degraded, "")
 
 	// setup
-	server := config.Unifi.WebUI.Hostname()
 	year, month, _ := ts.Date()
 	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 
@@ -73,7 +72,7 @@ func setUnifiStatus(config *OPNCall, ts time.Time, notice string, responsive, ba
 		linkUI := "<a href=\"" + config.Unifi.WebUI.String() + "\" " + _nwin + "><button><b>[" + server + "]</b></button></a> "
 		linkCurrent := "<a href=\"./files/" + server + "/current.unf\"" + _nwin + "><button><b>[current.unf]</b></button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
-		links := " <td><b>Backup: </b>" + linkCurrent + " " + linkArchive + "</td>"
+		links := " <td>" + linkCurrent + " " + linkArchive + "</td>"
 		if !backup {
 			state = _degraded
 		}
@@ -84,7 +83,10 @@ func setUnifiStatus(config *OPNCall, ts time.Time, notice string, responsive, ba
 			exportArchive := "<a href=\"./files/" + _uniEx + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
 			export = " <td><b>Export: </b>" + exportCurrent + " " + exportArchive + "</td>"
 		}
-		unifiStatus = state + " </td><td>" + linkUI + _b + seen + links + export + "<br>"
+		if tag != "" {
+			tag = "</td><td><b>" + tag + "</b>"
+		}
+		unifiStatus = state + " </td><td>" + linkUI + _b + links + export + seen + tag + "<br>"
 		return
 	}
 	unifiStatus = _fail + unifiStatus

@@ -142,7 +142,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
 
 # Unifi 
-- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444], use '#' to add asset tag
 - OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
 - OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
 - OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]

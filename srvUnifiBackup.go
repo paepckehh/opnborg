@@ -15,8 +15,9 @@ import (
 // perform unifi backup
 func srvUnifiBackup(config *OPNCall) {
 
-	// info
-	displayChan <- []byte("[UNIFI][BACKUP][START][CONTROLLER] " + config.Unifi.WebUI.Hostname())
+	// setup
+	server, notice := config.Unifi.WebUI.Hostname(), ""
+	displayChan <- []byte("[UNIFI][BACKUP][START][CONTROLLER] " + server)
 
 	// setup session
 	jar, err := cookiejar.New(nil)
@@ -176,7 +177,7 @@ func srvUnifiBackup(config *OPNCall) {
 		}
 
 		// set unifi status
-		setUnifiStatus(config, time.Now(), notice, isReachable, backupOK)
+		setUnifiStatus(config, server, config.Unifi.Tag, notice, time.Now(), isReachable, backupOK)
 
 		// wait for next round trigger
 		<-updateUnifiBackup

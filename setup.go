@@ -135,6 +135,10 @@ func Setup() (*OPNCall, error) {
 	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
 		return config, err
 	}
+	s := strings.Split(os.Getenv("OPN_UNIFI_WEBUI"), "#")
+	if len(s) > 1 {
+		config.Unifi.Tag = s[1]
+	}
 	unifiBackupEnable.Store(false)
 	unifiExportEnable.Store(false)
 	if config.Unifi.WebUI != nil {

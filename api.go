@@ -6,7 +6,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.60"
+const SemVer = "v0.1.61"
 
 // global var
 var (
@@ -58,6 +58,7 @@ type OPNCall struct {
 	}
 	Unifi struct {
 		WebUI   *url.URL
+		Tag     string
 		Version string
 		Backup  struct {
 			Enable bool

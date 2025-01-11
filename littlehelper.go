@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -38,7 +39,8 @@ func startLog(config *OPNCall) {
 
 // checkURL
 func checkURL(env string) (*url.URL, error) {
-	if _, ok := os.LookupEnv(env); ok {
+	s := strings.Split(env, "#")
+	if _, ok := os.LookupEnv(s[0]); ok {
 		out, err := url.Parse(os.Getenv(env))
 		if err != nil {
 			return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
