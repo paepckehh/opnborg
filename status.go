@@ -69,15 +69,22 @@ func setUnifiStatus(config *OPNCall, ts time.Time, notice string, responsive, ba
 
 	if responsive {
 		state := _unifi
-		seen := ts.Format(time.RFC3339)
+		seen := "<td><b>Last Seen: " + ts.Format(time.RFC3339) + "</b></td>"
 		linkUI := "<a href=\"" + config.Unifi.WebUI.String() + "\" " + _nwin + "><button><b>[" + server + "]</b></button></a> "
 		linkCurrent := "<a href=\"./files/" + server + "/current.unf\"" + _nwin + "><button><b>[current.unf]</b></button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
-		links := linkCurrent + " " + linkArchive
+		links := " <td><b>Backup: </b>" + linkCurrent + " " + linkArchive + "</td>"
 		if !backup {
 			state = _degraded
 		}
-		unifiStatus = state + _b + linkUI + _b + " <button><b>Last Seen:" + seen + "</b></button> " + links + "<br>"
+		export := ""
+		if config.Unifi.Export.Enable {
+			ext := config.Unifi.Export.Format
+			exportCurrent := "<a href=\"./files/" + _uniEx + "/current." + ext + "\"" + _nwin + "><button><b>[current." + ext + "]</b></button></a>"
+			exportArchive := "<a href=\"./files/" + _uniEx + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
+			export = " <td><b>Export: </b>" + exportCurrent + " " + exportArchive + "</td>"
+		}
+		unifiStatus = state + " </td><td>" + linkUI + _b + seen + links + export + "<br>"
 		return
 	}
 	unifiStatus = _fail + unifiStatus

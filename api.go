@@ -6,7 +6,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.58"
+const SemVer = "v0.1.60"
 
 // global var
 var (
@@ -66,6 +66,7 @@ type OPNCall struct {
 		}
 		Export struct {
 			Enable bool
+			Format string
 			URI    *url.URL
 		}
 	}

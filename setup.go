@@ -150,17 +150,21 @@ func Setup() (*OPNCall, error) {
 			unifiBackupEnable.Store(true)
 			config.Unifi.Backup.Enable = true
 			if _, ok := os.LookupEnv("OPN_UNIFI_VERSION"); !ok {
-				return config, errors.New("OPN_UNIFI_VERSION must contain the unifi controller version number (eg.: '5.6.9') when backup is enabled")
+				return config, errors.New("OPN_UNIFI_VERSION must contain the unifi controller version number (eg.: '5.6.9') when unifi backup is enabled")
 			}
 			config.Unifi.Version = os.Getenv("OPN_UNIFI_VERSION")
 			if _, ok := os.LookupEnv("OPN_UNIFI_EXPORT"); ok {
 				unifiExportEnable.Store(true)
 				config.Unifi.Export.Enable = true
 				if config.Unifi.Export.URI, err = url.Parse("mongodb://127.0.0.1:27117"); err != nil {
-					panic(err) // unreachable
+					panic(err) // unreachable internal error in default mongodb uri
 				}
 				if config.Unifi.Export.URI, err = checkURL("OPN_UNIFI_MONGODB_URI"); err != nil {
 					return config, err
+				}
+				config.Unifi.Export.Format = "csv"
+				if d := os.Getenv("OPN_UNIFI_FORMAT"); d == "json" {
+					config.Unifi.Export.Format = "json"
 				}
 			}
 		}

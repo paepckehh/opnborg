@@ -17,7 +17,7 @@
 
 # OPNBORG 
 
-- Selfhosted OPNSense WebGUI portal to configure, monitor and backup [opnsense.org](https://opnsense.org/) firewall appliance(s)
+- Selfhosted OPNSense and Unifi WebGUI portal to configure, monitor and backup [opnsense.org](https://opnsense.org/) and [ui.com](https://ui.com) appliance(s)
  
 # SCREENSHOT WEBUI
 
@@ -142,10 +142,13 @@ see opnborg-prometheus-grafana.nix
 - OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
 
 # Unifi 
-- OPN_UNIFI_WEBUI              - Unifi Web Console target & port [example: http://localhost:8444]
-- OPN_UNIFI_BACKUP_USER        - Unifi Backup User Account
-- OPN_UNIFI_BACKUP_SECRET      - Unifi Backup User Account Password
-- OPN_UNIFI_BACKUP_IMGURL      - Unifi Backup Group Image URL [example: OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
+- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444]
+- OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
+- OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
+- OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
+- OPN_UNIFI_EXPORT        - Unifi Inventory Export enable [example: export OPN_UNIFI_EXPORT='1']
+- OPN_UNIFI_FORMAT        - Unifi Inventory Export formart, defaults to 'csv', optional 'json'
+- OPN_UNIFI_MONGODB_URI   - Unifi Inventory Mongodb Database uri, defaults to 'mongodb://localhost:27117'
 
 # Wazuh 
 - OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
