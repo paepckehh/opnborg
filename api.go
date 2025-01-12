@@ -56,6 +56,9 @@ type OPNCall struct {
 			BG string // color theme foreground
 		}
 	}
+	GitSrv struct {
+		Enable bool
+	}
 	Unifi struct {
 		WebUI   *url.URL
 		Tag     string

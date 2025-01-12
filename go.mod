@@ -3,6 +3,7 @@ module paepcke.de/opnborg
 go 1.23.3
 
 require (
+	github.com/AaronO/go-git-http v0.0.0-20161214145340-1d9485b3a98f
 	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3
 	github.com/go-git/go-git/v5 v5.12.0

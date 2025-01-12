@@ -110,6 +110,8 @@ func srv(config *OPNCall) error {
 	for {
 		// reset global (atomic) git worktree state tracker
 		if config.Git {
+			// init git repo
+			_ = gitCheckIn(config)
 			config.dirty.Store(false)
 		}
 

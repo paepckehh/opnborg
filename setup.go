@@ -20,6 +20,7 @@ var (
 	updateUnifiBackup     = make(chan bool, 1)
 	updateUnifiExport     = make(chan bool, 1)
 	unifiStatus           string
+	store                 string
 )
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -56,12 +57,19 @@ func Setup() (*OPNCall, error) {
 	if config.Path == "" {
 		config.Path = filepath.Dir("./")
 	}
+	store = config.Path
 
 	// validate bools
 	config.Daemon = !isEnv("OPN_NODAEMON")
 	config.Debug = isEnv("OPN_DEBUG")
 	config.Git = !isEnv("OPN_NOGIT")
 	config.GitPush = isEnv("OPN_GITPUSH")
+
+	// configure git repo https server
+	config.GitSrv.Enable = false
+	if isEnv("OPN_GITSRV") {
+		config.GitSrv.Enable = true
+	}
 
 	// configure remote syslog server
 	config.RSysLog.Enable = false
