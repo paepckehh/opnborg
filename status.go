@@ -37,7 +37,7 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button><b>[archive]</b></button></a>"
 		links := " <td>" + linkCurrent + " " + linkArchive + "</td>"
 		if tag != "" {
-			tag = "</td><td><b>" + tag + "</b>"
+			tag = "<td><b>" + tag + "</b></tb>"
 		}
 		status := state + " </td><td>" + linkUI + " " + linkVS + links + seen + tag
 		hiveMutex.Lock()
@@ -84,9 +84,9 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 			export = " <td><b>Export: </b>" + exportCurrent + " " + exportArchive + "</td>"
 		}
 		if tag != "" {
-			tag = "</td><td><b>" + tag + "</b>"
+			tag = "<td><b>" + tag + "</b>"
 		}
-		unifiStatus = state + " </td><td>" + linkUI + _b + links + export + seen + tag + "<br>"
+		unifiStatus = state + " </td><td>" + linkUI + " " + links + export + seen + tag
 		return
 	}
 	unifiStatus = _fail + unifiStatus
