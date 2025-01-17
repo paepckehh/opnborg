@@ -146,7 +146,9 @@ see opnborg-prometheus-grafana.nix
 - OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
 - OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
 - OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
-- OPN_UNIFI_EXPORT        - Unifi Inventory Export enable [example: export OPN_UNIFI_EXPORT='1']
+
+# Unifi Inventory Export, details see: [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex)
+- OPN_UNIFI_EXPORT        - Unifi Inventory Nightly Exports, check into git repo  [example: export OPN_UNIFI_EXPORT='1']
 - OPN_UNIFI_FORMAT        - Unifi Inventory Export formart, defaults to 'csv', optional 'json'
 - OPN_UNIFI_MONGODB_URI   - Unifi Inventory Mongodb Database uri, defaults to 'mongodb://localhost:27117'
 
