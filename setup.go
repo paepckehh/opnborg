@@ -20,7 +20,6 @@ var (
 	updateUnifiBackup     = make(chan bool, 1)
 	updateUnifiExport     = make(chan bool, 1)
 	unifiStatus           string
-	store                 string
 )
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -45,7 +44,7 @@ func Setup() (*OPNCall, error) {
 	// check if we meet basic requirements
 	config.Unifi.Backup.Enable = checkSetRequiredUnifi()
 	if !config.Enable && !config.Unifi.Backup.Enable {
-		return nil, errors.New("Please enable either OPN or Unifi backup. Please set OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_BACKUP_USER & SECRET")
+		return nil, errors.New("please enable either OPN or Unifi backup. Please set OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_BACKUP_USER & SECRET")
 	}
 
 	// setup app name
@@ -57,7 +56,6 @@ func Setup() (*OPNCall, error) {
 	if config.Path == "" {
 		config.Path = filepath.Dir("./")
 	}
-	store = config.Path
 
 	// validate bools
 	config.Daemon = !isEnv("OPN_NODAEMON")

@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
@@ -79,7 +78,7 @@ func srvUnifiBackup(config *OPNCall) {
 			// check http status code
 			if res.StatusCode != 200 {
 				isReachable = false
-				body, _ := ioutil.ReadAll(res.Body)
+				body, _ := io.ReadAll(res.Body)
 				notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] "
 				displayChan <- []byte(notice)
 				displayChan <- body
@@ -100,7 +99,7 @@ func srvUnifiBackup(config *OPNCall) {
 					if res.StatusCode != 200 {
 						isReachable = false
 						notice = "[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL][BODY] "
-						body, _ := ioutil.ReadAll(res.Body)
+						body, _ := io.ReadAll(res.Body)
 						displayChan <- []byte(notice)
 						displayChan <- body
 
@@ -113,7 +112,7 @@ func srvUnifiBackup(config *OPNCall) {
 		if isReachable {
 
 			// if last backup > 6 hours
-			if time.Now().Sub(ts) < time.Duration(6*time.Hour) {
+			if time.Since(ts) < time.Duration(6*time.Hour) {
 				unifiBackupNow.Store(true)
 			}
 
@@ -136,7 +135,6 @@ func srvUnifiBackup(config *OPNCall) {
 					notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error()
 					displayChan <- []byte(notice)
 				}
-				defer res.Body.Close()
 
 				// proceed
 				if backupOK {
@@ -148,6 +146,7 @@ func srvUnifiBackup(config *OPNCall) {
 						notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
 						displayChan <- []byte(notice)
 					}
+					res.Body.Close()
 
 					// check file
 					if backupOK {
