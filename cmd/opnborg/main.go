@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"log"
 	"time"
 
 	"paepcke.de/opnborg"
@@ -16,22 +15,20 @@ func main() {
 
 	// Startup
 	t0 := time.Now()
-	fmt.Println(_app + "[STARTUP][API-VERSION:" + opnborg.SemVer + "]")
+	log.Println(_app + "[STARTUP][API-VERSION:" + opnborg.SemVer + "]")
 
 	// Configure
 	config, err := opnborg.Setup()
 	if err != nil {
-		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
-		os.Exit(1)
+		log.Fatalf(_app+"[ERROR][EXIT] %s\n", err)
 	}
 
 	// Perform Backup of all Appliances xml configuration
 	err = opnborg.Start(config)
 	if err != nil {
-		fmt.Printf(_app+"[ERROR][EXIT] %s\n", err)
-		os.Exit(1)
+		log.Fatalf(_app+"[ERROR][EXIT] %s\n", err)
 	}
 
 	// Finish
-	fmt.Println(_app + "[END][RUNTIME]:" + time.Since(t0).String())
+	log.Println(_app + "[END][RUNTIME]:" + time.Since(t0).String())
 }
