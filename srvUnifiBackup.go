@@ -54,7 +54,7 @@ func srvUnifiBackup(config *OPNCall) {
 
 	// init
 	ts := time.Now()
-	isReachable, backupOK, notice := true, false, ""
+	isReachable, backupOK, notice := false, false, ""
 
 	// enfore init backup
 	unifiBackupNow.Store(true)
@@ -160,7 +160,11 @@ func srvUnifiBackup(config *OPNCall) {
 						if backupOK {
 
 							// check into store
-							checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf))
+							if err := checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf)); err != nil {
+								backupOK = false
+								notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-WRITE-BACKUP-FILE-INTO-STORE] " + err.Error()
+								displayChan <- []byte(notice)
+							}
 
 							// flag git store as dirty
 							config.dirty.Store(true)

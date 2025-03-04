@@ -3,12 +3,6 @@ PROJECT=$(shell basename $(CURDIR))
 all:
 	make -C cmd/$(PROJECT) all
 
-clean:
-	make -C cmd/$(PROJECT) clean
-
-examples:
-	make -C cmd/$(PROJECT) examples
-
 deps: 
 	rm go.mod go.sum
 	go mod init paepcke.de/$(PROJECT)
@@ -16,5 +10,7 @@ deps:
 
 check: 
 	gofmt -w -s .
+	go vet .
 	staticcheck
+	golangci-lint run
 	make -C cmd/$(PROJECT) check
