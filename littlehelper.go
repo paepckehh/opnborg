@@ -15,9 +15,9 @@ import (
 
 // outSlice write messages to stdout
 func outSlice(msg []byte, config *OPNCall) {
-	os.Stdout.Write([]byte(config.AppName))
-	os.Stdout.Write(msg)
-	os.Stdout.Write([]byte("\n"))
+	_, _ = os.Stdout.Write([]byte(config.AppName))
+	_, _ = os.Stdout.Write(msg)
+	_, _ = os.Stdout.Write([]byte("\n"))
 }
 
 // displayChan channel for the display engine

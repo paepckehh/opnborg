@@ -290,7 +290,7 @@ func checkSetRequiredOPN() bool {
 			}
 		}
 		if len(member) > 0 {
-			os.Setenv("OPN_TARGETS", member)
+			_ = os.Setenv("OPN_TARGETS", member)
 			return true
 		}
 	}

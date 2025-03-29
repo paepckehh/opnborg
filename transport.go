@@ -58,7 +58,7 @@ func getFirmwareVersion(config *OPNCall, server string) string {
 	}
 
 	// read, validate & return full xml body
-	defer body.Body.Close()
+	defer func() { _ = body.Body.Close }()
 	data, err := io.ReadAll(body.Body)
 	if err != nil {
 		displayChan <- []byte("[FETCH-VERSION][FAIL:READ-BODY] " + targetURL + err.Error())
@@ -111,7 +111,7 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	}
 
 	// read body
-	defer body.Body.Close()
+	defer func() { _ = body.Body.Close }()
 	msg, err := io.ReadAll(body.Body)
 	if err != nil {
 		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL + " " + err.Error())
@@ -196,7 +196,7 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	}
 
 	// read, validate & return full xml body
-	defer body.Body.Close()
+	defer func() { _ = body.Body.Close }()
 	data, err = io.ReadAll(body.Body)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:READ-BODY] " + targetURL)

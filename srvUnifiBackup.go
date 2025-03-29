@@ -146,7 +146,7 @@ func srvUnifiBackup(config *OPNCall) {
 						notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
 						displayChan <- []byte(notice)
 					}
-					res.Body.Close()
+					_ = res.Body.Close()
 
 					// check file
 					if backupOK {
