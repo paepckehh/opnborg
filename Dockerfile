@@ -1,4 +1,4 @@
-FROM golang:1.23 as app
+FROM golang:1.24 as app
 RUN mkdir -p /opnborg
 WORKDIR /opnborg
 COPY . .
