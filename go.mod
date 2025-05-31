@@ -1,6 +1,6 @@
 module paepcke.de/opnborg
 
-go 1.24.1
+go 1.24.3
 
 require (
 	github.com/AaronO/go-git-http v0.0.0-20161214145340-1d9485b3a98f

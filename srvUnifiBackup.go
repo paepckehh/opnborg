@@ -152,7 +152,10 @@ func srvUnifiBackup(config *OPNCall) {
 					if backupOK {
 						if len(unf) < 1024 {
 							backupOK = false
-							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL] " + err.Error()
+							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL] "
+							if err != nil {
+								notice = notice + err.Error()
+							}
 							displayChan <- []byte(notice)
 						}
 
