@@ -10,7 +10,7 @@ require (
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/sirupsen/logrus v1.9.3
 	paepcke.de/npad v0.1.29
-	paepcke.de/uniex v0.1.8
+	paepcke.de/uniex v0.1.19
 )
 
 require (
