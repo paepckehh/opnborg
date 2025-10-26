@@ -175,5 +175,5 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 paepcke.de/npad v0.1.29 h1:WtcO++d/TKlS9x8XP8LIEURdvJ/Wf39Wxy03Udu6xdQ=
 paepcke.de/npad v0.1.29/go.mod h1:7vSKQi7ok23YYp2mevqDRHnLHq5Hw+Y/67ffADruUH0=
-paepcke.de/uniex v0.1.8 h1:t1NA4j5TXLkulL+pL6W02zQ6kT1Ggs/0sznzuhnK8mE=
-paepcke.de/uniex v0.1.8/go.mod h1:pkHRfb/AO2J9Crcig0CXpa1xNMkHc9DY7aQK5aZ6N6I=
+paepcke.de/uniex v0.1.19 h1:D76Jjx5ijEjEiGChhnx8wUnf0PzHLdUCC/B9ubK/pJE=
+paepcke.de/uniex v0.1.19/go.mod h1:BV7QTmb7J3FVJlTI0OMZtXnaQkfNhnkmiaY1qJbAwE8=
