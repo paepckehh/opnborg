@@ -8,7 +8,7 @@ require (
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/natefinch/lumberjack v2.0.0+incompatible
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	paepcke.de/npad v0.1.29
 	paepcke.de/uniex v0.1.19
 )
