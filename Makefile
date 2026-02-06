@@ -3,7 +3,9 @@ PROJECT=$(shell basename $(CURDIR))
 all:
 	make -C cmd/$(PROJECT) all
 
-deps: 
+deps:
+	@echo "reminder: bump api.com hardcoded version before release!"
+	@echo "########################################################"
 	rm go.mod go.sum
 	go mod init paepcke.de/$(PROJECT)
 	go mod tidy -v	
