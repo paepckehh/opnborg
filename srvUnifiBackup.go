@@ -45,7 +45,7 @@ func srvUnifiBackup(config *OPNCall) {
 	}
 
 	// prep system test
-	system := map[string]interface{}{"cmd": "async-backup", "days": 0}
+	system := map[string]any{"cmd": "async-backup", "days": 0}
 	postSystem, err := json.Marshal(system)
 	if err != nil {
 		displayChan <- []byte("[UNIFI][BACKUP][ERROR][CONFIG-SYSTEM-TEST-JSON-ENCODING-FAIL]" + err.Error())

@@ -71,7 +71,7 @@ func isEnv(check string) bool {
 
 // isValidXML
 func isValidXML(s string) bool {
-	return xml.Unmarshal([]byte(s), new(interface{})) == nil
+	return xml.Unmarshal([]byte(s), new(any)) == nil
 }
 
 // padMonth

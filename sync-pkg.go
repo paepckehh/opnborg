@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -14,13 +15,7 @@ func checkInstallPKG(server string, config *OPNCall, opn *Opnsense) error {
 	var add bool
 	var missing []string
 	for _, master := range config.Sync.PKG.Packages {
-		add = true
-		for _, pkg := range srvpkg {
-			if master == pkg {
-				add = false
-				break
-			}
-		}
+		add = !slices.Contains(srvpkg, master)
 		if add {
 			missing = append(missing, master)
 		}
