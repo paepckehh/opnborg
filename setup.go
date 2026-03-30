@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/joho/godotenv"
 )
 
 // global
@@ -24,7 +26,9 @@ var (
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
 func Setup() (*OPNCall, error) {
-
+    // load .env
+	_ = godotenv.Load()
+	
 	// var
 	var err error
 
