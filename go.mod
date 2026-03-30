@@ -6,11 +6,12 @@ require (
 	github.com/AaronO/go-git-http v0.0.0-20161214145340-1d9485b3a98f
 	github.com/alecthomas/chroma/v2 v2.23.1
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3
-	github.com/go-git/go-git/v5 v5.17.0
+	github.com/go-git/go-git/v5 v5.17.1
+	github.com/joho/godotenv v1.5.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/sirupsen/logrus v1.9.4
 	paepcke.de/npad v0.1.29
-	paepcke.de/uniex v0.1.28
+	paepcke.de/uniex v0.1.31
 )
 
 require (
@@ -18,7 +19,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cnaude/go-syslog/format/v3 v3.0.0-20220728001533-6297dc1b2ff3 // indirect
 	github.com/cnaude/go-syslog/parser/v3 v3.0.0-20220728001533-6297dc1b2ff3 // indirect
 	github.com/cnaude/go-syslog/rfc3164/v3 v3.0.0-20220728001533-6297dc1b2ff3 // indirect
@@ -43,7 +44,7 @@ require (
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
-	go.mongodb.org/mongo-driver v1.17.7 // indirect
+	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
