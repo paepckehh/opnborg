@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/AaronO/go-git-http v0.0.0-20161214145340-1d9485b3a98f
-	github.com/alecthomas/chroma/v2 v2.23.1
+	github.com/alecthomas/chroma/v2 v2.24.1
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3
 	github.com/go-git/go-git/v5 v5.19.0
 	github.com/joho/godotenv v1.5.1
@@ -25,7 +25,7 @@ require (
 	github.com/cnaude/go-syslog/rfc3164/v3 v3.0.0-20220728001533-6297dc1b2ff3 // indirect
 	github.com/cnaude/go-syslog/rfc5424/v3 v3.0.0-20220728001533-6297dc1b2ff3 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
-	github.com/dlclark/regexp2 v1.11.5 // indirect
+	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
