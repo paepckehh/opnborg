@@ -26,9 +26,9 @@ var (
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
 func Setup() (*OPNCall, error) {
-    // load .env
+	// load .env
 	_ = godotenv.Load()
-	
+
 	// var
 	var err error
 

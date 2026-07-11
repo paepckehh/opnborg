@@ -6,6 +6,7 @@ all:
 deps:
 	@echo "reminder: bump api.com hardcoded version before release!"
 	@echo "########################################################"
+	touch go.mod go.sum
 	rm go.mod go.sum
 	go mod init paepcke.de/$(PROJECT)
 	go mod tidy -v	
