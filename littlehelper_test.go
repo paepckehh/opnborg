@@ -658,3 +658,36 @@ func httptestOK(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 	return httptest.NewRecorder()
 }
+
+// --- rsyslog-clientconf.go: mismatchErr --------------------------------
+
+func TestMismatchErrFormat(t *testing.T) {
+	got := mismatchErr("[LABEL]", "opn01.lan", "0", "1")
+	want := "[LABEL] opn01.lan -> have: 0 need: 1"
+	if got.Error() != want {
+		t.Errorf("got %q want %q", got.Error(), want)
+	}
+}
+
+func TestGetLogConfUsesConstants(t *testing.T) {
+	opn := getLogConf([]string{"10.0.0.1", "514"})
+	d := opn.OPNsense.Syslog.Destinations.Destination
+	if d.Uuid != _syslogUUID {
+		t.Errorf("uuid = %q want %q", d.Uuid, _syslogUUID)
+	}
+	if d.Level != _syslogLevel {
+		t.Errorf("level mismatch")
+	}
+	if d.Facility != _syslogFacility {
+		t.Errorf("facility mismatch")
+	}
+	if d.Program != _syslogProgram {
+		t.Errorf("program mismatch")
+	}
+	if d.Description != _syslogDesc {
+		t.Errorf("description mismatch")
+	}
+	if d.Enabled != _syslogEnabled || d.Transport != _syslogTransport || d.Rfc5424 != _syslogRfc5424 {
+		t.Errorf("fixed-value field mismatch")
+	}
+}
