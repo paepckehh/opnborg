@@ -929,3 +929,29 @@ func TestWriteGroupHeaderImgAndPlain(t *testing.T) {
 		t.Errorf("img header missing attrs: %q", got)
 	}
 }
+
+// --- transport.go: opnClient --------------------------------------------
+
+func TestOpnClientTimeoutApplied(t *testing.T) {
+	c := opnClient(&OPNCall{}, 7)
+	if c.Timeout != 7*time.Second {
+		t.Errorf("timeout = %v want %v", c.Timeout, 7*time.Second)
+	}
+	if c.Transport == nil {
+		t.Error("Transport must be set")
+	}
+	if c.Jar != nil || c.CheckRedirect != nil {
+		t.Error("Jar/CheckRedirect should be nil to match getClient")
+	}
+}
+
+func TestOpnClientUsesKeyPinWhenConfigured(t *testing.T) {
+	without := opnClient(&OPNCall{}, 5).Transport.(*http.Transport).TLSClientConfig
+	if without.VerifyConnection != nil {
+		t.Error("VerifyConnection should be nil without keypin")
+	}
+	with := opnClient(&OPNCall{TLSKeyPin: "FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M="}, 5).Transport.(*http.Transport).TLSClientConfig
+	if with.VerifyConnection == nil {
+		t.Error("VerifyConnection should be set when keypin configured")
+	}
+}

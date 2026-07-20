@@ -44,13 +44,8 @@ func getFirmwareVersion(config *OPNCall, server string) string {
 	}
 	req.SetBasicAuth(config.Key, config.Secret)
 
-	// setup transport layer
-	tlsconf := getTlsConf(config)
-	transport := getTransport(tlsconf)
-	client := getClient(transport)
-
 	// connect
-	client.Timeout = time.Duration(20 * time.Second)
+	client := opnClient(config, 20)
 	body, err := client.Do(req)
 	if err != nil {
 		displayChan <- []byte("[FETCH-VERSION][FAIL:TLS-CONNECT] " + targetURL + " " + err.Error())
@@ -97,13 +92,8 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(config.Key, config.Secret)
 
-	// setup transport layer
-	tlsconf := getTlsConf(config)
-	transport := getTransport(tlsconf)
-	client := getClient(transport)
-
 	// connect
-	client.Timeout = time.Duration(4 * time.Second)
+	client := opnClient(config, 4)
 	body, err := client.Do(req)
 	if err != nil {
 		displayChan <- []byte("[INSTALL-PKG][FAIL:TLS-CONNECT] " + targetURL + " " + err.Error())
@@ -182,13 +172,8 @@ func fetchXML(server string, config *OPNCall) (data []byte, err error) {
 	}
 	req.SetBasicAuth(config.Key, config.Secret)
 
-	// setup transport layer
-	tlsconf := getTlsConf(config)
-	transport := getTransport(tlsconf)
-	client := getClient(transport)
-
 	// connect
-	client.Timeout = time.Duration(20 * time.Second)
+	client := opnClient(config, 20)
 	body, err := client.Do(req)
 	if err != nil {
 		displayChan <- []byte("[FETCH][FAIL:TLS-CONNECT] " + targetURL)
@@ -263,6 +248,20 @@ func getClient(transport *http.Transport) *http.Client {
 		CheckRedirect: nil,
 		Jar:           nil,
 		Transport:     transport,
+	}
+}
+
+// opnClient assembles a hardened HTTP client for OPNsense API calls: TLS 1.3
+// config (with optional keypin), compression disabled, and a caller-supplied
+// per-call timeout. It collapses the getTlsConf → getTransport → getClient →
+// set-Timeout sequence previously duplicated across fetchXML, fetchVersion
+// and installPKG.
+func opnClient(config *OPNCall, timeoutSec int) *http.Client {
+	return &http.Client{
+		CheckRedirect: nil,
+		Jar:           nil,
+		Transport:     getTransport(getTlsConf(config)),
+		Timeout:       time.Duration(timeoutSec) * time.Second,
 	}
 }
 
