@@ -14,6 +14,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// env var prefix constants used by checkSetRequiredOPN to walk OPN_TARGETS_*
+// group definitions out of the process environment.
+const (
+	_opnTargetsPrefix    = "OPN_TARGETS_"
+	_opnTargetsImgPrefix = "OPN_TARGETS_IMGURL_"
+)
+
 // global
 var (
 	hive                  []string
@@ -257,46 +264,35 @@ func checkSetRequiredOPN() bool {
 		return true
 	}
 
-	member := ""
 	env := os.Environ()
-	if len(env) > 1 {
-		sort.Strings(env)
-		for _, value := range env {
-			if len(value) > 15 {
-				if value[0:12] == "OPN_TARGETS_" {
-					if value[0:18] == "OPN_TARGETS_IMGURL" {
-						continue
-					}
-					grp := strings.Split(value, "=")
-					if len(member) > 0 {
-						member = member + ","
-					}
-					member = member + grp[1]
-					if isEnv("OPN_TARGETS_IMGURL_" + grp[0][12:]) {
-						tg = append(tg, OPNGroup{
-							Name:   grp[0][12:],
-							Img:    true,
-							OPN:    true,
-							Unifi:  false,
-							ImgURL: os.Getenv("OPN_TARGETS_IMGURL_" + grp[0][12:]),
-							Member: strings.Split(grp[1], ","),
-						})
-					} else {
-						tg = append(tg, OPNGroup{
-							Name:   grp[0][12:],
-							Img:    false,
-							OPN:    true,
-							Unifi:  false,
-							Member: strings.Split(grp[1], ","),
-						})
-					}
-				}
-			}
+	if len(env) < 2 {
+		return false
+	}
+	sort.Strings(env)
+	var members []string
+	for _, value := range env {
+		name, val, found := strings.Cut(value, "=")
+		if !found {
+			continue
 		}
-		if len(member) > 0 {
-			_ = os.Setenv("OPN_TARGETS", member)
-			return true
+		if !strings.HasPrefix(name, _opnTargetsPrefix) || strings.HasPrefix(name, _opnTargetsImgPrefix) {
+			continue
 		}
+		group := strings.TrimPrefix(name, _opnTargetsPrefix)
+		members = append(members, val)
+		imgURL := os.Getenv(_opnTargetsImgPrefix + group)
+		tg = append(tg, OPNGroup{
+			Name:   group,
+			Img:    imgURL != "",
+			OPN:    true,
+			Unifi:  false,
+			ImgURL: imgURL,
+			Member: strings.Split(val, ","),
+		})
+	}
+	if len(members) > 0 {
+		_ = os.Setenv("OPN_TARGETS", strings.Join(members, ","))
+		return true
 	}
 	return false
 }

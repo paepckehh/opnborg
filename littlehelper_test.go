@@ -713,3 +713,96 @@ func TestLogBackupErrSendsToDisplayChan(t *testing.T) {
 		t.Fatal("displayChan did not receive the error message")
 	}
 }
+
+// --- setup.go: checkSetRequiredOPN --------------------------------------
+
+// resetTargetsGlobals snapshots and restores the package-global tg slice and
+// the OPN_TARGETS env var so each subtest starts from a clean state.
+func resetTargetsGlobals(t *testing.T) {
+	t.Helper()
+	savedTg := tg
+	savedTargets := os.Getenv("OPN_TARGETS")
+	t.Cleanup(func() {
+		tg = savedTg
+		_ = os.Setenv("OPN_TARGETS", savedTargets)
+	})
+	tg = nil
+}
+
+func TestCheckSetRequiredOPNMissingCreds(t *testing.T) {
+	resetTargetsGlobals(t)
+	withEnv(t, "OPN_APIKEY", "", false)
+	withEnv(t, "OPN_APISECRET", "", false)
+	withEnv(t, "OPN_TARGETS", "", false)
+	if got := checkSetRequiredOPN(); got {
+		t.Errorf("expected false when APIKEY/APISECRET unset")
+	}
+}
+
+func TestCheckSetRequiredOPNFlatTargets(t *testing.T) {
+	resetTargetsGlobals(t)
+	withEnv(t, "OPN_APIKEY", "key", true)
+	withEnv(t, "OPN_APISECRET", "secret", true)
+	withEnv(t, "OPN_TARGETS", "fw01,fw02", true)
+	if !checkSetRequiredOPN() {
+		t.Fatalf("expected true for flat OPN_TARGETS")
+	}
+	if len(tg) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(tg))
+	}
+	if tg[0].Name != "" || !tg[0].OPN || tg[0].Img {
+		t.Errorf("unexpected flat group: %+v", tg[0])
+	}
+	if len(tg[0].Member) != 2 || tg[0].Member[0] != "fw01" || tg[0].Member[1] != "fw02" {
+		t.Errorf("unexpected members: %+v", tg[0].Member)
+	}
+}
+
+func TestCheckSetRequiredOPNGroupsAndImg(t *testing.T) {
+	resetTargetsGlobals(t)
+	withEnv(t, "OPN_APIKEY", "key", true)
+	withEnv(t, "OPN_APISECRET", "secret", true)
+	withEnv(t, "OPN_TARGETS", "", false)
+	withEnv(t, "OPN_TARGETS_EDGE", "edge01,edge02", true)
+	withEnv(t, "OPN_TARGETS_CORE", "core01", true)
+	withEnv(t, "OPN_TARGETS_IMGURL_EDGE", "https://img/edge.png", true)
+
+	if !checkSetRequiredOPN() {
+		t.Fatalf("expected true for group targets")
+	}
+	// OPN_TARGETS must be rewritten to the merged member list.
+	if got := os.Getenv("OPN_TARGETS"); got != "edge01,edge02,core01" && got != "core01,edge01,edge02" {
+		t.Errorf("OPN_TARGETS not merged correctly: %q", got)
+	}
+	// find the EDGE group
+	var edge *OPNGroup
+	for i := range tg {
+		if tg[i].Name == "EDGE" {
+			edge = &tg[i]
+			break
+		}
+	}
+	if edge == nil {
+		t.Fatalf("EDGE group not registered: %+v", tg)
+	}
+	if !edge.Img || edge.ImgURL != "https://img/edge.png" {
+		t.Errorf("EDGE group image not wired: %+v", edge)
+	}
+}
+
+func TestCheckSetRequiredOPNIgnoresImgUrlEntries(t *testing.T) {
+	resetTargetsGlobals(t)
+	withEnv(t, "OPN_APIKEY", "key", true)
+	withEnv(t, "OPN_APISECRET", "secret", true)
+	withEnv(t, "OPN_TARGETS", "", false)
+	withEnv(t, "OPN_TARGETS_EDGE", "edge01", true)
+	withEnv(t, "OPN_TARGETS_IMGURL_EDGE", "https://img/edge.png", true)
+	if !checkSetRequiredOPN() {
+		t.Fatalf("expected true")
+	}
+	for _, g := range tg {
+		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "IMGURL") {
+			t.Errorf("IMGURL entry should not be a group: %+v", g)
+		}
+	}
+}
