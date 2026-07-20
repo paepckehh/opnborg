@@ -2,6 +2,7 @@ package opnborg
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -99,7 +100,11 @@ func getPKG() string {
 	}
 	var s strings.Builder
 	s.WriteString("<br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
-	s.WriteString("<a href=\"" + pkgmaster + "\"><Button><b> [ Manage Package Plugins via Master: " + pkghost + " ] </b></Button></a><br><br>")
+	s.WriteString("<a href=\"")
+	s.WriteString(pkgmaster)
+	s.WriteString("\"><Button><b> [ Manage Package Plugins via Master: ")
+	s.WriteString(pkghost)
+	s.WriteString(" ] </b></Button></a><br><br>")
 	s.WriteString("<table><tr><td><small>")
 	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
 	s.WriteString("</small></td></tr></table>")
@@ -113,27 +118,12 @@ func getHive() string {
 	s.WriteString("<br><br><br>")
 	hiveMutex.Lock() // snapshot (freeze) state
 	for _, grp := range tg {
-		if grp.Img {
-			s.WriteString("<b><img alt=\"" + grp.Name + "\" src=\"" + grp.ImgURL + "\"></b><br>")
-		} else {
-			s.WriteString("<b>" + grp.Name + "</b><br>")
-		}
+		writeGroupHeader(&s, grp)
 		s.WriteString(" <table>")
 		s.WriteString(_lf)
 		for _, srv := range grp.Member {
 			s.WriteString("  <tr><td>")
-			if grp.OPN {
-				for _, line := range hive {
-					target := strings.Split(srv, "#")
-					if strings.Contains(line, target[0]) {
-						s.WriteString(line)
-						break
-					}
-				}
-			}
-			if grp.Unifi {
-				s.WriteString(unifiStatus)
-			}
+			writeGroupMember(&s, grp, srv)
 			s.WriteString("  </td></tr>")
 			s.WriteString(_lf)
 		}
@@ -150,61 +140,76 @@ func getHive() string {
 	return s.String()
 }
 
+// writeGroupHeader renders the heading line for a target group, either as an
+// inline image (when an ImgURL is configured) or a plain bold label.
+func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
+	if grp.Img {
+		s.WriteString("<b><img alt=\"")
+		s.WriteString(grp.Name)
+		s.WriteString("\" src=\"")
+		s.WriteString(grp.ImgURL)
+		s.WriteString("\"></b><br>")
+		return
+	}
+	s.WriteString("<b>")
+	s.WriteString(grp.Name)
+	s.WriteString("</b><br>")
+}
+
+// writeGroupMember renders a single hive member row, looking up the per-server
+// status line for OPN groups or the shared unifi status for Unifi groups.
+func writeGroupMember(s *strings.Builder, grp OPNGroup, srv string) {
+	if grp.OPN {
+		target := strings.Split(srv, "#")
+		for _, line := range hive {
+			if strings.Contains(line, target[0]) {
+				s.WriteString(line)
+				return
+			}
+		}
+	}
+	if grp.Unifi {
+		s.WriteString(unifiStatus)
+	}
+}
+
+// naviLink describes a single top-navigation entry. An empty suffix is
+// allowed; the link is only emitted when the configured base URL is non-nil.
+type naviLink struct {
+	url    *url.URL
+	suffix string
+	label  string
+}
+
 // getNavi provides the central top navigation links
 func getNavi() string {
-	var s strings.Builder
-	if prometheusWebUI != nil {
-		s.WriteString(" <a href=\"")
-		s.WriteString(prometheusWebUI.String())
-		s.WriteString("/targets?search=")
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ PrometheusDB ]</b></button></a> ")
+	links := []naviLink{
+		{url: prometheusWebUI, suffix: "/targets?search=", label: "[ PrometheusDB ]"},
+		{url: grafanaWebUI, suffix: "/dashboards", label: "[ Grafana ]"},
+		{url: grafanaFreeBSD, suffix: "", label: "[ OPNSense OS Dashboard ]"},
+		{url: grafanaHAProxy, suffix: "", label: "[ HAProxy Dashboard ]"},
+		{url: grafanaUnifi, suffix: "", label: "[ Unifi Dashboard ]"},
 	}
-	if grafanaWebUI != nil {
-		s.WriteString("<a href=\"")
-		s.WriteString(grafanaWebUI.String())
-		s.WriteString("/dashboards")
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Grafana ]</b></button></a> ")
-	}
-	if grafanaFreeBSD != nil {
-		s.WriteString("<a href=\"")
-		s.WriteString(grafanaFreeBSD.String())
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ OPNSense OS Dashboard ]</b></button></a> ")
-	}
-	if grafanaHAProxy != nil {
-		s.WriteString("<a href=\"")
-		s.WriteString(grafanaHAProxy.String())
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ HAProxy Dashboard ]</b></button></a> ")
-	}
-	if grafanaUnifi != nil {
-		s.WriteString("<a href=\"")
-		s.WriteString(grafanaUnifi.String())
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Unifi Dashboard ]</b></button></a> ")
-	}
+	// Unifi controller entry is only shown when backups are NOT enabled (the
+	// controller gets its own dedicated tile otherwise).
 	if unifiWebUI != nil && !unifiBackupEnable.Load() {
-		s.WriteString(" <a href=\"")
-		s.WriteString(unifiWebUI.String())
-		s.WriteString("/")
-		s.WriteString("\" ")
-		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Unifi ]</b></button></a> ")
+		links = append(links, naviLink{url: unifiWebUI, suffix: "/", label: "[ Unifi ]"})
 	}
-	if wazuhWebUI != nil {
+	links = append(links, naviLink{url: wazuhWebUI, suffix: "/", label: "[ Wazuh ]"})
+
+	var s strings.Builder
+	for _, l := range links {
+		if l.url == nil {
+			continue
+		}
 		s.WriteString(" <a href=\"")
-		s.WriteString(wazuhWebUI.String())
-		s.WriteString("/")
+		s.WriteString(l.url.String())
+		s.WriteString(l.suffix)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button><b>[ Wazuh ]</b></button></a> ")
+		s.WriteString("><button><b>")
+		s.WriteString(l.label)
+		s.WriteString("</b></button></a> ")
 	}
 	return s.String()
 }

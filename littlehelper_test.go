@@ -50,17 +50,18 @@ func withEnv(tb testing.TB, key, value string, set bool) {
 	})
 }
 
-// ensureDisplayDrained replaces the package-global displayChan with a
-// buffered one and drains it in the background so the functions under test
-// that send to displayChan do not block. The package init creates
-// displayChan with capacity 20; we just spin a reader.
+// ensureDisplayDrained spins a background reader against the package-global
+// displayChan so the functions under test that send to it do not block. It
+// captures the channel value at setup time: if a later test swaps displayChan
+// for its own channel, that test is responsible for draining its own swap.
 func ensureDisplayDrained(tb testing.TB) {
 	tb.Helper()
+	ch := displayChan
 	done := make(chan struct{})
 	go func() {
 		for {
 			select {
-			case <-displayChan:
+			case <-ch:
 			case <-done:
 				return
 			}
@@ -696,7 +697,9 @@ func TestGetLogConfUsesConstants(t *testing.T) {
 
 func TestLogBackupErrSendsToDisplayChan(t *testing.T) {
 	// Replace displayChan with a buffered one we control so we can assert
-	// the exact payload without racing the package init reader.
+	// the exact payload. We intentionally do NOT call ensureDisplayDrained
+	// here, because that helper spins a reader against the original
+	// displayChan; swapping the channel underneath it would race.
 	saved := displayChan
 	t.Cleanup(func() { displayChan = saved })
 	ch := make(chan []byte, 1)
@@ -804,5 +807,125 @@ func TestCheckSetRequiredOPNIgnoresImgUrlEntries(t *testing.T) {
 		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "IMGURL") {
 			t.Errorf("IMGURL entry should not be a group: %+v", g)
 		}
+	}
+}
+
+// --- httpd-handler.go: getNavi all links + getPKG/getHive ---------------
+
+func TestGetNaviAllLinks(t *testing.T) {
+	saved := struct {
+		prom, grafana, fbsd, haproxy, unifiG, wazuh, unifiW *url.URL
+	}{prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy, grafanaUnifi, wazuhWebUI, unifiWebUI}
+	t.Cleanup(func() {
+		prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy, grafanaUnifi, wazuhWebUI, unifiWebUI =
+			saved.prom, saved.grafana, saved.fbsd, saved.haproxy, saved.unifiG, saved.wazuh, saved.unifiW
+	})
+	must := func(s string) *url.URL {
+		u, err := url.Parse(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	prometheusWebUI = must("https://prom.example.com")
+	grafanaWebUI = must("https://grafana.example.com")
+	grafanaFreeBSD = must("https://grafana.example.com/d/freebsd")
+	grafanaHAProxy = must("https://grafana.example.com/d/haproxy")
+	grafanaUnifi = must("https://grafana.example.com/d/unifi")
+	wazuhWebUI = must("https://wazuh.example.com")
+	unifiWebUI = nil // unifiBackupEnable is false by default in tests
+	unifiBackupEnable.Store(false)
+
+	got := getNavi()
+	for _, want := range []string{
+		"https://prom.example.com/targets?search=",
+		"[ PrometheusDB ]",
+		"https://grafana.example.com/dashboards",
+		"[ Grafana ]",
+		"https://grafana.example.com/d/freebsd",
+		"[ OPNSense OS Dashboard ]",
+		"https://grafana.example.com/d/haproxy",
+		"[ HAProxy Dashboard ]",
+		"https://grafana.example.com/d/unifi",
+		"[ Unifi Dashboard ]",
+		"https://wazuh.example.com/",
+		"[ Wazuh ]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getNavi missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestGetNaviUnifiConditional(t *testing.T) {
+	saved := unifiWebUI
+	savedBackup := unifiBackupEnable.Load()
+	t.Cleanup(func() {
+		unifiWebUI = saved
+		unifiBackupEnable.Store(savedBackup)
+	})
+	u, err := url.Parse("https://unifi.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unifiWebUI = u
+
+	// When backup is enabled, the Unifi nav link is suppressed.
+	unifiBackupEnable.Store(true)
+	if got := getNavi(); strings.Contains(got, "[ Unifi ]") {
+		t.Errorf("Unifi link should be hidden when backup is enabled: %q", got)
+	}
+	// When backup is disabled, the Unifi nav link is shown.
+	unifiBackupEnable.Store(false)
+	if got := getNavi(); !strings.Contains(got, "[ Unifi ]") {
+		t.Errorf("Unifi link should be visible when backup is disabled: %q", got)
+	}
+}
+
+func TestGetPKGSkipsShortSync(t *testing.T) {
+	saved := syncPKG
+	t.Cleanup(func() { syncPKG = saved })
+	syncPKG = "os"
+	if got := getPKG(); got != "" {
+		t.Errorf("expected empty for short syncPKG, got %q", got)
+	}
+}
+
+func TestGetHiveEmpty(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+	})
+	tg = nil
+	hive = nil
+	sleep = "60"
+	got := getHive()
+	if !strings.Contains(got, "BorgBACKUP") {
+		t.Errorf("missing BorgBACKUP header: %q", got)
+	}
+	if !strings.Contains(got, "60 seconds") {
+		t.Errorf("missing sleep interval: %q", got)
+	}
+	if !strings.Contains(got, _forceButton) {
+		t.Errorf("missing force button: %q", got)
+	}
+}
+
+func TestWriteGroupHeaderImgAndPlain(t *testing.T) {
+	var s strings.Builder
+	writeGroupHeader(&s, OPNGroup{Name: "Plain", Img: false})
+	if got := s.String(); !strings.Contains(got, "<b>Plain</b>") {
+		t.Errorf("plain header missing label: %q", got)
+	}
+	s.Reset()
+	writeGroupHeader(&s, OPNGroup{Name: "Img", Img: true, ImgURL: "https://img/x.png"})
+	got := s.String()
+	if !strings.Contains(got, "<img alt=\"Img\" src=\"https://img/x.png\">") {
+		t.Errorf("img header missing attrs: %q", got)
 	}
 }
