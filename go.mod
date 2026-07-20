@@ -10,7 +10,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/sirupsen/logrus v1.9.4
-	paepcke.de/npad v0.1.29
 	paepcke.de/uniex v0.1.31
 )
 

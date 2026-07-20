@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	"paepcke.de/npad/compress"
 )
 
 const (
@@ -51,7 +49,7 @@ func getIndexHandler() http.Handler {
 		r = headHTML(r)
 		switch q.Method {
 		case "GET":
-			compress.WriteTransportCompressedPage(getStartHTML(), r, q, true)
+			writeTransportCompressedPage(getStartHTML(), r, q, true)
 		default:
 			inf := "Error: Method Not Allowed (405) [" + q.Method + "]"
 			http.Error(r, inf, http.StatusMethodNotAllowed)
