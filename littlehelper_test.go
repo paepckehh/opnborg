@@ -691,3 +691,25 @@ func TestGetLogConfUsesConstants(t *testing.T) {
 		t.Errorf("fixed-value field mismatch")
 	}
 }
+
+// --- store.go: logBackupErr ----------------------------------------------
+
+func TestLogBackupErrSendsToDisplayChan(t *testing.T) {
+	// Replace displayChan with a buffered one we control so we can assert
+	// the exact payload without racing the package init reader.
+	saved := displayChan
+	t.Cleanup(func() { displayChan = saved })
+	ch := make(chan []byte, 1)
+	displayChan = ch
+
+	logBackupErr("FAIL:TEST", "ctx-123")
+	select {
+	case got := <-ch:
+		want := "[BACKUP][ERROR][FAIL:TEST] ctx-123"
+		if string(got) != want {
+			t.Errorf("got %q want %q", string(got), want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("displayChan did not receive the error message")
+	}
+}

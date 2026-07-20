@@ -19,12 +19,19 @@ const (
 	_hashFile = "sha256.db"
 )
 
+// logBackupErr reports a backup-store failure to the display engine. It
+// centralises the repeated `displayChan <- []byte("[BACKUP][ERROR]... ")`
+// pattern used across checkIntoStore and lastSum without altering the error
+// value each caller returns.
+func logBackupErr(msg, ctx string) {
+	displayChan <- []byte("[BACKUP][ERROR][" + msg + "] " + ctx)
+}
+
 // lastSum check last XML file sha256 checksum
 func lastSum(config *OPNCall, server string) [32]byte {
-	fileName := filepath.Join(config.Path, server, _current)
-	data, err := os.ReadFile(fileName)
+	data, err := os.ReadFile(filepath.Join(config.Path, server, _current))
 	if err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-READ-HASHSHUM-FILE] " + server)
+		logBackupErr("FAIL:UNABLE-TO-READ-HASHSHUM-FILE", server)
 	}
 	return sha256.Sum256(data)
 }
@@ -42,14 +49,14 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	store := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 	fullPath := filepath.Join(config.Path, server, store)
 	if err := os.MkdirAll(fullPath, 0770); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + fullPath)
+		logBackupErr("FAIL:UNABLE-TO-CREATE-FILE-STORAGE", fullPath)
 		return err
 	}
 
 	// change thread into store-root (needed for relative symlink creation)
 	dirStoreRoot := filepath.Join(config.Path, server)
 	if err := os.Chdir(dirStoreRoot); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CHANGE-INTO-STORAGE-DIR] " + dirStoreRoot)
+		logBackupErr("FAIL:UNABLE-TO-CHANGE-INTO-STORAGE-DIR", dirStoreRoot)
 		return err
 	}
 
@@ -57,7 +64,7 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	name := ts.UTC().Format("20060102T150405Z") + "-" + server + ext
 	archiveFile := filepath.Join(store, name)
 	if err := os.WriteFile(archiveFile, serverXML, 0660); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-ARCHIVE-FILE] " + server)
+		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-FILE", server)
 		return err
 	}
 
@@ -65,7 +72,7 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	file := "current" + ext
 	_ = os.Remove(file)
 	if err := os.WriteFile(file, serverXML, 0660); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-CURRENT-FILE] " + archiveFile)
+		logBackupErr("FAIL:UNABLE-TO-CREATE-CURRENT-FILE", archiveFile)
 		return err
 	}
 
@@ -73,15 +80,15 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	logEntry := name + _tab + base64.StdEncoding.EncodeToString(sum[:]) + _linefeed
 	hashFile, err := os.OpenFile(_hashFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-OPEN-OR-CREATE-HASHSHUM-FILE] " + server)
+		logBackupErr("FAIL:UNABLE-TO-OPEN-OR-CREATE-HASHSHUM-FILE", server)
 		return err
 	}
 	if _, err := hashFile.Write([]byte(logEntry)); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-WRITE-TO-HASHSHUM-FILE] " + server)
+		logBackupErr("FAIL:UNABLE-TO-WRITE-TO-HASHSHUM-FILE", server)
 		return err
 	}
 	if err := hashFile.Close(); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-SAVE-HASHSHUM-FILE] " + server)
+		logBackupErr("FAIL:UNABLE-TO-SAVE-HASHSHUM-FILE", server)
 		return err
 	}
 
@@ -93,7 +100,7 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 
 	// write current symlink pointer
 	if err = os.Symlink(archiveFile, _current); err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK] " + server)
+		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK", server)
 		return err
 	}
 	return nil
