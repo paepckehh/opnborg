@@ -66,7 +66,6 @@ func getStartHTML() string {
 	s.WriteString(_head)
 	s.WriteString(_bodyStart)
 	s.WriteString(_bodyHead)
-	s.WriteString(borg)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
 	s.WriteString(getPKG())
@@ -99,61 +98,52 @@ func getPKG() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<br><b>BorgSYNC</b><br><b> [ Module:Package-Sync:Active ] </b><br>\n")
+	s.WriteString("<div class=\"backup-section\"><b>BorgSYNC</b> [ Module:Package-Sync:Active ]<br>")
 	s.WriteString("<a href=\"")
 	s.WriteString(pkgmaster)
-	s.WriteString("\"><Button><b> [ Manage Package Plugins via Master: ")
+	s.WriteString("\"><button>[ Manage Package Plugins via Master: ")
 	s.WriteString(pkghost)
-	s.WriteString(" ] </b></Button></a><br><br>")
-	s.WriteString("<table><tr><td><small>")
+	s.WriteString(" ]</button></a><br><span class=\"member-meta\">")
 	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
-	s.WriteString("</small></td></tr></table>")
-	s.WriteString("<br>\n")
+	s.WriteString("</span></div>")
 	return s.String()
 }
 
 // getHive
 func getHive() string {
 	var s strings.Builder
-	s.WriteString("<br><br><br>")
 	hiveMutex.Lock() // snapshot (freeze) state
 	for _, grp := range tg {
+		s.WriteString("<div class=\"group\">")
 		writeGroupHeader(&s, grp)
-		s.WriteString(" <table>")
-		s.WriteString(_lf)
 		for _, srv := range grp.Member {
-			s.WriteString("  <tr><td>")
+			s.WriteString("<div class=\"member-row\">")
 			writeGroupMember(&s, grp, srv)
-			s.WriteString("  </td></tr>")
-			s.WriteString(_lf)
+			s.WriteString("</div>")
 		}
-		s.WriteString(" </table>")
-		s.WriteString(" <br>")
-		s.WriteString(_lf)
+		s.WriteString("</div>")
 	}
 	hiveMutex.Unlock()
-	s.WriteString(_lf)
-	s.WriteString("<b>BorgBACKUP</b><br><b>Module:Monitor:Backup:Active<br>[ Automatic check every ")
+	s.WriteString("<div class=\"backup-section\"><b>BorgBACKUP</b><br>Module:Monitor:Backup:Active<br>[ Automatic check every ")
 	s.WriteString(sleep)
-	s.WriteString(" seconds ]</b><br>" + _lf)
-	s.WriteString(_forceButton + "<br><br>" + _lf)
+	s.WriteString(" seconds ]</div>")
+	s.WriteString(_forceButton)
 	return s.String()
 }
 
-// writeGroupHeader renders the heading line for a target group, either as an
-// inline image (when an ImgURL is configured) or a plain bold label.
+// writeGroupHeader renders the heading line for a target group. When a text
+// description is configured via the OPN_TARGETS_DESC_<GROUP> env var it is
+// shown as a subheading beneath the group name; otherwise only the name is shown.
 func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
-	if grp.Img {
-		s.WriteString("<b><img alt=\"")
-		s.WriteString(grp.Name)
-		s.WriteString("\" src=\"")
-		s.WriteString(grp.ImgURL)
-		s.WriteString("\"></b><br>")
-		return
-	}
-	s.WriteString("<b>")
+	s.WriteString("<div class=\"group-header\"><b>")
 	s.WriteString(grp.Name)
-	s.WriteString("</b><br>")
+	s.WriteString("</b>")
+	if grp.Desc != "" {
+		s.WriteString("<span class=\"group-desc\">")
+		s.WriteString(grp.Desc)
+		s.WriteString("</span>")
+	}
+	s.WriteString("</div>")
 }
 
 // writeGroupMember renders a single hive member row, looking up the per-server
@@ -198,18 +188,20 @@ func getNavi() string {
 	links = append(links, naviLink{url: wazuhWebUI, suffix: "/", label: "[ Wazuh ]"})
 
 	var s strings.Builder
+	s.WriteString("<nav>")
 	for _, l := range links {
 		if l.url == nil {
 			continue
 		}
-		s.WriteString(" <a href=\"")
+		s.WriteString("<a href=\"")
 		s.WriteString(l.url.String())
 		s.WriteString(l.suffix)
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
-		s.WriteString("><button><b>")
+		s.WriteString("><button>")
 		s.WriteString(l.label)
-		s.WriteString("</b></button></a> ")
+		s.WriteString("</button></a>")
 	}
+	s.WriteString("</nav>")
 	return s.String()
 }

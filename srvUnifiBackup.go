@@ -79,6 +79,7 @@ func srvUnifiBackup(config *OPNCall) {
 			if res.StatusCode != 200 {
 				isReachable = false
 				body, _ := io.ReadAll(res.Body)
+				_ = res.Body.Close()
 				notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] "
 				displayChan <- []byte(notice)
 				displayChan <- body
@@ -100,6 +101,7 @@ func srvUnifiBackup(config *OPNCall) {
 						isReachable = false
 						notice = "[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL][BODY] "
 						body, _ := io.ReadAll(res.Body)
+						_ = res.Body.Close()
 						displayChan <- []byte(notice)
 						displayChan <- body
 

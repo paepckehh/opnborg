@@ -6,14 +6,14 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.88"
+const SemVer = "v0.1.89"
 
 // global var
 var (
 	tg                                                         []OPNGroup
 	unifiBackupEnable, unifiExportEnable                       atomic.Bool
 	unifiBackupNow, unifiExportNow                             atomic.Bool
-	sleep, borg, pkgmaster, pkghost                            string
+	sleep, pkgmaster, pkghost                                  string
 	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL
 	grafanaWebUI, grafanaFreeBSD, grafanaUnifi, grafanaHAProxy *url.URL
 )
@@ -23,8 +23,7 @@ type OPNGroup struct {
 	Name   string   // group name
 	OPN    bool     // is OPNsense Appliance
 	Unifi  bool     // is Unifi Controller
-	Img    bool     // group image available
-	ImgURL string   // group image url
+	Desc   string   // group description (text, from env)
 	Member []string // group member
 }
 

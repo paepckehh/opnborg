@@ -14,7 +14,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 ## IMPORTANT FOR EVERY SINGLE TASK: NEVER SKIP THIS ACTIONS
 
 - Test every change via build and unit tests
-- commit each task into git repo when done.
+- commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
   the **patch** segment, the last segemnt (e.g. `v0.0.22` → `v0.0.23` → `v0.0.24`). 
   The other two first segments (major, minor) stays at any cost at zero, `v0.0.xx`
@@ -105,7 +105,7 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 - **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`) as long as the value is non-empty. To disable, unset the var. The only exception is the empty string, which `isEnv` treats as false.
 - `OPN_NODAEMON` and `OPN_NOGIT` invert the default (both default to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`, `Git = !isEnv("OPN_NOGIT")`.
 - Either OPN backup (`OPN_APIKEY` + `OPN_APISECRET`) or Unifi backup (`OPN_UNIFI_BACKUP_USER` + `OPN_UNIFI_BACKUP_SECRET` + `OPN_UNIFI_VERSION`) must be configured or `Setup()` returns a fatal error.
-- `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_IMGURL_<GROUPNAME>` supplies the group's WebUI image.
+- `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description.
 - `OPN_TARGETS` / `OPN_MASTER` entries must include a port suffix if not `:443` (e.g. `192.168.0.1:8443`). Clear-text HTTP is unsupported.
 - `.env` is auto-loaded by `godotenv.Load()` if present at the working directory.
 - Example env templates live at the repo root: `example.sh`, `example-env-config-simple.sh`, `example-env-config-complex.sh`, `example-env-config-unifi.sh`, `example-env-config-dev.sh`.

@@ -242,15 +242,6 @@ func getTransport(tlsconf *tls.Config) *http.Transport {
 	}
 }
 
-// getClient setup hardened transport
-func getClient(transport *http.Transport) *http.Client {
-	return &http.Client{
-		CheckRedirect: nil,
-		Jar:           nil,
-		Transport:     transport,
-	}
-}
-
 // opnClient assembles a hardened HTTP client for OPNsense API calls: TLS 1.3
 // config (with optional keypin), compression disabled, and a caller-supplied
 // per-call timeout. It collapses the getTlsConf → getTransport → getClient →

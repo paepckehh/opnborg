@@ -66,7 +66,7 @@ func srv(config *OPNCall) error {
 	state = "[DISABLED]"
 	if config.Unifi.Backup.Enable {
 		state = "[ENABLED]"
-		unifiStatus = _na + " <b>Member: </b> " + config.Unifi.WebUI.String() + " <b>Version: </b>n/a <b>Last Seen: </b>n/a<br>"
+		unifiStatus = _na + "<span class=\"member-meta\">Member: " + config.Unifi.WebUI.String() + " Version: n/a Last Seen: n/a</span>"
 		go srvUnifiBackup(config)
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-BACKUP-AND-MONITORING]" + state)
@@ -90,16 +90,16 @@ func srv(config *OPNCall) error {
 			switch len(s) {
 			case 1:
 				if len(s[0]) > 0 {
-					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a"
+					status := _na + "<span class=\"member-meta\">Member: " + s[0] + " Version: n/a Last Seen: n/a</span>"
 					hive = append(hive, status)
 				}
 			case 2:
 				if len(s[0]) > 0 && len(s[1]) > 0 {
-					status := _na + " <b>Member: </b> " + s[0] + " <b>Version: </b>n/a <b>Last Seen: </b>n/a </td><td><b>Tag: </b>" + s[1]
+					status := _na + "<span class=\"member-meta\">Member: " + s[0] + " Version: n/a Last Seen: n/a Tag: " + s[1] + "</span>"
 					hive = append(hive, status)
 				}
 			default:
-				status := _na + " <b>configuration error, please fix configuration line for server: </b> " + server
+				status := _na + "<span class=\"member-meta\">configuration error, please fix configuration line for server: " + server + "</span>"
 				hive = append(hive, status)
 			}
 		}

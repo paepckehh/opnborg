@@ -366,8 +366,8 @@ func TestGetNaviEmpty(t *testing.T) {
 			saved.prom, saved.grafana, saved.fbsd, saved.haproxy, saved.unifiG, saved.wazuh
 	})
 	prometheusWebUI, grafanaWebUI, grafanaFreeBSD, grafanaHAProxy, grafanaUnifi, wazuhWebUI = nil, nil, nil, nil, nil, nil
-	if got := getNavi(); got != "" {
-		t.Errorf("getNavi() with no WebUIs = %q, want empty", got)
+	if got := getNavi(); got != "<nav></nav>" {
+		t.Errorf("getNavi() with no WebUIs = %q, want %q", got, "<nav></nav>")
 	}
 }
 
@@ -753,7 +753,7 @@ func TestCheckSetRequiredOPNFlatTargets(t *testing.T) {
 	if len(tg) != 1 {
 		t.Fatalf("expected 1 group, got %d", len(tg))
 	}
-	if tg[0].Name != "" || !tg[0].OPN || tg[0].Img {
+	if tg[0].Name != "" || !tg[0].OPN || tg[0].Desc != "" {
 		t.Errorf("unexpected flat group: %+v", tg[0])
 	}
 	if len(tg[0].Member) != 2 || tg[0].Member[0] != "fw01" || tg[0].Member[1] != "fw02" {
@@ -761,14 +761,14 @@ func TestCheckSetRequiredOPNFlatTargets(t *testing.T) {
 	}
 }
 
-func TestCheckSetRequiredOPNGroupsAndImg(t *testing.T) {
+func TestCheckSetRequiredOPNGroupsAndDesc(t *testing.T) {
 	resetTargetsGlobals(t)
 	withEnv(t, "OPN_APIKEY", "key", true)
 	withEnv(t, "OPN_APISECRET", "secret", true)
 	withEnv(t, "OPN_TARGETS", "", false)
 	withEnv(t, "OPN_TARGETS_EDGE", "edge01,edge02", true)
 	withEnv(t, "OPN_TARGETS_CORE", "core01", true)
-	withEnv(t, "OPN_TARGETS_IMGURL_EDGE", "https://img/edge.png", true)
+	withEnv(t, "OPN_TARGETS_DESC_EDGE", "Edge firewalls", true)
 
 	if !checkSetRequiredOPN() {
 		t.Fatalf("expected true for group targets")
@@ -788,24 +788,24 @@ func TestCheckSetRequiredOPNGroupsAndImg(t *testing.T) {
 	if edge == nil {
 		t.Fatalf("EDGE group not registered: %+v", tg)
 	}
-	if !edge.Img || edge.ImgURL != "https://img/edge.png" {
-		t.Errorf("EDGE group image not wired: %+v", edge)
+	if edge.Desc != "Edge firewalls" {
+		t.Errorf("EDGE group desc not wired: %+v", edge)
 	}
 }
 
-func TestCheckSetRequiredOPNIgnoresImgUrlEntries(t *testing.T) {
+func TestCheckSetRequiredOPNIgnoresDescEntries(t *testing.T) {
 	resetTargetsGlobals(t)
 	withEnv(t, "OPN_APIKEY", "key", true)
 	withEnv(t, "OPN_APISECRET", "secret", true)
 	withEnv(t, "OPN_TARGETS", "", false)
 	withEnv(t, "OPN_TARGETS_EDGE", "edge01", true)
-	withEnv(t, "OPN_TARGETS_IMGURL_EDGE", "https://img/edge.png", true)
+	withEnv(t, "OPN_TARGETS_DESC_EDGE", "Edge firewalls", true)
 	if !checkSetRequiredOPN() {
 		t.Fatalf("expected true")
 	}
 	for _, g := range tg {
-		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "IMGURL") {
-			t.Errorf("IMGURL entry should not be a group: %+v", g)
+		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "DESC") {
+			t.Errorf("DESC entry should not be a group: %+v", g)
 		}
 	}
 }
@@ -916,17 +916,20 @@ func TestGetHiveEmpty(t *testing.T) {
 	}
 }
 
-func TestWriteGroupHeaderImgAndPlain(t *testing.T) {
+func TestWriteGroupHeaderDescAndPlain(t *testing.T) {
 	var s strings.Builder
-	writeGroupHeader(&s, OPNGroup{Name: "Plain", Img: false})
+	writeGroupHeader(&s, OPNGroup{Name: "Plain"})
 	if got := s.String(); !strings.Contains(got, "<b>Plain</b>") {
 		t.Errorf("plain header missing label: %q", got)
 	}
 	s.Reset()
-	writeGroupHeader(&s, OPNGroup{Name: "Img", Img: true, ImgURL: "https://img/x.png"})
+	writeGroupHeader(&s, OPNGroup{Name: "Desc", Desc: "Edge firewalls"})
 	got := s.String()
-	if !strings.Contains(got, "<img alt=\"Img\" src=\"https://img/x.png\">") {
-		t.Errorf("img header missing attrs: %q", got)
+	if !strings.Contains(got, "<b>Desc</b>") {
+		t.Errorf("desc header missing label: %q", got)
+	}
+	if !strings.Contains(got, "Edge firewalls") {
+		t.Errorf("desc header missing description text: %q", got)
 	}
 }
 
@@ -953,5 +956,220 @@ func TestOpnClientUsesKeyPinWhenConfigured(t *testing.T) {
 	with := opnClient(&OPNCall{TLSKeyPin: "FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M="}, 5).Transport.(*http.Transport).TLSClientConfig
 	if with.VerifyConnection == nil {
 		t.Error("VerifyConnection should be set when keypin configured")
+	}
+}
+
+// --- httpd-handler.go: getStartHTML + modern WebUI -----------------------
+
+func TestGetStartHTMLStructure(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+	})
+	tg = []OPNGroup{{Name: "TEST", OPN: true, Member: []string{"fw01"}}}
+	hive = []string{_na + "<span class=\"member-meta\">fw01</span>"}
+	sleep = "60"
+	got := getStartHTML()
+	for _, want := range []string{
+		"<!doctype html>",
+		"<html>",
+		"<body>",
+		"</body>",
+		"</html>",
+		"<header",
+		"<footer",
+		"<nav>",
+		"</nav>",
+		"<div class=\"group\">",
+		"member-row",
+		"backup-section",
+		"BorgBACKUP",
+		"60 seconds",
+		"Backup NOW",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getStartHTML missing %q", want)
+		}
+	}
+	for _, bad := range []string{"<table", "<td>", "<tr>", "<center>"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("getStartHTML should not contain legacy %q", bad)
+		}
+	}
+}
+
+func TestGetStartHTMLNoLegacyTags(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+	})
+	tg = nil
+	hive = nil
+	sleep = "60"
+	got := getStartHTML()
+	for _, bad := range []string{"<table", "<td>", "<tr>", "<center>", "</td>", "</tr>"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("getStartHTML should not contain %q", bad)
+		}
+	}
+}
+
+// --- setOPNStatus: no legacy <td> tags in rendered status ----------------
+
+func TestSetOPNStatusNoLegacyTags(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	t.Cleanup(func() { hive = savedHive })
+	hive = make([]string, 1)
+	config := &OPNCall{Key: "k", Secret: "s"}
+	ts := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	// ok=false on an empty slot produces just the _fail SVG.
+	setOPNStatus(config, "fw01.lan", "edge-1", "", 0, ts, false, false)
+	status := hive[0]
+	if strings.Contains(status, "<td>") || strings.Contains(status, "</td>") {
+		t.Errorf("status should not contain <td> tags: %q", status)
+	}
+	if !strings.Contains(status, "failed") {
+		t.Errorf("fail status should contain fail indicator: %q", status)
+	}
+}
+
+// --- getHive: modern HTML structure --------------------------------------
+
+func TestGetHiveModernHTML(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+	})
+	tg = []OPNGroup{
+		{Name: "EDGE", Desc: "Edge firewalls", OPN: true, Member: []string{"fw01#edge-1"}},
+		{Name: "CORE", OPN: true, Member: []string{"fw02"}},
+	}
+	hive = []string{
+		_na + "<span class=\"member-meta\">fw01</span>",
+		_na + "<span class=\"member-meta\">fw02</span>",
+	}
+	sleep = "30"
+	got := getHive()
+	for _, want := range []string{
+		"<div class=\"group\">",
+		"<div class=\"member-row\">",
+		"group-header",
+		"group-desc",
+		"Edge firewalls",
+		"CORE",
+		"backup-section",
+		"30 seconds",
+		"Backup NOW",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getHive missing %q", want)
+		}
+	}
+	for _, bad := range []string{"<table", "<td", "<tr", "<center"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("getHive should not contain %q", bad)
+		}
+	}
+}
+
+// --- writeGroupMember: lookup behavior ------------------------------------
+
+func TestWriteGroupMemberOPNMatch(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	t.Cleanup(func() { hive = savedHive })
+	hive = []string{
+		_ok + "<span>fw01.lan</span>",
+		_ok + "<span>fw02.lan</span>",
+	}
+	var s strings.Builder
+	writeGroupMember(&s, OPNGroup{OPN: true}, "fw01.lan")
+	if !strings.Contains(s.String(), "fw01.lan") {
+		t.Errorf("should have matched fw01.lan: %q", s.String())
+	}
+	if strings.Contains(s.String(), "fw02.lan") {
+		t.Errorf("should not contain fw02.lan: %q", s.String())
+	}
+}
+
+func TestWriteGroupMemberUnifi(t *testing.T) {
+	savedStatus := unifiStatus
+	t.Cleanup(func() { unifiStatus = savedStatus })
+	unifiStatus = _unifi + "<span>controller</span>"
+	var s strings.Builder
+	writeGroupMember(&s, OPNGroup{Unifi: true}, "unifi-host")
+	if !strings.Contains(s.String(), "controller") {
+		t.Errorf("unifi member should render unifiStatus: %q", s.String())
+	}
+}
+
+func TestWriteGroupMemberOPNNoMatch(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	t.Cleanup(func() { hive = savedHive })
+	hive = []string{_ok + "<span>fw99.lan</span>"}
+	var s strings.Builder
+	writeGroupMember(&s, OPNGroup{OPN: true}, "fw01.lan")
+	if s.String() != "" {
+		t.Errorf("no match should produce empty output: %q", s.String())
+	}
+}
+
+// --- checkSetRequiredUnifi: Desc field -----------------------------------
+
+func TestCheckSetRequiredUnifiWithDesc(t *testing.T) {
+	savedTg := tg
+	t.Cleanup(func() { tg = savedTg })
+	tg = nil
+	withEnv(t, "OPN_UNIFI_WEBUI", "https://unifi.example.com", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_USER", "user", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_SECRET", "secret", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_DESC", "Network controller", true)
+	if !checkSetRequiredUnifi() {
+		t.Fatalf("expected true for unifi with desc")
+	}
+	if len(tg) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(tg))
+	}
+	if tg[0].Desc != "Network controller" {
+		t.Errorf("desc = %q, want %q", tg[0].Desc, "Network controller")
+	}
+	if !tg[0].Unifi || tg[0].OPN {
+		t.Errorf("group flags wrong: OPN=%v Unifi=%v", tg[0].OPN, tg[0].Unifi)
+	}
+}
+
+// --- getPKG: modern HTML structure ---------------------------------------
+
+func TestGetPKGModernHTML(t *testing.T) {
+	saved := syncPKG
+	t.Cleanup(func() { syncPKG = saved })
+	syncPKG = "os-foo,os-bar"
+	got := getPKG()
+	for _, want := range []string{"backup-section", "BorgSYNC", "foo", "bar"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getPKG missing %q: %q", want, got)
+		}
+	}
+	for _, bad := range []string{"<table", "<td", "<tr"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("getPKG should not contain %q: %q", bad, got)
+		}
 	}
 }

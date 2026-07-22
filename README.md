@@ -108,7 +108,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_APISECRET        - OPNsense Backup User APISECRET [string, base64 encoded]
 - OPN_TARGETS          - list of OPNSense Target Server to Backup [string, hostnames, comma separated] [optional: add asset-tag, via # as seprator for each host]
 - OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."], add a '#' after hostname for asset tags
-- OPN_TARGETS_IMGURL_* - alternative: custom image url for customs groups within WebUI [example: OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"]
+- OPN_TARGETS_DESC_*  - custom text description for custom groups within WebUI [example: OPN_TARGETS_DESC_INTRANET="Intranet firewalls"]
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
@@ -145,7 +145,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444], use '#' to add asset tag
 - OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
 - OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
-- OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
+- OPN_UNIFI_BACKUP_DESC - Unifi Backup Group text description [example: export OPN_UNIFI_BACKUP_DESC="Network controller"]
 
 # Unifi Inventory Export, details see: [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex)
 - OPN_UNIFI_EXPORT        - Unifi Inventory Nightly Exports, check into git repo  [example: export OPN_UNIFI_EXPORT='1']

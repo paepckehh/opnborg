@@ -26,8 +26,8 @@
             "OPN_MASTER" = "opn00.lan:8443";
             "OPN_TARGETS_HOTSTANDBY" = "opn00.lan:8443";
             "OPN_TARGETS_PRODUCTION" = "opn01.lan:8443,opn02.lan:8443";
-            "OPN_TARGETS_IMGURL_HOTSTANDBY" = "https://icon-library.com/images/freebsd-icon/freebsd-icon-16.jpg";
-            "OPN_TARGETS_IMGURL_PRODUCTION" = "https://icon-library.com/images/freebsd-icon/freebsd-icon-16.jpg";
+            "OPN_TARGETS_DESC_HOTSTANDBY" = "Hot standby firewalls";
+            "OPN_TARGETS_DESC_PRODUCTION" = "Production firewalls";
             "OPN_SLEEP" = "60";
             "OPN_DEBUG" = "true";
             "OPN_SYNC_PKG" = "true";

@@ -17,8 +17,8 @@ import (
 // env var prefix constants used by checkSetRequiredOPN to walk OPN_TARGETS_*
 // group definitions out of the process environment.
 const (
-	_opnTargetsPrefix    = "OPN_TARGETS_"
-	_opnTargetsImgPrefix = "OPN_TARGETS_IMGURL_"
+	_opnTargetsPrefix     = "OPN_TARGETS_"
+	_opnTargetsDescPrefix = "OPN_TARGETS_DESC_"
 )
 
 // global
@@ -102,8 +102,8 @@ func Setup() (*OPNCall, error) {
 			config.Httpd.Server = "127.0.0.1:6464"
 			if isEnv("OPN_HTTPD_SERVER") {
 				config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
-				if len(strings.Split(config.Httpd.Server, ":")) < 1 {
-					return nil, fmt.Errorf("env variable 'OPN_HTTPD_SRV' format error, example \"127.0.0.1:6464\"")
+				if len(strings.Split(config.Httpd.Server, ":")) < 2 {
+					return nil, fmt.Errorf("env variable 'OPN_HTTPD_SERVER' format error, example \"127.0.0.1:6464\"")
 				}
 			}
 			config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
@@ -123,11 +123,9 @@ func Setup() (*OPNCall, error) {
 			s.WriteString("<meta charset=\"UTF-8\">" + _lf)
 			s.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" + _lf)
 			s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
-			s.WriteString(" <style>" + _lf)
-			s.WriteString("  table,th,td{border: 1px solid " + config.Httpd.Color.FG + "; border-collapse: collapse; padding: 8px;}" + _lf)
-			s.WriteString("  body{font-family:sans-serif;color: " + config.Httpd.Color.FG + ";background-color: " + config.Httpd.Color.BG + ";}" + _lf)
-			s.WriteString(" </style>" + _lf)
-			_head = s.String() + "<meta http-equiv=\"refresh\" contenti=\"15\">" + _lf + "</head>" + _lf
+			css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
+			s.WriteString(css)
+			_head = s.String() + "<meta http-equiv=\"refresh\" content=\"15\">" + _lf + "</head>" + _lf
 			_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
 			_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceInfo + _bodyEnd + _htmlEnd
 
@@ -260,7 +258,7 @@ func checkSetRequiredOPN() bool {
 	}
 
 	if isEnv("OPN_TARGETS") {
-		tg = append(tg, OPNGroup{Name: "", Img: false, OPN: true, Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
+		tg = append(tg, OPNGroup{Name: "", OPN: true, Member: strings.Split(os.Getenv("OPN_TARGETS"), ",")})
 		return true
 	}
 
@@ -275,18 +273,17 @@ func checkSetRequiredOPN() bool {
 		if !found {
 			continue
 		}
-		if !strings.HasPrefix(name, _opnTargetsPrefix) || strings.HasPrefix(name, _opnTargetsImgPrefix) {
+		if !strings.HasPrefix(name, _opnTargetsPrefix) || strings.HasPrefix(name, _opnTargetsDescPrefix) {
 			continue
 		}
 		group := strings.TrimPrefix(name, _opnTargetsPrefix)
 		members = append(members, val)
-		imgURL := os.Getenv(_opnTargetsImgPrefix + group)
+		desc := os.Getenv(_opnTargetsDescPrefix + group)
 		tg = append(tg, OPNGroup{
 			Name:   group,
-			Img:    imgURL != "",
 			OPN:    true,
 			Unifi:  false,
-			ImgURL: imgURL,
+			Desc:   desc,
 			Member: strings.Split(val, ","),
 		})
 	}
@@ -310,23 +307,12 @@ func checkSetRequiredUnifi() bool {
 	}
 
 	// add unifi group
-	if isEnv("OPN_UNIFI_BACKUP_IMGURL") {
-		tg = append(tg, OPNGroup{
-			Name:   "UNIFI CONTROLLER",
-			Img:    true,
-			OPN:    false,
-			Unifi:  true,
-			ImgURL: os.Getenv("OPN_UNIFI_BACKUP_IMGURL"),
-			Member: strings.Split(unifiURL.Hostname(), ","),
-		})
-	} else {
-		tg = append(tg, OPNGroup{
-			Name:   "UNIFI CONTROLLER",
-			Img:    false,
-			OPN:    false,
-			Unifi:  true,
-			Member: strings.Split(unifiURL.Hostname(), ","),
-		})
-	}
+	tg = append(tg, OPNGroup{
+		Name:   "UNIFI CONTROLLER",
+		OPN:    false,
+		Unifi:  true,
+		Desc:   os.Getenv("OPN_UNIFI_BACKUP_DESC"),
+		Member: strings.Split(unifiURL.Hostname(), ","),
+	})
 	return true
 }
