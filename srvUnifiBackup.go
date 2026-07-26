@@ -83,6 +83,10 @@ func srvUnifiBackup(config *OPNCall) {
 				notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE][BODY] "
 				displayChan <- []byte(notice)
 				displayChan <- body
+			} else {
+				// success: drain and close the login response before reusing res
+				_, _ = io.Copy(io.Discard, res.Body)
+				_ = res.Body.Close()
 			}
 
 			// was authentication and status code ok?
@@ -105,6 +109,10 @@ func srvUnifiBackup(config *OPNCall) {
 						displayChan <- []byte(notice)
 						displayChan <- body
 
+					} else {
+						// success: drain and close the system response before the download GET reuses res
+						_, _ = io.Copy(io.Discard, res.Body)
+						_ = res.Body.Close()
 					}
 				}
 			}
@@ -114,7 +122,7 @@ func srvUnifiBackup(config *OPNCall) {
 		if isReachable {
 
 			// if last backup > 6 hours
-			if time.Since(ts) < time.Duration(6*time.Hour) {
+			if time.Since(ts) > 6*time.Hour {
 				unifiBackupNow.Store(true)
 			}
 

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -36,9 +35,9 @@ func writeTransportCompressedPage(page string, r http.ResponseWriter, q *http.Re
 			r.Header().Set("Content-Encoding", "deflate")
 			p = compressLevel(p, zlib.NewWriterLevel)
 		}
-		_, err = fmt.Fprint(r, string(p))
+		_, err = r.Write(p)
 	} else {
-		_, err = fmt.Fprint(r, page)
+		_, err = r.Write(p)
 	}
 	if err != nil {
 		displayChan <- []byte("[HTTPD][COMPRESS][FAIL] " + err.Error())

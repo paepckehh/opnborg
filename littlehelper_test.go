@@ -319,6 +319,33 @@ func TestCompareLogConf(t *testing.T) {
 	if err := compareLogConf(server, srv, badRfc); err == nil {
 		t.Error("expected error for Rfc5424 mismatch")
 	}
+
+	// Each field mismatch must carry the correct diagnostic label so operators
+	// can identify which value drifted. Previously Transport and Rfc5424 were
+	// mislabelled as HOSTNAME/PORT respectively.
+	cases := []struct {
+		name  string
+		mut   func(d *SyslogDestination)
+		label string
+	}{
+		{"Enabled", func(d *SyslogDestination) { d.Enabled = "0" }, "[TARGET-REMOTE-SYSLOG-SERVER-ENABLED]"},
+		{"Transport", func(d *SyslogDestination) { d.Transport = "tcp" }, "[TARGET-REMOTE-SYSLOG-TRANSPORT]"},
+		{"Hostname", func(d *SyslogDestination) { d.Hostname = "10.0.0.1" }, "[TARGET-REMOTE-SYSLOG-HOSTNAME]"},
+		{"Port", func(d *SyslogDestination) { d.Port = "9999" }, "[TARGET-REMOTE-SYSLOG-PORT]"},
+		{"Rfc5424", func(d *SyslogDestination) { d.Rfc5424 = "0" }, "[TARGET-REMOTE-SYSLOG-RFC5424]"},
+	}
+	for _, c := range cases {
+		opn := getLogConf(srv)
+		c.mut(&opn.OPNsense.Syslog.Destinations.Destination)
+		err := compareLogConf(server, srv, opn)
+		if err == nil {
+			t.Errorf("%s: expected labelled error, got nil", c.name)
+			continue
+		}
+		if !strings.HasPrefix(err.Error(), c.label+" ") {
+			t.Errorf("%s: error %q does not start with expected label %q", c.name, err.Error(), c.label)
+		}
+	}
 }
 
 // --- httpd-handler.go: getPKG / getNavi ---------------------------------

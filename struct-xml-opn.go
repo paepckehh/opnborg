@@ -2,6 +2,25 @@ package opnborg
 
 import "encoding/xml"
 
+// SyslogDestination is a single remote-syslog destination entry as stored in
+// the OPNsense <Syslog><destinations><destination> XML node. It is lifted into
+// a named type so the rsyslog client-config logic and its tests can refer to
+// the destination fields without redeclaring the anonymous struct.
+type SyslogDestination struct {
+	Text        string `xml:",chardata"`
+	Uuid        string `xml:"uuid,attr"`
+	Enabled     string `xml:"enabled"`
+	Transport   string `xml:"transport"`
+	Program     string `xml:"program"`
+	Level       string `xml:"level"`
+	Facility    string `xml:"facility"`
+	Hostname    string `xml:"hostname"`
+	Certificate string `xml:"certificate"`
+	Port        string `xml:"port"`
+	Rfc5424     string `xml:"rfc5424"`
+	Description string `xml:"description"`
+}
+
 // Opnsense xml schema
 type Opnsense struct {
 	XMLName xml.Name `xml:"opnsense"`
@@ -575,21 +594,8 @@ type Opnsense struct {
 				Maxfilesize string `xml:"maxfilesize"`
 			} `xml:"general"`
 			Destinations struct {
-				Text        string `xml:",chardata"`
-				Destination struct {
-					Text        string `xml:",chardata"`
-					Uuid        string `xml:"uuid,attr"`
-					Enabled     string `xml:"enabled"`
-					Transport   string `xml:"transport"`
-					Program     string `xml:"program"`
-					Level       string `xml:"level"`
-					Facility    string `xml:"facility"`
-					Hostname    string `xml:"hostname"`
-					Certificate string `xml:"certificate"`
-					Port        string `xml:"port"`
-					Rfc5424     string `xml:"rfc5424"`
-					Description string `xml:"description"`
-				} `xml:"destination"`
+				Text        string            `xml:",chardata"`
+				Destination SyslogDestination `xml:"destination"`
 			} `xml:"destinations"`
 		} `xml:"Syslog"`
 		OpenVPN struct {

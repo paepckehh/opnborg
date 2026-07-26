@@ -181,7 +181,12 @@ func writeGroupMember(s *strings.Builder, grp OPNGroup, srv string) {
 		}
 	}
 	if grp.Unifi {
-		s.WriteString(unifiStatus)
+		// unifiStatus is mutated by setUnifiStatus under unifiMutex; snapshot
+		// it under the same lock to avoid racing the writer goroutine.
+		unifiMutex.Lock()
+		status := unifiStatus
+		unifiMutex.Unlock()
+		s.WriteString(status)
 	}
 }
 

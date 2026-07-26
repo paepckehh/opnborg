@@ -45,7 +45,7 @@ func compareLogConf(server string, srv []string, opn *Opnsense) error {
 		return mismatchErr("[TARGET-REMOTE-SYSLOG-SERVER-ENABLED]", server, d.Enabled, _syslogEnabled)
 	}
 	if d.Transport != _syslogTransport {
-		return mismatchErr("[TARGET-REMOTE-SYSLOG-HOSTNAME]", server, d.Transport, _syslogTransport)
+		return mismatchErr("[TARGET-REMOTE-SYSLOG-TRANSPORT]", server, d.Transport, _syslogTransport)
 	}
 	if d.Hostname != srv[0] {
 		return mismatchErr("[TARGET-REMOTE-SYSLOG-HOSTNAME]", server, d.Hostname, srv[0])
@@ -54,7 +54,7 @@ func compareLogConf(server string, srv []string, opn *Opnsense) error {
 		return mismatchErr("[TARGET-REMOTE-SYSLOG-PORT]", server, d.Port, srv[1])
 	}
 	if d.Rfc5424 != _syslogRfc5424 {
-		return mismatchErr("[TARGET-REMOTE-SYSLOG-PORT]", server, d.Rfc5424, _syslogRfc5424)
+		return mismatchErr("[TARGET-REMOTE-SYSLOG-RFC5424]", server, d.Rfc5424, _syslogRfc5424)
 	}
 	return nil
 }

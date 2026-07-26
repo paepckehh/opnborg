@@ -88,8 +88,8 @@ func Setup() (*OPNCall, error) {
 			if isEnv("OPN_RSYSLOG_SERVER") {
 				config.RSysLog.Enable = true
 				config.RSysLog.Server = os.Getenv("OPN_RSYSLOG_SERVER")
-				if len(strings.Split(config.RSysLog.Server, ":")) < 1 {
-					return nil, fmt.Errorf("env variable 'OPN_RSYSLOG_SRV' format error, example \"192.168.0.100:5140\"")
+				if len(strings.Split(config.RSysLog.Server, ":")) < 2 {
+					return nil, fmt.Errorf("env variable 'OPN_RSYSLOG_SERVER' format error, example \"192.168.0.100:5140\"")
 				}
 			}
 		}
