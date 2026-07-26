@@ -18,9 +18,9 @@ update:
 
 deploy-test-nix: update build 
 	sudo -v
-	sudo systemctl stop $(PROJECT).service
+	sudo systemctl stop $(PROJECT)2.service
 	sudo mv -f ./$(PROJECT) /nix/persist/root/bin 
-	sudo systemctl start $(PROJECT).service
+	sudo systemctl start $(PROJECT)2.service
 
 run: update build 
 	OPN_TARGETS="testopn" \
