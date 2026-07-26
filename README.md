@@ -117,7 +117,7 @@ see opnborg-prometheus-grafana.nix
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
 - OPN_TLSKEYPIN   - OPNsense TLS MitM proof Certificate Keypin [string]
-- OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 5 seconds]
+- OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 10 seconds]
 - OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
 - OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
 - OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']

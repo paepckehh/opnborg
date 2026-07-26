@@ -12,7 +12,10 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 2. **Build** — `go build -o opnborg ./cmd/opnborg` must succeed.
 > 3. **Test** — `go test -count=1 ./...` must be ok
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
-> 5. **Tag** — bump the patch segment only: the result is `v0.0.<N+1>` Never move, delete, or reuse an existing tag.
+> 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
+>    (the current release series; the latest tag is `v0.1.92`). Never move,
+>    delete, or reuse an existing tag. Also bump the `SemVer` constant in
+>    `api.go` to match the new tag.
 >
 > These steps are non-negotiable for every single task regardless of size.
 
@@ -31,8 +34,8 @@ Reference guide for AI agents working in the `opnborg` repository.
 - Test every change via build and unit tests
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
-  the **patch** segment, the last segemnt (e.g. `v0.0.22` → `v0.0.23` → `v0.0.24`). 
-  The other two first segments (major, minor) stays at any cost unmodified,
+  the **patch** segment, the last segment (e.g. `v0.1.92` → `v0.1.93` → `v0.1.94`).
+  The other two first segments (major, minor) stay unmodified,
   increment only the last part by +1. Never move, delete, or rewrite an existing tag.
 
 ## Build, Run, Check
@@ -50,8 +53,11 @@ go run cmd/opnborg/main.go
 # Run via remote module
 go run paepcke.de/opnborg/cmd/opnborg@main
 
-# Lint / format (top-level Makefile target)
-make check        # runs gofmt -w -s, go vet, go fix (root + cmd/opnborg)
+# Format / lint / vet (top-level Makefile target)
+make check        # runs gofmt -l ., go vet ./..., go mod tidy -diff
+
+# Run the test suite (race detector enabled)
+make test         # runs go test -race -count=1 ./...
 
 # Dependency refresh (DESTRUCTIVE - rewrites go.mod/go.sum)
 make deps
@@ -60,13 +66,13 @@ make deps
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-`make check` is the canonical pre-PR gate. `staticcheck` is intentionally commented out in both Makefiles; do not re-enable it without checking the existing code baseline (the project currently emits `writestring` and `unusedparams` diagnostics by design).
+`make check` is the canonical pre-PR gate; it runs `gofmt -l .`, `go vet ./...`, and `go mod tidy -diff`. There is no `staticcheck` wiring in the Makefile or CI; gopls `unusedparams` diagnostics (e.g. the `notice` parameter on `setUnifiStatus`) are known and intentional — do not "fix" them without checking call sites.
 
 ### Releasing
 
 - Releases are tag-driven (`v*`). Pushing a `v*` tag triggers both `.github/workflows/release.yml` (goreleaser cross-compile via `.goreleaser.yml`) and `.github/workflows/ghcr.yml` (build/push `ghcr.io/paepckehh/opnborg:latest`).
 - goreleaser builds target linux/freebsd/darwin/netbsd/openbsd/windows on amd64 + arm64, `CGO_ENABLED=0`.
-- **Before tagging a release**, bump the `SemVer` constant in `api.go` AND the hardcoded API version reminder in the top-level `Makefile` (`make deps` prints a reminder to do this). `SemVer` is consumed both by the CLI startup banner and the WebUI footer.
+- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.92` → `v0.1.93`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
 
 ## Architecture & Control Flow
 
@@ -113,7 +119,7 @@ Hardcoded under the `_api*` consts:
 - `/api/core/firmware/status/` - firmware version JSON (`struct-json-firmwareStatus.go`)
 - `/api/core/firmware/install/<pkg>` - plugin install (POST)
 
-HTTPS is mandatory; the client intentionally skips OS trust store verification and relies on `OPN_TLSKEYPIN` (SHA-256 base64 of the SPKI) for MitM-proofing. See `getTlsConf` / `getTransport` in `httpd-transport.go`.
+HTTPS is mandatory; the client intentionally skips OS trust store verification and relies on `OPN_TLSKEYPIN` (SHA-256 base64 of the SPKI) for MitM-proofing. See `getTlsConf` / `getTransport` / `opnClient` in `transport.go` (not `httpd-transport.go`, which only holds the WebUI listener `getHTTPTLS`).
 
 ## Configuration Conventions (ENV)
 
@@ -135,19 +141,19 @@ For a configured `OPN_PATH` (default `.`):
 <OPN_PATH>/
   .gitignore                         # auto-created: ignores ".archive", "CONFIG*", "Logs"
   <server>/
-    current.xml                      # symlink to the latest archive file
-    CONFIG-LAST                      # previous checksum source
-    CONFIG-CURRENT                   # current checksum source (read by lastSum)
-    .archive/<YYYY>/<MM>/<RFC3339TS>-<server>.xml
-    sha256.db
+    current.xml                      # regular file holding the latest backup XML (served by the WebUI)
+    CONFIG-CURRENT                   # symlink to the latest .archive entry (read by lastSum for SHA-256 compare)
+    CONFIG-LAST                      # previous CONFIG-CURRENT symlink (renamed on each rotation)
+    .archive/<YYYY>/<MM>/<YYYYMMDDTHHMMSSZ>-<server>.xml
+    sha256.db                        # append-only log: <archive-name>\t<base64-sha256>
   Logs/current.log                   # rotated by lumberjack (256MB, 256 backups, 180d, gzipped)
 ```
 
-`gitCheckIn` does `os.Chdir(config.Path)` then `git.PlainOpen`/`git.PlainInit` (SHA256 object format on new repos), `wtree.Add(".")`, and commits as `OPNBORG-AUTO-COMMIT <git@opnborg>`. `OPN_GITPUSH` enables pushing to a configured upstream. Multiple call sites `os.Chdir` into subdirectories -- be careful when adding new code that assumes a stable CWD; restore or re-`Chdir` as needed.
+`gitCheckIn` does `os.Chdir(config.Path)` then `git.PlainOpen`/`git.PlainInit` (SHA256 object format on new repos), `wtree.Add(".")`, and commits with message `"opnborg auto update"` authored as `OPNBORG-AUTO-COMMIT <config.Email>` (default `git@opnborg`). It also runs `repo.RepackObjects` and, when `OPN_GITPUSH` is set, pushes to the configured upstream. Multiple call sites `os.Chdir` into subdirectories — be careful when adding new code that assumes a stable CWD; restore or re-`Chdir` as needed.
 
 ## Testing
 
-There is currently **no test suite** in the repository (no `*_test.go` files). CI runs only `go build ./...` and `go vet ./...` (see `.github/workflows/golang.yml`). When adding code, prefer keeping the `make check` gate green over introducing a new test framework unless asked.
+The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing (`isEnv`, `Setup`), URL helpers, the OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, and the syslog config comparison. Run it via `make test` (`go test -race -count=1 ./...`). CI (`.github/workflows/golang.yml`) still runs only `go build ./...` and `go vet ./...` on go 1.23 across ubuntu/macos/windows; tests are not yet wired into CI. When adding code, prefer extending the existing table-driven tests and keeping the `make check` gate green.
 
 ## Coding Conventions
 
@@ -167,7 +173,7 @@ There is currently **no test suite** in the repository (no `*_test.go` files). C
 - **`os.Chdir` is called from multiple goroutines** (`gitCheckIn`, `checkIntoStore`, `startWeb`, `startRSysLog`). The process-wide working directory is a shared resource. Workers run concurrently per server; rely on `config.Path` for absolute pathing and minimize `Chdir`.
 - **`make deps` deletes `go.mod` and `go.sum` and re-runs `go mod init`** -- only run it when you intend to fully refresh the module graph.
 - **`status.go::setUnifiStatus` has an unused `notice` parameter** (gopls `unusedparams` diagnostic). This is known and currently intentional; do not "fix" it without checking call sites.
-- **`SemVer` in `api.go` is the single source of truth** for the version string (CLI banner + WebUI footer + goreleaser consumes git tags, not this constant). Bump it in lockstep with the release tag.
+- **`SemVer` in `api.go` is the single source of truth** for the version string (CLI banner via `cmd/opnborg/main.go` + WebUI footer). goreleaser consumes git tags, not this constant. Bump it in lockstep with each release tag (see *Releasing* above).
 - **Dockerfile Go version (`1.24`) and CI Go version (`1.23`) lag behind `go.mod` (`1.26.4`)**. If you adopt newer language features, verify the Docker/CI builds still pass or bump these in the same change.
 - **OPNsense API does not support legacy backup endpoints** -- only `/api/core/backup/download/this` is wired in (`_apiBackupXML`). Don't fall back to alternatives without explicit requirement.
 - **HTTPS chain verification via the OS trust store is disabled by default**; security relies on `OPN_TLSKEYPIN`. Documenting "just use system CAs" would be wrong.
