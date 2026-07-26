@@ -28,18 +28,19 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 				state = strings.ReplaceAll(state, "DEGRADED", html.EscapeString(notice))
 			}
 		}
-		seen := "<span class=\"member-meta\">Last Seen: " + ts.Format(time.RFC3339) + "</span>"
+		seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Seen</span><span class=\"meta-value\">" + ts.Format(time.RFC3339) + "</span></div>"
 		ver := getFirmwareVersion(config, server)
 		borgSC := "<a href=\"https://" + server + _srvc + "\" " + _nwin + "><button><img src=\"favicon.ico\" width=\"12\" height=\"12\"></button></a>"
 		linkUI := "<a href=\"https://" + server + _dash + "\" " + _nwin + "><button>[" + server + "]</button></a>" + borgSC
 		linkVS := "<a href=\"https://" + server + _fwup + "\" " + _nwin + "><button>[" + ver + "]</button></a>"
 		linkCurrent := "<a href=\"./files/" + server + "/current.xml\"" + _nwin + "><button>[current.xml]</button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
-		links := "<span class=\"member-links\">" + linkCurrent + linkArchive + "</span>"
+		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
+		tagBox := ""
 		if tag != "" {
-			tag = "<span class=\"member-meta\">Tag: " + tag + "</span>"
+			tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(tag) + "</span></div>"
 		}
-		status := state + "<span class=\"member-links\">" + linkUI + linkVS + "</span>" + links + seen + tag
+		status := "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + linkVS + "</span>" + links + "</div>" + seen + tagBox
 		hiveMutex.Lock()
 		hive[id] = status
 		hiveMutex.Unlock()
@@ -49,7 +50,8 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 	defer hiveMutex.Unlock()
 	status := hive[id]
 	status = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(status, _ok, ""), _na, ""), _fail, ""), _degraded, "")
-	status = _fail + status
+	status = strings.Replace(status, "<div class=\"member-status\"></div>", "", 1)
+	status = "<div class=\"member-status\">" + _fail + "</div>" + status
 	hive[id] = status
 }
 
@@ -59,20 +61,17 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 	unifiMutex.Lock()
 	defer unifiMutex.Unlock()
 
-	// clean status
-	unifiStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiStatus, _unifi, ""), _na, ""), _fail, ""), _degraded, "")
-
 	// setup
 	year, month, _ := ts.Date()
 	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
 
 	if responsive {
 		state := _unifi
-		seen := "<span class=\"member-meta\">Last Seen: " + ts.Format(time.RFC3339) + "</span>"
+		seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Seen</span><span class=\"meta-value\">" + ts.Format(time.RFC3339) + "</span></div>"
 		linkUI := "<a href=\"" + config.Unifi.WebUI.String() + "\" " + _nwin + "><button>[" + server + "]</button></a>"
 		linkCurrent := "<a href=\"./files/" + server + "/current.unf\"" + _nwin + "><button>[current.unf]</button></a>"
 		linkArchive := "<a href=\"./files/" + server + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
-		links := "<span class=\"member-links\">" + linkCurrent + linkArchive + "</span>"
+		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		if !backup {
 			state = _degraded
 		}
@@ -81,13 +80,18 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 			ext := config.Unifi.Export.Format
 			exportCurrent := "<a href=\"./files/" + _uniEx + "/current." + ext + "\"" + _nwin + "><button>[current." + ext + "]</button></a>"
 			exportArchive := "<a href=\"./files/" + _uniEx + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
-			export = "<span class=\"member-meta\">Export:</span><span class=\"member-links\">" + exportCurrent + exportArchive + "</span>"
+			export = "<span class=\"member-links member-links-export\">" + exportCurrent + exportArchive + "</span>"
 		}
+		tagBox := ""
 		if tag != "" {
-			tag = "<span class=\"member-meta\">Tag: " + tag + "</span>"
+			tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(tag) + "</span></div>"
 		}
-		unifiStatus = state + "<span class=\"member-links\">" + linkUI + "</span>" + links + export + seen + tag
+		unifiStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + export + "</div>" + seen + tagBox
 		return
 	}
-	unifiStatus = _fail + unifiStatus
+	// clean status: strip any state svg, drop the now-empty status wrapper, and
+	// re-render with the failure indicator while preserving the meta boxes.
+	unifiStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiStatus, _unifi, ""), _na, ""), _fail, ""), _degraded, "")
+	unifiStatus = strings.Replace(unifiStatus, "<div class=\"member-status\"></div>", "", 1)
+	unifiStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiStatus
 }
