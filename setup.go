@@ -56,7 +56,7 @@ func Setup() (*OPNCall, error) {
 	// check if we meet basic requirements
 	config.Unifi.Backup.Enable = checkSetRequiredUnifi()
 	if !config.Enable && !config.Unifi.Backup.Enable {
-		return nil, errors.New("please enable either OPN or Unifi backup. Please set OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_BACKUP_USER & SECRET")
+		return nil, errors.New("please enable either OPN or Unifi backup, Please set OPN_TARGETS and OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_WEBUI and OPN_UNIFI_BACKUP_USER & SECRET")
 	}
 
 	// setup app name
