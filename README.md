@@ -251,4 +251,5 @@ Yes, Please! PRs Welcome!
 # SPONSORS & SPECIAL THANKS
 
 - [pvz.digital](https://pvz.digital)
+- [debitor.de](https://debitor.de)
 - UX Borg Design & Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)

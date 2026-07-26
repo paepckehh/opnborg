@@ -19,7 +19,7 @@ const (
 
 	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1></header>" + _lf
 	_bodySemVer = "<div class=\"semver\">[ " + SemVer + " ]</div>" + _lf
-	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
+	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
 	_forceInfo   = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
 	_forceButton = "<a href=\"./force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
