@@ -47,6 +47,35 @@ please see:
 - example-env-config-unifi.sh
 ```
 
+## Custom groups with WebUI text description (`OPN_TARGETS_DESC_*`) and image (`OPN_TARGETS_IMGURL_*`)
+
+Instead of a single `OPN_TARGETS` list, split the hive into named groups via
+`OPN_TARGETS_<GROUP>`. Each group can carry an optional WebUI text description
+(`OPN_TARGETS_DESC_<GROUP>`) and an optional image URL
+(`OPN_TARGETS_IMGURL_<GROUP>`) that replaces the text headline; when an image is
+set, the description becomes the image's tooltip.
+
+```
+export OPN_TARGETS_STANDBY='opn00.lan:8443#RACK-LAB-2ND-FLOOR'
+export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
+export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01-VODAFONE,opn04.lan:8443#RACK-DMZ02-TELEKOM'
+
+export OPN_TARGETS_DESC_STANDBY='Hot standby firewalls'
+export OPN_TARGETS_DESC_INTRANET='Intranet firewalls'
+export OPN_TARGETS_DESC_EXTERNAL='External firewalls'
+
+export OPN_TARGETS_IMGURL_STANDBY='https://paepcke.de/res/hot.png'
+export OPN_TARGETS_IMGURL_INTRANET='https://paepcke.de/res/int.png'
+export OPN_TARGETS_IMGURL_EXTERNAL='https://paepcke.de/res/ext.png'
+```
+
+The Unifi backup group accepts the same pair of options:
+
+```
+export OPN_UNIFI_BACKUP_DESC='Network controller'
+export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/uni.png'
+```
+
 # ⚡️DOCKER
 ```
 docker pull ghcr.io/paepckehh/opnborg:latest
