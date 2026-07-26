@@ -1,61 +1,118 @@
+<div align="center">
 
----
+# ⚙️ OPNBORG
 
-### *** OPNBORG - RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED. ***
+### Resistance is futile. Your OPNsense will be assimilated.
 
----
+A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes configuration** across a fleet of [OPNsense](https://opnsense.org/) firewalls and (optionally) [Unifi](https://ui.com) controllers — with an embedded WebUI, central syslog collector, and a consolidated git-tracked archive for rapid restore.
 
-# OVERVIEW 
-[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg) 
-[![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg) 
+[![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
+[![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
 [![Go Build](https://github.com/paepckehh/opnborg/actions/workflows/golang.yml/badge.svg)](https://github.com/paepckehh/opnborg/actions/workflows/golang.yml)
 [![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
 [![SemVer](https://img.shields.io/github/v/release/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/releases/latest)
-<br>[![built with nix](https://builtwithnix.org/badge.svg)](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg)
+[![built with nix](https://builtwithnix.org/badge.svg)](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg)
 
-[paepcke.de/opnborg](https://paepcke.de/opnborg/)
+[paepcke.de/opnborg](https://paepcke.de/opnborg/) · [Releases](https://github.com/paepckehh/opnborg/releases) · [Docs](https://pkg.go.dev/paepcke.de/opnborg) · [Issues](https://github.com/paepckehh/opnborg/issues)
 
-# OPNBORG 
+</div>
 
-- Selfhosted OPNSense and Unifi WebGUI portal to configure, monitor and backup [opnsense.org](https://opnsense.org/) and [ui.com](https://ui.com) appliance(s)
- 
-# SCREENSHOT WEBUI
+---
 
-![OPNBORG SAMPLE SCREENSHOT](https://github.com/paepckehh/opnborg/blob/main/resources/screenshot02.png "SCREEN")
+## 📸 WebUI
 
-# ⚡️QUICK START
+![OPNBORG Sample Screenshot](resources/screenshot02.png)
+
+---
+
+## ✨ Features
+
+- **Central Monitoring** — version, status, online/offline, last seen, configuration compliance across the whole hive.
+- **Central Package Management** — replicate installed OPNsense plugins from one master host to every target.
+- **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive for auditable change-log trails and rapid restore.
+- **Central Log Consolidation** — built-in RFC5424 syslog collector with rotation and archiving.
+- **Single Static Binary** — no runtime dependencies; cross OS & hardware via Go (Linux, FreeBSD, OpenBSD, NetBSD, Windows; amd64, arm64, armv7).
+- **NixOS Integration** — ready-made modules for Prometheus + Grafana (WIP: Wazuh, Influx, Graylog).
+- **Complementary Sidekick** — designed as a small companion to [OPNCentral](https://opnsense.org/), not a replacement.
+- **Free & Open Source** — BSD 3-Clause. Contributions and forks welcome.
+
+---
+
+## 🚀 Quick Start
+
+Run the latest tagged release directly from source — no build step required:
+
+```sh
+OPN_TARGETS="opn01.lan,opn02.lan" \
+OPN_APIKEY="..." \
+OPN_APISECRET="..." \
+go run paepcke.de/opnborg/cmd/opnborg@main
 ```
-OPN_TARGETS="opn01.lan,opn02.lan" OPN_APIKEY="..." OPN_APISECRET="..." go run paepcke.de/opnborg/cmd/opnborg@main
-```
 
-# ⚡️HOW TO INSTALL
+Then open the WebUI at <http://localhost:6464>.
 
-```
+---
+
+## 📦 Installation
+
+### Pre-built binaries
+
+Download the latest release for your platform from the
+[Releases page](https://github.com/paepckehh/opnborg/releases).
+
+### From source
+
+```sh
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-# ⚡️PRE-BUILD BINARIES (DOWNLOAD)
-[https://github.com/paepckehh/opnborg/releases](https://github.com/paepckehh/opnborg/releases)
+### Docker
 
-# ⚡️EXAMPLE CONFIGURATION VIA ENV 
-```
-please see:
-- example.sh 
-- example-env-config-simple.sh
-- example-env-config-complex.sh
-- example-env-config-dev.sh
-- example-env-config-unifi.sh
+```sh
+docker pull ghcr.io/paepckehh/opnborg:latest
 ```
 
-## Custom groups with WebUI text description (`OPN_TARGETS_DESC_*`) and image (`OPN_TARGETS_IMGURL_*`)
+### NixOS / Nix
 
-Instead of a single `OPN_TARGETS` list, split the hive into named groups via
-`OPN_TARGETS_<GROUP>`. Each group can carry an optional WebUI text description
-(`OPN_TARGETS_DESC_<GROUP>`) and an optional image URL
-(`OPN_TARGETS_IMGURL_<GROUP>`) that replaces the text headline; when an image is
-set, the description becomes the image's tooltip.
+Available as a Nix package — see [search.nixos.org](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg).
+Ready-made service modules live in this repo:
 
+- `opnborg-docker.nix`
+- `opnborg-docker-complex.nix`
+- `opnborg-prometheus-grafana.nix`
+
+---
+
+## 🔧 Configuration
+
+OPNBORG is configured entirely through **environment variables** — the binary itself accepts only `-v` / `-h`. A local `.env` file in the working directory is auto-loaded via `godotenv` if present.
+
+> ⚠️ **Booleans are presence-based.** Setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to **true**. To disable a flag, **unset** the variable. The only exception is the empty string, which is treated as false. `OPN_NODAEMON` and `OPN_NOGIT` invert this default (they default to `true` when unset).
+
+Example configurations are provided in the repo root:
+
+| File | Use case |
+| --- | --- |
+| `example.sh` | Minimal baseline |
+| `example-env-config-simple.sh` | Small OPNsense fleet |
+| `example-env-config-complex.sh` | Multi-group hive |
+| `example-env-config-dev.sh` | Development / debug |
+| `example-env-config-unifi.sh` | Unifi controller |
+
+### Minimal example
+
+```sh
+export OPN_PATH='/tmp/opn'
+export OPN_TARGETS='opn01.lan:8443,opn02.lan:8443,opn03.lan:8443'
+export OPN_APIKEY='+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD'
+export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p'
 ```
+
+### Custom groups with descriptions & images
+
+Split the hive into named groups via `OPN_TARGETS_<GROUP>`. Each group may carry an optional WebUI text description (`OPN_TARGETS_DESC_<GROUP>`) and an optional image URL (`OPN_TARGETS_IMGURL_<GROUP>`) that replaces the text headline — when an image is set, the description becomes the image's tooltip.
+
+```sh
 export OPN_TARGETS_STANDBY='opn00.lan:8443#RACK-LAB-2ND-FLOOR'
 export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
 export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01-VODAFONE,opn04.lan:8443#RACK-DMZ02-TELEKOM'
@@ -71,22 +128,16 @@ export OPN_TARGETS_IMGURL_EXTERNAL='https://paepcke.de/res/ext.png'
 
 The Unifi backup group accepts the same pair of options:
 
-```
+```sh
 export OPN_UNIFI_BACKUP_DESC='Network controller'
-export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/uni.png'
+export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/unifi.png'
 ```
 
-# ⚡️DOCKER
-```
-docker pull ghcr.io/paepckehh/opnborg:latest
-```
+---
 
-# ⚡️NIXOS SYSTEM SERVICE VIA DOCKER
-see opnborg-docker.nix
-see opnborg-docker-complex.nix
-see opnborg-prometheus-grafana.nix
+## 🧰 Docker Compose / NixOS example
 
-```
+```nix
 {config, ...}: {
   ####################
   #-=# NETWORKING #=-#
@@ -120,152 +171,190 @@ see opnborg-prometheus-grafana.nix
 }
 ```
 
-# FEATURES
+---
 
-- Central Monitoring (version, status, online, offline, last seen, configuration compliance)
-- Central Package Management (Install Packages across all OPNSenses, follow one master configuration)
-- Central Configuration Audit / Change Log Trail / Backup (consolidated git repo, filesystem archive for archive & easy rapid restore)
-- Central Logs Consolidation (provides internal RFC5424 syslog collector, rotate, archive, ...)
-- One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
-- Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
-- Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
-- Free, Open Source, BSD License, feel free to contribute or fork
+## 📖 Supported Options
 
+### Required
 
-# SUPPORTED OPTIONS 
+| Variable | Description |
+| --- | --- |
+| `OPN_APIKEY` | OPNsense backup user API key (base64-encoded string) |
+| `OPN_APISECRET` | OPNsense backup user API secret (base64-encoded string) |
+| `OPN_TARGETS` | Comma-separated list of OPNsense targets. Append `#<asset-tag>` per host (e.g. `opn01.lan:8443#RACK-PROD01`) |
+| `OPN_TARGETS_*` | Alternative: custom named groups (e.g. `OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."`) |
+| `OPN_TARGETS_DESC_*` | Custom WebUI text description for a group (e.g. `OPN_TARGETS_DESC_INTRANET="Intranet firewalls"`) |
+| `OPN_TARGETS_IMGURL_*` | Custom image URL for a group (e.g. `OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"`) |
 
-```
-# Required
-- OPN_APIKEY           - OPNsense Backup User APIKEY [string, base64 encoded]
-- OPN_APISECRET        - OPNsense Backup User APISECRET [string, base64 encoded]
-- OPN_TARGETS          - list of OPNSense Target Server to Backup [string, hostnames, comma separated] [optional: add asset-tag, via # as seprator for each host]
-- OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."], add a '#' after hostname for asset tags
-- OPN_TARGETS_DESC_*  - custom text description for custom groups within WebUI [example: OPN_TARGETS_DESC_INTRANET="Intranet firewalls"]
-- OPN_TARGETS_IMGURL_* - custom image url for customs groups within WebUI [example: OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"]
+### Optional / General
 
-# Optional
-- OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
-- OPN_TLSKEYPIN   - OPNsense TLS MitM proof Certificate Keypin [string]
-- OPN_SLEEP       - daemon mode poll interval [string, defaults to 3600 seconds, minimum 10 seconds]
-- OPN_EMAIL       - specify email address contact for local git commits [string: defaults to git@opnborg]
-- OPN_NODAEMON    - do not run app in daemon mode, quit after one loop [bool: defaults to 'false']
-- OPN_NOGIT       - do not create & update local git version repo [bool: defaults to 'false']
-- OPN_GITPUSH     - push all changes to upstream git repo (needs upstream setting via .git/config)
-- OPN_DEBUG       - verbose debug log mode [bool: defaults to 'false']
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPN_PATH` | `.` | Absolute or relative path to store backups |
+| `OPN_TLSKEYPIN` | _empty_ | OPNsense TLS MitM-proof certificate keypin (base64 SPKI SHA-256) |
+| `OPN_SLEEP` | `3600` | Daemon poll interval in seconds (minimum `10`) |
+| `OPN_EMAIL` | `git@opnborg` | Email address used for local git commits |
+| `OPN_NODAEMON` | unset (= daemon on) | Quit after one loop instead of running as a daemon |
+| `OPN_NOGIT` | unset (= git on) | Do not create/update a local git repo |
+| `OPN_GITPUSH` | unset | Push all changes to the upstream git repo (requires `.git/config` upstream) |
+| `OPN_DEBUG` | unset | Verbose debug log mode |
 
-# PKG Installation Sync
-- OPN_MASTER      - define a master server, opnborg will replicate all config changes on the master to all the hive [string, hostname]
-- OPN_SYNC_PKG    - enable to unlock opnsense hive package (system/plugin) syncronisation across all targets [bool, defaults to false]
+### Package Installation Sync
 
-# Internal Remote Syslog Collector
-- OPN_RSYSLOG_ENABLE - spin up internal RFC5424 rsyslog server, monitor all hive members log config (bool, default: false)
-- OPN_RSYSLOG_SERVER - [required] define syslog srv listen ip & port [example: 192.168.0.1:5140] (Do not use 0.0.0.0, its srv & target ip conf!)
+| Variable | Description |
+| --- | --- |
+| `OPN_MASTER` | Define a master server; opnborg replicates its config to all hive members |
+| `OPN_SYNC_PKG` | Enable OPNsense plugin/system package synchronization across all targets |
 
-# WebConsole 
-- OPN_HTTPD_DISABLE     - disable the internal httpd server (bool, default: false => not set)
-- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:6464]
-- Optional 
-  - OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
-  - OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
-  - OPN_HTTPD_CACLIENT    - HTTPD Server CA ClientCA Certificate (string: <clientCA.pem>), defaults to <empty>, if set, enforces mTLS)
-  - OPN_HTTPD_COLOR_FG    - WebUI Foreground (html) color code (example: "black" or "#000000", ) 
-  - OPN_HTTPD_COLOR_BG    - WebUI Background (html) color code (example: "orange" or "#ffa500")
+### Internal Remote Syslog Collector
 
-# Prometheus 
-- OPN_PROMETHEUS_WEBUI - Promometheus Web Console target & port [example: http://localhost:8443]
+| Variable | Description |
+| --- | --- |
+| `OPN_RSYSLOG_ENABLE` | Spin up internal RFC5424 rsyslog server; monitor hive log config |
+| `OPN_RSYSLOG_SERVER` | Listen address & port (e.g. `192.168.0.1:5140`). Do not use `0.0.0.0` |
 
-# Unifi 
-- OPN_UNIFI_WEBUI         - Unifi Web Console target & port [example: http://localhost:8444], use '#' to add asset tag
-- OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
-- OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
-- OPN_UNIFI_BACKUP_DESC - Unifi Backup Group text description [example: export OPN_UNIFI_BACKUP_DESC="Network controller"]
-- OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
+### WebConsole
 
-# Unifi Inventory Export, details see: [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex)
-- OPN_UNIFI_EXPORT        - Unifi Inventory Nightly Exports, check into git repo  [example: export OPN_UNIFI_EXPORT='1']
-- OPN_UNIFI_FORMAT        - Unifi Inventory Export formart, defaults to 'csv', optional 'json'
-- OPN_UNIFI_MONGODB_URI   - Unifi Inventory Mongodb Database uri, defaults to 'mongodb://localhost:27117'
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPN_HTTPD_DISABLE` | `false` | Disable the internal HTTPD server |
+| `OPN_HTTPD_SERVER` | `127.0.0.1:6464` | HTTPD listen address |
+| `OPN_HTTPD_CACERT` | _empty_ | Server CA X.509 certificate; empty disables HTTPS |
+| `OPN_HTTPD_CAKEY` | _empty_ | Server CA key; empty disables HTTPS |
+| `OPN_HTTPD_CACLIENT` | _empty_ | Client CA certificate; if set, enforces mTLS |
+| `OPN_HTTPD_COLOR_FG` | — | WebUI foreground color (e.g. `black` or `#000000`) |
+| `OPN_HTTPD_COLOR_BG` | — | WebUI background color (e.g. `orange` or `#ffa500`) |
 
-# Wazuh 
-- OPN_WAZUH_WEBUI - Wazuh Web Console target & port [example: http://localhost:8446]
+### Prometheus
 
-# Grafana
-- OPN_GRAFANA_WEBUI             - grafana web console target & port [example: http://localhost:8446]
-- OPN_GRAFANA_DASHBOARD_FREEBSD - grafana freebsd node dashboard id / dashboard name (example: Kczn-jPZz/node-exporter-freebsd)
-- OPN_GRAFANA_DASHBOARD_HAPROXY - grafana haproxy node dashboard id / dashboard name (example: P4zs3-ces/haproxy-2-full)
-- OPN_GRAFANA_DASHBOARD_UNIFI   - grafana unpoller dashboard id / dashboard name (example: g3kd0-3ds/unpoller)
+| Variable | Description |
+| --- | --- |
+| `OPN_PROMETHEUS_WEBUI` | Prometheus web console target & port (e.g. `http://localhost:8443`) |
 
-```
+### Unifi
 
-# OPTIONS FAQ
+| Variable | Description |
+| --- | --- |
+| `OPN_UNIFI_WEBUI` | Unifi web console target & port (e.g. `http://localhost:8444`); `#` adds an asset tag |
+| `OPN_UNIFI_BACKUP_USER` | Unifi backup user account |
+| `OPN_UNIFI_BACKUP_SECRET` | Unifi backup user account password |
+| `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
+| `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
 
-```
-- How to create a secure OPENSense Backup API Key? (OPN_APIKEY & OPN_APISECRET)
-    
-    - Create a User 'backup' 
-        - OPNSense WebUI -> System -> Access -> User -> Add 
-        - Skip passwords, tick scrambled random password & tick 'Save and go back' 
-    
-    - Go back to user 'backup' via -> Edit (new option sections magically appear)
-        - Effective Privileges -> Edit 
-            - Diagnostics: Configuration History -> tick allowed box [for system backups]
-            - System: Firmware -> tick allowed box [only needed for automatic plugin/pkg management]
-            - click 'Save' button to activate
-        - API Keys -> Add (Create API Key): The API Key & Secret will download to your browser download folder as file
+### Unifi Inventory Export
 
-- How to lock down the TLS Session MitM proof via 'OPN_TLSKEYPIN'? 
-    
-    - enable https for your OPNSense Admin interface (even simple self-signed certificates will do the trick)
-    
-    - go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
-        - Pick First Line (copy only the base64 encoded string, without brackets): 
-            Example:    X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
-                        OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
+See [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex) for details.
 
-- The internal webserver is listening to on [any] interface port 6464 -> 0.0.0.0:6464 (http://localhost:6464) (daemon mode only) 
-- Enviroment Variables bools will always be true if defined (the value you set is not relevant)
-- OPN_TARGETS & OPN_MASTER must hold the (reachable) WebUI Interface(s) [example: 192.168.0.1] including the port, if not 443 (example: 192.168.0.1:8443)
-- Clear text HTTP protocol is not supported, switch on HTTPS for your admin interface (self-signed certificates will do)
-- ATT: HTTPS chain verification via system os trust store(s) is disabled by default: use OPN_TLSKEYPIN (!!!)
-```
-# NIXOS: PROMETHEUS AND GRAFANA INTEGRATION
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPN_UNIFI_EXPORT` | unset | Enable nightly Unifi inventory export into the git repo (e.g. `1`) |
+| `OPN_UNIFI_FORMAT` | `csv` | Export format; optional `json` |
+| `OPN_UNIFI_MONGODB_URI` | `mongodb://localhost:27117` | Unifi MongoDB database URI |
 
-```
-If you run OPNBORG on NixOS
-- adapt target IPs and import opnborg-prometheus-grafana.nix via
+### Wazuh
 
-  imports = [
-    ./opnborg-prometheus-grafana-wazuh.nix
-  ];
+| Variable | Description |
+| --- | --- |
+| `OPN_WAZUH_WEBUI` | Wazuh web console target & port (e.g. `http://localhost:8446`) |
 
-- import into your grafana instance this dashboards 
-- set OPN_GRAFANA_DASHBOARD_*='id/names' after import
-    - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
-    - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
-    - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
+### Grafana
 
-todo:
-- add wazuh
-- add pre-configured optimised opnsense dashboards
-- opnborg nixpkg and declarative systemd service ( services.opnborg = { enable = true; } ... )
-```
+| Variable | Description |
+| --- | --- |
+| `OPN_GRAFANA_WEBUI` | Grafana web console target & port (e.g. `http://localhost:8446`) |
+| `OPN_GRAFANA_DASHBOARD_FREEBSD` | FreeBSD node dashboard id / name (e.g. `Kczn-jPZz/node-exporter-freebsd`) |
+| `OPN_GRAFANA_DASHBOARD_HAPROXY` | HAProxy node dashboard id / name (e.g. `P4zs3-ces/haproxy-2-full`) |
+| `OPN_GRAFANA_DASHBOARD_UNIFI` | Unpoller dashboard id / name (e.g. `g3kd0-3ds/unpoller`) |
 
-# DOCS
+---
 
-[pkg.go.dev/paepcke.de/opnborg](https://pkg.go.dev/paepcke.de/opnborg)
+## ❓ FAQ
 
-# 🛡 License
+### How do I create a secure OPNsense Backup API Key (`OPN_APIKEY` & `OPN_APISECRET`)?
+
+1. Create a `backup` user:
+   - OPNsense WebUI → **System → Access → Users → Add**
+   - Skip the password, tick **scrambled random password**, then **Save and go back**.
+2. Re-open the `backup` user via **Edit** (new option sections will appear).
+3. Under **Effective Privileges → Edit**, tick:
+   - **Diagnostics: Configuration History** (required for system backups)
+   - **System: Firmware** (only needed for automatic plugin/package management)
+   - Click **Save**.
+4. Under **API Keys → Add**, create an API key. The key & secret will download to your browser's download folder.
+
+### How do I lock down the TLS session against MitM via `OPN_TLSKEYPIN`?
+
+1. Enable HTTPS for your OPNsense admin interface (self-signed certificates are fine).
+2. Run:
+
+   ```sh
+   go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
+   ```
+
+3. Pick the first line — copy only the base64 string (without brackets):
+
+   ```sh
+   # Example:
+   # X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
+   export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
+   ```
+
+### Operational notes
+
+- The internal web server listens on `0.0.0.0:6464` (daemon mode only) → <http://localhost:6464>.
+- Boolean env vars are always `true` when defined — the assigned value is irrelevant.
+- `OPN_TARGETS` & `OPN_MASTER` must hold reachable WebUI interfaces (e.g. `192.168.0.1`) including a port if not `:443` (e.g. `192.168.0.1:8443`).
+- Clear-text HTTP is unsupported — enable HTTPS for your admin interface (self-signed certificates are fine).
+- ⚠️ HTTPS chain verification via the OS trust store is **disabled by default** — use `OPN_TLSKEYPIN`.
+
+---
+
+## 📈 NixOS: Prometheus & Grafana Integration
+
+If you run OPNBORG on NixOS:
+
+1. Adapt target IPs and import the module:
+
+   ```nix
+   imports = [
+     ./opnborg-prometheus-grafana-wazuh.nix
+   ];
+   ```
+
+2. Import these Grafana dashboards, then set `OPN_GRAFANA_DASHBOARD_*` accordingly:
+   - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
+   - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
+   - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
+
+### TODO
+
+- Add Wazuh integration
+- Add pre-configured, optimized OPNsense dashboards
+- Provide an `opnborg` Nixpkg and a declarative systemd service (`services.opnborg = { enable = true; }`)
+
+---
+
+## 📚 Documentation
+
+- Package reference: [pkg.go.dev/paepcke.de/opnborg](https://pkg.go.dev/paepcke.de/opnborg)
+- Internal architecture: see [`AGENTS.md`](AGENTS.md)
+
+---
+
+## 🛡 License
 
 [![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
 
-This project is licensed under the terms of the `BSD 3-Clause License` license. See [LICENSE](https://github.com/paepckehh/opnborg/blob/master/LICENSE) for more details.
+This project is licensed under the terms of the **BSD 3-Clause License**. See [LICENSE](LICENSE) for details.
 
-# 📃 Citation
+---
+
+## 📃 Citation
 
 ```bibtex
 @misc{opnborg,
   author = {Michael Paepcke},
-  title = {Selfhost-able OPNSense Appliance Configuration Managenment & Backup Portal},
+  title = {Selfhost-able OPNSense Appliance Configuration Management & Backup Portal},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
@@ -273,12 +362,16 @@ This project is licensed under the terms of the `BSD 3-Clause License` license. 
 }
 ```
 
-# CONTRIBUTION
+---
 
-Yes, Please! PRs Welcome! 
+## 🤝 Contributing
 
-# SPONSORS & SPECIAL THANKS
+Yes, please! Pull requests are welcome. Please read [`AGENTS.md`](AGENTS.md) for the build / test / commit / tag workflow before opening a PR.
+
+---
+
+## 💖 Sponsors & Special Thanks
 
 - [pvz.digital](https://pvz.digital)
 - [debitor.de](https://debitor.de)
-- UX Borg Design & Contrib: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)
+- UX Borg design & contributions: [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)
