@@ -4,10 +4,39 @@ import (
 	"encoding/xml"
 	"errors"
 	"strings"
+	"sync"
 )
 
 // global
-var syncPKG string
+var (
+	syncPKG      string
+	syncPKGMutex sync.RWMutex
+)
+
+// setSyncPKG stores the master plugin list under syncPKGMutex so the
+// HTTP handler reading it (getPKG) never races with the daemon writer.
+func setSyncPKG(plugins string) {
+	syncPKGMutex.Lock()
+	syncPKG = plugins
+	syncPKGMutex.Unlock()
+}
+
+// getSyncPKG returns a snapshot of the master plugin list.
+func getSyncPKG() string {
+	syncPKGMutex.RLock()
+	defer syncPKGMutex.RUnlock()
+	return syncPKG
+}
+
+// splitPlugins splits a comma-separated plugin list while avoiding the
+// strings.Split("", ",") == [""] gotcha: an empty input yields no entries.
+func splitPlugins(plugins string) []string {
+	plugins = strings.TrimSpace(plugins)
+	if plugins == "" {
+		return nil
+	}
+	return strings.Split(plugins, ",")
+}
 
 // readMasterConf
 func readMasterConf(config *OPNCall) (*OPNCall, error) {
@@ -40,8 +69,8 @@ func readMasterConf(config *OPNCall) (*OPNCall, error) {
 	if config.Debug {
 		displayChan <- []byte("[MASTER][PLUGINS]" + opn.System.Firmware.Plugins)
 	}
-	syncPKG = opn.System.Firmware.Plugins // global
-	config.Sync.PKG.Packages = strings.Split(opn.System.Firmware.Plugins, ",")
+	setSyncPKG(opn.System.Firmware.Plugins) // global, guarded
+	config.Sync.PKG.Packages = splitPlugins(opn.System.Firmware.Plugins)
 
 	// fin
 	if config.Debug {

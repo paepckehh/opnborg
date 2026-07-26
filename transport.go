@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -72,19 +73,19 @@ func getFirmwareVersion(config *OPNCall, server string) string {
 // installPKG
 func installPKG(config *OPNCall, server, pkg string) error {
 
+	// guard against empty package names (e.g. from malformed plugin lists)
+	if pkg == "" {
+		return errors.New("[INSTALL-PKG][EMPTY-PACKAGE-NAME]")
+	}
+
 	// parse & assemble target url
 	targetURL := "https://" + server + _apiInstallPKG + pkg
 	if _, err := url.Parse(targetURL); err != nil {
 		return errors.New("[INSTALL-PKG][UNABLE-TO-PARSE-TARGET-URL]" + targetURL + " " + err.Error())
 	}
 
-	// build payload
-	params := url.Values{}
-	params.Add("", ``)
-	post := strings.NewReader(params.Encode())
-
-	// setup request
-	req, err := http.NewRequest("POST", targetURL, post)
+	// setup request: empty JSON body, the package is encoded in the URL path
+	req, err := http.NewRequest("POST", targetURL, strings.NewReader("{}"))
 	if err != nil {
 		return errors.New("[INSTALL-PKG][UNABLE-TO-CREATE-HTTP-REQUEST]" + targetURL + " " + err.Error())
 	}
@@ -105,11 +106,11 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	msg, err := io.ReadAll(body.Body)
 	if err != nil {
 		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL + " " + err.Error())
-		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]" + string(msg))
+		return errors.New("[ERROR-WHILE-READ-ANSWER-BODY] " + string(msg))
 	}
-	if body.StatusCode > 299 {
-		displayChan <- []byte("[INSTALL-PKG][FAIL:READ-BODY] " + targetURL + " " + string(msg))
-		return errors.New("ERROR-WHILE-READ-ANSWER-BODY]")
+	if body.StatusCode < 200 || body.StatusCode > 299 {
+		displayChan <- []byte("[INSTALL-PKG][FAIL:HTTP-STATUS] " + targetURL + " " + strconv.Itoa(body.StatusCode) + " " + string(msg))
+		return errors.New("[INSTALL-PKG][HTTP-STATUS] " + strconv.Itoa(body.StatusCode))
 	}
 	if config.Debug {
 		displayChan <- []byte("[INSTALL-PKG][OK][FINISH] " + targetURL + " -> " + string(msg))

@@ -94,6 +94,7 @@ func addSecurityHeader(next http.Handler) http.Handler {
 
 // getPKG ...
 func getPKG() string {
+	syncPKG := getSyncPKG()
 	if len(syncPKG) < 5 {
 		return _empty
 	}
