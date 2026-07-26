@@ -483,6 +483,34 @@ func TestCheckIntoStore(t *testing.T) {
 	}
 }
 
+// TestLastSumMissingFile covers the first-backup case where no CONFIG-CURRENT
+// file exists yet. lastSum must return the zero hash and must NOT emit a
+// backup error log (it is a benign first-run condition, not a failure).
+func TestLastSumMissingFile(t *testing.T) {
+	ensureDisplayDrained(t)
+
+	// Swap displayChan for a captured one so we can assert silence.
+	saved := displayChan
+	displayChan = make(chan []byte, 8)
+	t.Cleanup(func() { displayChan = saved })
+
+	tmp := t.TempDir()
+	server := "first-run.lan"
+	config := &OPNCall{Path: tmp}
+
+	got := lastSum(config, server)
+	if got != ([32]byte{}) {
+		t.Errorf("lastSum on missing CONFIG-CURRENT = %x, want zero hash", got)
+	}
+
+	// Drain: no error message should have been emitted on first run.
+	select {
+	case msg := <-displayChan:
+		t.Fatalf("lastSum emitted unexpected log on missing file: %q", msg)
+	default:
+	}
+}
+
 func TestCheckIntoStoreRotation(t *testing.T) {
 	ensureDisplayDrained(t)
 

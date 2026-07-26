@@ -31,7 +31,10 @@ func logBackupErr(msg, ctx string) {
 func lastSum(config *OPNCall, server string) [32]byte {
 	data, err := os.ReadFile(filepath.Join(config.Path, server, _current))
 	if err != nil {
-		logBackupErr("FAIL:UNABLE-TO-READ-HASHSHUM-FILE", server)
+		if !os.IsNotExist(err) {
+			logBackupErr("FAIL:UNABLE-TO-READ-HASHSHUM-FILE", server)
+		}
+		return [32]byte{}
 	}
 	return sha256.Sum256(data)
 }
