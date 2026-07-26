@@ -19,6 +19,7 @@ import (
 const (
 	_opnTargetsPrefix     = "OPN_TARGETS_"
 	_opnTargetsDescPrefix = "OPN_TARGETS_DESC_"
+	_opnTargetsImgPrefix  = "OPN_TARGETS_IMGURL_"
 )
 
 // global
@@ -273,17 +274,21 @@ func checkSetRequiredOPN() bool {
 		if !found {
 			continue
 		}
-		if !strings.HasPrefix(name, _opnTargetsPrefix) || strings.HasPrefix(name, _opnTargetsDescPrefix) {
+		if !strings.HasPrefix(name, _opnTargetsPrefix) ||
+			strings.HasPrefix(name, _opnTargetsDescPrefix) ||
+			strings.HasPrefix(name, _opnTargetsImgPrefix) {
 			continue
 		}
 		group := strings.TrimPrefix(name, _opnTargetsPrefix)
 		members = append(members, val)
 		desc := os.Getenv(_opnTargetsDescPrefix + group)
+		imgURL := os.Getenv(_opnTargetsImgPrefix + group)
 		tg = append(tg, OPNGroup{
 			Name:   group,
 			OPN:    true,
 			Unifi:  false,
 			Desc:   desc,
+			ImgURL: imgURL,
 			Member: strings.Split(val, ","),
 		})
 	}
@@ -312,6 +317,7 @@ func checkSetRequiredUnifi() bool {
 		OPN:    false,
 		Unifi:  true,
 		Desc:   os.Getenv("OPN_UNIFI_BACKUP_DESC"),
+		ImgURL: os.Getenv("OPN_UNIFI_BACKUP_IMGURL"),
 		Member: strings.Split(unifiURL.Hostname(), ","),
 	})
 	return true

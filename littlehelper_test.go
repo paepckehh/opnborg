@@ -800,12 +800,24 @@ func TestCheckSetRequiredOPNIgnoresDescEntries(t *testing.T) {
 	withEnv(t, "OPN_TARGETS", "", false)
 	withEnv(t, "OPN_TARGETS_EDGE", "edge01", true)
 	withEnv(t, "OPN_TARGETS_DESC_EDGE", "Edge firewalls", true)
+	withEnv(t, "OPN_TARGETS_IMGURL_EDGE", "https://example.com/edge.png", true)
 	if !checkSetRequiredOPN() {
 		t.Fatalf("expected true")
 	}
 	for _, g := range tg {
-		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "DESC") {
-			t.Errorf("DESC entry should not be a group: %+v", g)
+		if g.Name == "_EDGE" || strings.HasPrefix(g.Name, "DESC") || strings.HasPrefix(g.Name, "IMGURL") {
+			t.Errorf("DESC/IMGURL entry should not be a group: %+v", g)
+		}
+	}
+	// find the EDGE group and verify ImgURL + Desc are wired
+	for i := range tg {
+		if tg[i].Name == "EDGE" {
+			if tg[i].ImgURL != "https://example.com/edge.png" {
+				t.Errorf("EDGE group ImgURL not wired: %+v", tg[i])
+			}
+			if tg[i].Desc != "Edge firewalls" {
+				t.Errorf("EDGE group Desc not wired: %+v", tg[i])
+			}
 		}
 	}
 }
@@ -930,6 +942,39 @@ func TestWriteGroupHeaderDescAndPlain(t *testing.T) {
 	}
 	if !strings.Contains(got, "Edge firewalls") {
 		t.Errorf("desc header missing description text: %q", got)
+	}
+}
+
+func TestWriteGroupHeaderImgURL(t *testing.T) {
+	var s strings.Builder
+	// Image only: no tooltip, alt text is the group name.
+	writeGroupHeader(&s, OPNGroup{Name: "Img", ImgURL: "https://example.com/i.png"})
+	got := s.String()
+	if !strings.Contains(got, `src="https://example.com/i.png"`) {
+		t.Errorf("img header missing src: %q", got)
+	}
+	if !strings.Contains(got, `alt="Img"`) {
+		t.Errorf("img header missing alt: %q", got)
+	}
+	if strings.Contains(got, `title=`) {
+		t.Errorf("img header should not have title without desc: %q", got)
+	}
+	if strings.Contains(got, "<b>Img</b>") {
+		t.Errorf("img header should not render text headline: %q", got)
+	}
+
+	// Image + desc: desc becomes the tooltip; no text headline.
+	s.Reset()
+	writeGroupHeader(&s, OPNGroup{Name: "Img", Desc: "Edge firewalls", ImgURL: "https://example.com/i.png"})
+	got = s.String()
+	if !strings.Contains(got, `title="Edge firewalls"`) {
+		t.Errorf("img header missing desc tooltip: %q", got)
+	}
+	if !strings.Contains(got, `src="https://example.com/i.png"`) {
+		t.Errorf("img header missing src: %q", got)
+	}
+	if strings.Contains(got, "group-desc") {
+		t.Errorf("img header should not render desc as subheading: %q", got)
 	}
 }
 

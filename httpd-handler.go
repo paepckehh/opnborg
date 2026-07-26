@@ -131,17 +131,39 @@ func getHive() string {
 	return s.String()
 }
 
-// writeGroupHeader renders the heading line for a target group. When a text
-// description is configured via the OPN_TARGETS_DESC_<GROUP> env var it is
-// shown as a subheading beneath the group name; otherwise only the name is shown.
+// writeGroupHeader renders the heading line for a target group.
+//
+// When an image URL is configured via OPN_TARGETS_IMGURL_<GROUP> (or
+// OPN_UNIFI_BACKUP_IMGURL for the Unifi group) the image replaces the text
+// headline. If a text description (OPN_TARGETS_DESC_<GROUP>) is also present
+// it is attached as a tooltip (title attribute) on the image instead of being
+// shown as a separate subheading.
+//
+// When no image URL is configured but a description is, the description is
+// shown as a subheading beneath the group name. Otherwise only the name is shown.
 func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
-	s.WriteString("<div class=\"group-header\"><b>")
-	s.WriteString(grp.Name)
-	s.WriteString("</b>")
-	if grp.Desc != "" {
-		s.WriteString("<span class=\"group-desc\">")
-		s.WriteString(grp.Desc)
-		s.WriteString("</span>")
+	s.WriteString("<div class=\"group-header\">")
+	if grp.ImgURL != "" {
+		s.WriteString("<img class=\"group-img\" alt=\"")
+		s.WriteString(grp.Name)
+		s.WriteString("\"")
+		if grp.Desc != "" {
+			s.WriteString(" title=\"")
+			s.WriteString(grp.Desc)
+			s.WriteString("\"")
+		}
+		s.WriteString(" src=\"")
+		s.WriteString(grp.ImgURL)
+		s.WriteString("\">")
+	} else {
+		s.WriteString("<b>")
+		s.WriteString(grp.Name)
+		s.WriteString("</b>")
+		if grp.Desc != "" {
+			s.WriteString("<span class=\"group-desc\">")
+			s.WriteString(grp.Desc)
+			s.WriteString("</span>")
+		}
 	}
 	s.WriteString("</div>")
 }

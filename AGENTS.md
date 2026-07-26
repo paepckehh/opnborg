@@ -2,6 +2,21 @@
 
 Reference guide for AI agents working in the `opnborg` repository.
 
+> ## FIXED REQUIREMENT — EVERY CHANGE, NO EXCEPTIONS
+>
+> Before a task or change is considered done, all five steps below MUST be completed
+> in this exact order. Skipping or reordering any step is a failure.
+>
+> 1. **Format source code** — run `gofmt -w .` (or `make check`) so the tree
+>    stays gofmt-clean.
+> 2. **Build** — `go build -o opnborg ./cmd/opnborg` must succeed.
+> 3. **Test** — `go test -count=1 ./...` must be ok
+> 4. **Commit** — `git add . && git commit -m '<message>'`.
+> 5. **Tag** — bump the patch segment only: the result is `v0.0.<N+1>` Never move, delete, or reuse an existing tag.
+>
+> These steps are non-negotiable for every single task regardless of size.
+
+
 ## Project Summary
 
 `opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary itself accepts only `-v` / `-h`. Output is emitted to stdout via an internal `displayChan` log engine, and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
@@ -17,8 +32,8 @@ Reference guide for AI agents working in the `opnborg` repository.
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
   the **patch** segment, the last segemnt (e.g. `v0.0.22` → `v0.0.23` → `v0.0.24`). 
-  The other two first segments (major, minor) stays at any cost at zero, `v0.0.xx`
-  increment only the xx part. Never move, delete, or rewrite an existing tag.
+  The other two first segments (major, minor) stays at any cost unmodified,
+  increment only the last part by +1. Never move, delete, or rewrite an existing tag.
 
 ## Build, Run, Check
 
@@ -105,7 +120,7 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 - **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`) as long as the value is non-empty. To disable, unset the var. The only exception is the empty string, which `isEnv` treats as false.
 - `OPN_NODAEMON` and `OPN_NOGIT` invert the default (both default to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`, `Git = !isEnv("OPN_NOGIT")`.
 - Either OPN backup (`OPN_APIKEY` + `OPN_APISECRET`) or Unifi backup (`OPN_UNIFI_BACKUP_USER` + `OPN_UNIFI_BACKUP_SECRET` + `OPN_UNIFI_VERSION`) must be configured or `Setup()` returns a fatal error.
-- `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description.
+- `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description, and `OPN_TARGETS_IMGURL_<GROUPNAME>` supplies a custom image URL that replaces the text headline (the description then becomes the image's tooltip).
 - `OPN_TARGETS` / `OPN_MASTER` entries must include a port suffix if not `:443` (e.g. `192.168.0.1:8443`). Clear-text HTTP is unsupported.
 - `.env` is auto-loaded by `godotenv.Load()` if present at the working directory.
 - Example env templates live at the repo root: `example.sh`, `example-env-config-simple.sh`, `example-env-config-complex.sh`, `example-env-config-unifi.sh`, `example-env-config-dev.sh`.

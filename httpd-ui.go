@@ -57,6 +57,7 @@ nav a button:hover{border-color:var(--accent)}
 .group-header{display:flex;align-items:baseline;gap:.5rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);margin-bottom:.5rem}
 .group-header b{font-size:1.1rem;color:var(--accent)}
 .group-desc{color:var(--muted);font-size:.85rem}
+.group-img{max-width:100%;max-height:64px;object-fit:contain;display:block}
 .member-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .member-row:last-child{border-bottom:none}
 .member-row svg{font-size:1.2rem;flex-shrink:0}

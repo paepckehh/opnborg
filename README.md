@@ -41,7 +41,10 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 please see:
 - example.sh 
-- example-env-config.sh
+- example-env-config-simple.sh
+- example-env-config-complex.sh
+- example-env-config-dev.sh
+- example-env-config-unifi.sh
 ```
 
 # ⚡️DOCKER
@@ -93,7 +96,7 @@ see opnborg-prometheus-grafana.nix
 - Central Monitoring (version, status, online, offline, last seen, configuration compliance)
 - Central Package Management (Install Packages across all OPNSenses, follow one master configuration)
 - Central Configuration Audit / Change Log Trail / Backup (consolidated git repo, filesystem archive for archive & easy rapid restore)
-- Central Logs Consolidation (provides internal RFC5442 syslog collector, rotate, archive, ...)
+- Central Logs Consolidation (provides internal RFC5424 syslog collector, rotate, archive, ...)
 - One single binary, no dependency, cross os & hw plattform support via go (linux, freebsd, openbsd, netbsd, windows, x86, aarch64, armv7, ...) 
 - Simple NixOS integration for extensive Proemetheus & Grafana (wip:wazuh,influx,greylog,...) metrics collection / monitoring / alerting
 - Planned as little complementary SideKick for OPNCentral (is & will be no in-place or replacement)
@@ -109,6 +112,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_TARGETS          - list of OPNSense Target Server to Backup [string, hostnames, comma separated] [optional: add asset-tag, via # as seprator for each host]
 - OPN_TARGETS_*        - alternative: custom groups for OPNSense Target server [example: OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."], add a '#' after hostname for asset tags
 - OPN_TARGETS_DESC_*  - custom text description for custom groups within WebUI [example: OPN_TARGETS_DESC_INTRANET="Intranet firewalls"]
+- OPN_TARGETS_IMGURL_* - custom image url for customs groups within WebUI [example: OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"]
 
 # Optional
 - OPN_PATH        - specify a target path (absolut or releative) to store backups [string: defaults to '.']
@@ -130,7 +134,7 @@ see opnborg-prometheus-grafana.nix
 
 # WebConsole 
 - OPN_HTTPD_DISABLE     - disable the internal httpd server (bool, default: false => not set)
-- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:80]
+- OPN_HTTPD_SERVER      - HTTPD Listen Address  [string, default: 127.0.0.1:6464]
 - Optional 
   - OPN_HTTPD_CACERT      - HTTPD Server CA X.509 Certificate (string: <server.pem>), defaults to <empty>, empty disables https)
   - OPN_HTTPD_CACKEY      - HTTPD Server CA Key  (string: <server.key>), defaults to <empty>, empty disables https)
@@ -146,6 +150,7 @@ see opnborg-prometheus-grafana.nix
 - OPN_UNIFI_BACKUP_USER   - Unifi Backup User Account
 - OPN_UNIFI_BACKUP_SECRET - Unifi Backup User Account Password
 - OPN_UNIFI_BACKUP_DESC - Unifi Backup Group text description [example: export OPN_UNIFI_BACKUP_DESC="Network controller"]
+- OPN_UNIFI_BACKUP_IMGURL - Unifi Backup Group Image URL [example: export OPN_UNIFI_BACKUP_IMGURL="https://paepcke.de/img/unifi.png"]
 
 # Unifi Inventory Export, details see: [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex)
 - OPN_UNIFI_EXPORT        - Unifi Inventory Nightly Exports, check into git repo  [example: export OPN_UNIFI_EXPORT='1']

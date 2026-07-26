@@ -6,7 +6,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.89"
+const SemVer = "v0.1.90"
 
 // global var
 var (
@@ -23,7 +23,8 @@ type OPNGroup struct {
 	Name   string   // group name
 	OPN    bool     // is OPNsense Appliance
 	Unifi  bool     // is Unifi Controller
-	Desc   string   // group description (text, from env)
+	Desc   string   // group description (text, from env, shown when no ImgURL)
+	ImgURL string   // group image url (from env, replaces text headline when set)
 	Member []string // group member
 }
 
