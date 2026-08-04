@@ -4,6 +4,8 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -36,7 +38,6 @@ func getConfigDashboardHTML() string {
 	s.WriteString(_bodyHead)
 	s.WriteString(getConfigNavi())
 	s.WriteString(renderConfigDashboard(_cfg))
-	s.WriteString(_bodySemVer)
 	s.WriteString(_bodyFooter)
 	s.WriteString(_bodyEnd)
 	s.WriteString(_htmlEnd)
@@ -78,6 +79,7 @@ func renderConfigDashboard(config *OPNCall) string {
 	s.WriteString(renderMonitoringPanel(config))
 
 	s.WriteString("</div></div>")
+	s.WriteString(renderRawEnvSection())
 	return s.String()
 }
 
@@ -297,4 +299,164 @@ func groupSummary(grp OPNGroup) string {
 		b.WriteString(" | image set")
 	}
 	return b.String()
+}
+
+// _rawEnvNames is the fixed list of OPN_* environment variables recognised by
+// opnborg's Setup(). Variables that are NOT in this list but carry the OPN_
+// prefix are surfaced in a separate "unrecognised" subsection so an operator can
+// spot typos or stale config. Group-scoped vars (OPN_TARGETS_<GROUP>,
+// OPN_TARGETS_DESC_<GROUP>, OPN_TARGETS_IMGURL_<GROUP>) are matched by prefix.
+var _rawEnvNames = []string{
+	"OPN_APIKEY",
+	"OPN_APISECRET",
+	"OPN_TLSKEYPIN",
+	"OPN_PATH",
+	"OPN_EMAIL",
+	"OPN_TARGETS",
+	"OPN_NODAEMON",
+	"OPN_DEBUG",
+	"OPN_GIT_ENABLE",
+	"OPN_GIT_UPSTREAM",
+	"OPN_GIT_SSH_KEY",
+	"OPN_RSYSLOG_ENABLE",
+	"OPN_RSYSLOG_SERVER",
+	"OPN_HTTPD_DISABLE",
+	"OPN_HTTPD_SERVER",
+	"OPN_HTTPD_CACERT",
+	"OPN_HTTPD_CAKEY",
+	"OPN_HTTPD_CACLIENT",
+	"OPN_HTTPD_COLOR_FG",
+	"OPN_HTTPD_COLOR_BG",
+	"OPN_MASTER",
+	"OPN_SYNC_PKG",
+	"OPN_UNIFI_WEBUI",
+	"OPN_UNIFI_BACKUP_USER",
+	"OPN_UNIFI_BACKUP_SECRET",
+	"OPN_UNIFI_BACKUP_DESC",
+	"OPN_UNIFI_BACKUP_IMGURL",
+	"OPN_UNIFI_VERSION",
+	"OPN_UNIFI_EXPORT",
+	"OPN_UNIFI_MONGODB_URI",
+	"OPN_UNIFI_FORMAT",
+	"OPN_UNIFI_WATCH_PATH",
+	"OPN_PROMETHEUS_WEBUI",
+	"OPN_WAZUH_WEBUI",
+	"OPN_GRAFANA_WEBUI",
+	"OPN_GRAFANA_DASHBOARD_FREEBSD",
+	"OPN_GRAFANA_DASHBOARD_HAPROXY",
+	"OPN_GRAFANA_DASHBOARD_UNIFI",
+	"OPN_SLEEP",
+}
+
+// _rawEnvSecrets are env vars whose values must never be echoed verbatim. They
+// are rendered as a "set (masked)" pill instead.
+var _rawEnvSecrets = map[string]bool{
+	"OPN_APIKEY":              true,
+	"OPN_APISECRET":           true,
+	"OPN_TLSKEYPIN":           true,
+	"OPN_GIT_SSH_KEY":         true,
+	"OPN_UNIFI_BACKUP_SECRET": true,
+	"OPN_HTTPD_CAKEY":         true,
+}
+
+// _rawEnvPrefixGroups are OPN_ variable prefixes that define an open family of
+// recognised group-scoped variables (the suffix is a free-form group name).
+var _rawEnvPrefixGroups = []string{
+	"OPN_TARGETS_",
+	"OPN_TARGETS_DESC_",
+	"OPN_TARGETS_IMGURL_",
+}
+
+// renderRawEnvSection emits a full-width "Raw Environment" section that lists
+// every recognised OPN_* env var (whether set or not) followed by any other
+// OPN_-prefixed vars present in the process environment that opnborg does NOT
+// recognise. Secret-bearing vars are masked. The list is sourced from the live
+// process environment at render time so it always reflects what the daemon
+// actually saw.
+func renderRawEnvSection() string {
+	live := make(map[string]string)
+	for _, kv := range os.Environ() {
+		name, val, found := strings.Cut(kv, "=")
+		if !found {
+			continue
+		}
+		live[name] = val
+	}
+
+	// Build the recognised list: fixed names plus group-scoped vars present in
+	// the environment. Group-scoped vars are only shown when actually set (the
+	// suffix space is unbounded).
+	recognised := make([]string, 0, len(_rawEnvNames)+8)
+	recognised = append(recognised, _rawEnvNames...)
+	for name := range live {
+		if !strings.HasPrefix(name, "OPN_") {
+			continue
+		}
+		for _, pfx := range _rawEnvPrefixGroups {
+			if strings.HasPrefix(name, pfx) {
+				recognised = append(recognised, name)
+				break
+			}
+		}
+	}
+	sort.Strings(recognised)
+
+	// Determine which live OPN_ vars were NOT recognised (typos / stale).
+	recognisedSet := make(map[string]bool, len(recognised))
+	for _, n := range recognised {
+		recognisedSet[n] = true
+	}
+	var unknown []string
+	for name := range live {
+		if !strings.HasPrefix(name, "OPN_") {
+			continue
+		}
+		if !recognisedSet[name] {
+			unknown = append(unknown, name)
+		}
+	}
+	sort.Strings(unknown)
+
+	var s strings.Builder
+	s.WriteString("<div class=\"dashboard\">")
+	s.WriteString("<h2>BorgCONFIG &middot; Raw Environment</h2>")
+	s.WriteString("<p class=\"cfg-intro\">Every OPN_* env var recognised by opnborg, with the raw value as seen by the process. Secret-bearing vars are masked. Unset vars are shown as <span class=\"dash-muted\">not set</span>.</p>")
+	s.WriteString("<div class=\"raw-env-grid\">")
+	for _, name := range recognised {
+		s.WriteString("<div class=\"raw-env-row\"><span class=\"raw-env-name\">")
+		s.WriteString(html.EscapeString(name))
+		s.WriteString("</span><span class=\"raw-env-val\">")
+		s.WriteString(renderRawEnvValue(name, live[name]))
+		s.WriteString("</span></div>")
+	}
+	s.WriteString("</div>")
+
+	if len(unknown) > 0 {
+		s.WriteString("<h3 class=\"raw-env-sub\">Unrecognised OPN_* vars present in environment</h3>")
+		s.WriteString("<p class=\"cfg-intro\">These OPN_-prefixed vars are set but not consumed by opnborg; likely typos or stale config.</p>")
+		s.WriteString("<div class=\"raw-env-grid raw-env-unknown\">")
+		for _, name := range unknown {
+			s.WriteString("<div class=\"raw-env-row\"><span class=\"raw-env-name\">")
+			s.WriteString(html.EscapeString(name))
+			s.WriteString("</span><span class=\"raw-env-val\">")
+			s.WriteString(renderRawEnvValue(name, live[name]))
+			s.WriteString("</span></div>")
+		}
+		s.WriteString("</div>")
+	}
+
+	s.WriteString("</div>")
+	return s.String()
+}
+
+// renderRawEnvValue formats a single env var's value, masking secrets and
+// rendering empty values as a muted "not set" pill.
+func renderRawEnvValue(name, val string) string {
+	if val == "" {
+		return "<span class=\"dash-muted\">not set</span>"
+	}
+	if _rawEnvSecrets[name] {
+		return "<span class=\"dash-warn\">set (masked)</span>"
+	}
+	return "<code>" + html.EscapeString(val) + "</code>"
 }

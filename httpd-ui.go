@@ -17,8 +17,7 @@ const (
 	_bodyStart = "<body>" + _lf
 	_bodyEnd   = "</body>" + _lf
 
-	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1></header>" + _lf
-	_bodySemVer = "<div class=\"semver\">[ " + SemVer + " ]</div>" + _lf
+	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1><div class=\"semver\">[ " + SemVer + " ]</div></header>" + _lf
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
 	_forceInfo    = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
@@ -53,7 +52,7 @@ nav{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 0}
 nav a{text-decoration:none}
 nav a button{background:var(--card);color:var(--fg);border:1px solid var(--border);padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:border-color .2s,background .2s}
 nav a button:hover{border-color:var(--accent);background:var(--card-2)}
-.semver{color:var(--muted);font-size:.8rem;margin:.5rem 0}
+.semver{color:var(--muted);font-size:.8rem;margin:0;font-variant-numeric:tabular-nums}
 .group{margin:1rem 0;padding:1rem;background:var(--card);border:1px solid var(--border);border-radius:8px}
 .group-header{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;padding-bottom:.5rem;border-bottom:1px solid var(--border);margin-bottom:.5rem}
 .group-header b{font-size:1.1rem;color:var(--accent)}
@@ -98,5 +97,12 @@ footer{margin-top:2rem;padding:1rem 0;border-top:2px solid var(--border);display
 .dash-ok{color:var(--ok)}
 .dash-warn{color:var(--warn)}
 .dash-err{color:var(--err)}
-@media(max-width:640px){.member-row{flex-direction:column;align-items:flex-start}.member-main{flex-direction:column;align-items:flex-start}.meta-box{width:100%}.dashboard-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.member-row{flex-direction:column;align-items:flex-start}.member-main{flex-direction:column;align-items:flex-start}.meta-box{width:100%}.dashboard-grid{grid-template-columns:1fr}.raw-env-grid{grid-template-columns:1fr}}
+.raw-env-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:.4rem;margin-top:.5rem}
+.raw-env-row{display:flex;gap:.5rem;align-items:baseline;padding:.3rem .4rem;background:var(--card-2);border:1px solid var(--border);border-radius:4px}
+.raw-env-name{color:var(--accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;flex:0 0 auto;word-break:break-all}
+.raw-env-val{color:var(--fg);font-size:.78rem;word-break:break-word;text-align:right;flex:1 1 auto}
+.raw-env-val code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;background:var(--bg);padding:.05rem .25rem;border-radius:3px}
+.raw-env-sub{color:var(--warn);font-size:.9rem;margin:1rem 0 .25rem 0}
+.raw-env-unknown .raw-env-name{color:var(--err)}
 </style>`
