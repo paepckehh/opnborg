@@ -28,8 +28,6 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 ![OPNBORG Sample Screenshot 02](resources/sc02.png)
 
-![OPNBORG Sample Screenshot 03](resources/sc03.png)
-
 ---
 
 ## ✨ Features
