@@ -347,17 +347,19 @@ footer{margin-top:2rem;padding:1rem 0;border-top:2px solid var(--border);display
 .dash-row{display:flex;justify-content:space-between;gap:.5rem;padding:.18rem 0;font-size:.78rem}
 .dash-label{color:var(--muted);flex-shrink:0}
 .dash-value{color:var(--fg);text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}
+.dash-value:has(.target-chip){display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.2rem .25rem;align-items:center}
 .dash-muted{color:var(--muted);font-style:italic}
 .dash-ok{color:var(--ok)}
 .dash-warn{color:var(--warn)}
 .dash-err{color:var(--err)}
-.target-chip{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.05rem .4rem;margin:.1rem .15rem .1rem 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.72rem;word-break:break-all}
+.target-chip{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.05rem .4rem;margin:.1rem .15rem .1rem 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.72rem;white-space:nowrap}
 .raw-env-val .target-chip{font-size:.72rem}
 @media(max-width:640px){.member-row{flex-direction:column;align-items:flex-start}.member-main{flex-direction:column;align-items:flex-start}.meta-box{width:100%}.dashboard-grid{grid-template-columns:1fr}.raw-env-grid{grid-template-columns:1fr}}
 .raw-env-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:.4rem;margin-top:.5rem}
 .raw-env-row{display:flex;gap:.5rem;align-items:baseline;padding:.3rem .4rem;background:var(--card-2);border:1px solid var(--border);border-radius:4px}
 .raw-env-name{color:var(--accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;flex:0 0 auto;word-break:break-all}
 .raw-env-val{color:var(--fg);font-size:.78rem;word-break:break-word;text-align:right;flex:1 1 auto}
+.raw-env-val:has(.target-chip){display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.2rem .25rem;align-items:center}
 .raw-env-val code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;background:var(--bg);padding:.05rem .25rem;border-radius:3px}
 .raw-env-sub{color:var(--warn);font-size:.9rem;margin:1rem 0 .25rem 0}
 .raw-env-unknown .raw-env-name{color:var(--err)}
