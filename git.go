@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	gitcfg "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
@@ -218,8 +219,18 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 	// configured default fetch refspec. A detached HEAD falls back to pushing
 	// HEAD to "refs/heads/master" so an auto-init'd repo with no commits yet on
 	// a named branch still syncs.
+	//
+	// A freshly init'd repo with no commits yet has no HEAD. In that state
+	// there is nothing to push, so the sync is treated as a no-op success
+	// rather than an error: the next tick that produces a commit will have a
+	// HEAD and push it upstream.
 	head, err := repo.Head()
 	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			displayChan <- []byte("[GIT][REPO][PUSH][NOHEAD] " + upstream)
+			recordPush(true, "no HEAD yet, nothing to push")
+			return nil
+		}
 		recordPush(false, "head: "+err.Error())
 		return err
 	}
@@ -359,8 +370,16 @@ func gitGC(repo *git.Repository) error {
 // commit any pending backup changes, push to the upstream remote when one is
 // configured, and finally run the internal equivalent of `git gc --aggressive`
 // so the on-disk backup store stays compact. The gc only runs when a new
-// commit was created this tick (a clean worktree needs no repack). It returns
-// committed=true when a new commit was created.
+// commit was created this tick (a clean worktree needs no repack).
+//
+// When an upstream is configured the push runs on every tick, not only after
+// a fresh commit: the local repo may hold commits a previous tick failed to
+// push (transient upstream outage), or the upstream may have drifted from the
+// local HEAD. The configured refspec is a forced update (+refs/heads/*), so a
+// divergent upstream is resynced to the local history rather than leaving the
+// remote out of step. A clean tick with nothing to push is a no-op success.
+//
+// It returns committed=true when a new commit was created this tick.
 func gitCheckIn(config *OPNCall) (bool, error) {
 	if err := os.Chdir(config.Path); err != nil {
 		return false, err
@@ -377,11 +396,15 @@ func gitCheckIn(config *OPNCall) (bool, error) {
 		displayChan <- []byte("[GIT][REPO][COMMIT][FAIL] " + err.Error())
 		return false, err
 	}
+	// Always attempt the upstream sync when an upstream is configured, even on
+	// a clean tick, so the remote is reconciled with the local HEAD every pass.
+	if config.Git.Upstream != "" {
+		if err := gitPush(config, repo); err != nil {
+			return committed, err
+		}
+	}
 	if !committed {
 		return false, nil
-	}
-	if err := gitPush(config, repo); err != nil {
-		return true, err
 	}
 	if err := gitGC(repo); err != nil {
 		displayChan <- []byte("[GIT][REPO][GC][FAIL] " + err.Error())

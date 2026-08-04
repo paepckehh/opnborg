@@ -182,6 +182,16 @@ func srv(config *OPNCall) error {
 				}
 			}
 			displayChan <- []byte("[CHANGES-DETECTED][UPDATES-DONE][FINISH]")
+		} else if config.Git.Enable && config.Git.Upstream != "" {
+			// No local changes this tick, but an upstream is configured: still
+			// reconcile the remote so a previous failed push or an upstream drift
+			// is corrected every pass (force-push via the configured refspec).
+			if committed, err := gitCheckIn(config); err != nil {
+				displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL] " + err.Error())
+				return err
+			} else if committed {
+				displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
+			}
 		}
 
 		// finish
