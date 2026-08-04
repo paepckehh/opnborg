@@ -238,6 +238,23 @@ func lastUnifiWatchSyncOK(config *OPNCall) bool {
 	return config.Unifi.Watch.LastSyncErr == ""
 }
 
+// archivedCount returns the number of backup files currently held in the
+// per-server store, derived from the append-only sha256.db log. It is used by
+// the WebUI unifi watch tile to surface a live total of stored backups.
+func archivedCount(config *OPNCall, server string) int {
+	data, err := os.ReadFile(filepath.Join(config.Path, server, _hashFile))
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(string(data), _linefeed) {
+		if _, digest, found := strings.Cut(line, _tab); found && digest != "" {
+			count++
+		}
+	}
+	return count
+}
+
 // archivedSums returns the set of base64 SHA-256 digests recorded in the
 // per-server sha256.db log. It lets syncUnifiWatch dedup every source file
 // against the full archive history (not only current.<ext>) so re-sync passes

@@ -1958,28 +1958,39 @@ func TestSyncUnifiWatchRecordsReadDirError(t *testing.T) {
 }
 
 // TestSetUnifiWatchStatusSurfacesErrorAndStats verifies the WebUI tile renders
-// the per-pass sync stats (synced / source / skipped / last file) and the
+// the per-pass total files in the backup store + last file, and the
 // error reason box when the last sync failed.
 func TestSetUnifiWatchStatusSurfacesErrorAndStats(t *testing.T) {
 	savedStatus := unifiWatchStatus
 	t.Cleanup(func() { unifiWatchStatus = savedStatus })
 	unifiWatchStatus = ""
-	config := &OPNCall{}
+	store := t.TempDir()
+	config := &OPNCall{Path: store}
 	ts := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
 	config.Unifi.Watch.LastTS = ts
-	config.Unifi.Watch.SourceFiles = 3
-	config.Unifi.Watch.SyncedFiles = 2
-	config.Unifi.Watch.SkippedFiles = 1
 	config.Unifi.Watch.LastFile = "backup-2024-06-01.unf"
 	config.Unifi.Watch.LastSyncErr = "STORE-CHECKIN: disk full"
+	// seed the unifi-autobackup store with two archived entries so the
+	// Total Files counter reflects the live store size.
+	uniStore := filepath.Join(store, _uniWatch)
+	if err := os.MkdirAll(uniStore, 0o755); err != nil {
+		t.Fatalf("mkdir store: %v", err)
+	}
+	db := filepath.Join(uniStore, _hashFile)
+	if err := os.WriteFile(db, []byte("a\tYQ==\nb\tYg==\n"), 0o600); err != nil {
+		t.Fatalf("write sha256.db: %v", err)
+	}
 	setUnifiWatchStatus(config, true, false)
 	out := unifiWatchStatus
 	for _, want := range []string{
-		"Synced", "2 / 3", "Skipped", "1", "Last File", "backup-2024-06-01.unf", "Error", "STORE-CHECKIN: disk full", _degraded,
+		"Total Files", "2", "Last File", "backup-2024-06-01.unf", "Error", "STORE-CHECKIN: disk full", _degraded,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status output missing %q: %s", want, out)
 		}
+	}
+	if strings.Contains(out, "Synced") || strings.Contains(out, "Skipped") {
+		t.Errorf("status output should no longer surface Synced/Skipped: %s", out)
 	}
 }
 

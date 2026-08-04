@@ -143,10 +143,10 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 		state = _degraded
 	}
 	seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Sync</span><span class=\"meta-value\">" + lastSeen + "</span></div>"
-	// sync stats: files seen / synced / skipped on the last pass, mirroring the
-	// OPN backup tiles that surface per-server backup state.
-	statsBox := "<div class=\"meta-box meta-sync\"><span class=\"meta-label\">Synced</span><span class=\"meta-value\">" + strconv.Itoa(config.Unifi.Watch.SyncedFiles) + " / " + strconv.Itoa(config.Unifi.Watch.SourceFiles) + "</span></div>"
-	skipBox := "<div class=\"meta-box meta-skip\"><span class=\"meta-label\">Skipped</span><span class=\"meta-value\">" + strconv.Itoa(config.Unifi.Watch.SkippedFiles) + "</span></div>"
+	// total files currently held in the backup store (counted from the
+	// append-only sha256.db log) so the tile reflects the live store size
+	// rather than per-pass synced/skipped deltas.
+	totalBox := "<div class=\"meta-box meta-sync\"><span class=\"meta-label\">Total Files</span><span class=\"meta-value\">" + strconv.Itoa(archivedCount(config, _uniWatch)) + "</span></div>"
 	lastFileBox := ""
 	if config.Unifi.Watch.LastFile != "" {
 		lastFileBox = "<div class=\"meta-box meta-file\"><span class=\"meta-label\">Last File</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Watch.LastFile) + "</span></div>"
@@ -163,5 +163,5 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	if config.Unifi.Tag != "" {
 		tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Tag) + "</span></div>"
 	}
-	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + statsBox + skipBox + lastFileBox + errBox + tagBox
+	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + totalBox + lastFileBox + errBox + tagBox
 }
