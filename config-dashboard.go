@@ -103,7 +103,7 @@ func renderOPNPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OPNsense Backup</div>")
 	writeDashRow(&s, "Enabled", boolPill(c.Enable))
-	writeDashRow(&s, "Targets (raw)", maskIfEmpty(html.EscapeString(c.Targets)))
+	writeDashRow(&s, "Targets (raw)", maskIfEmpty(html.EscapeString(formatTargetsDisplay(c.Targets))))
 	writeDashRow(&s, "API Key", secretPill(c.Key))
 	writeDashRow(&s, "API Secret", secretPill(c.Secret))
 	writeDashRow(&s, "TLS Key Pin", secretPill(c.TLSKeyPin))
@@ -125,6 +125,11 @@ func renderGroupsPanel(c *OPNCall) string {
 			s.WriteString("</span><span class=\"dash-value\">")
 			s.WriteString(html.EscapeString(groupSummary(grp)))
 			s.WriteString("</span></div>")
+			if len(grp.Member) > 0 {
+				s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Members</span><span class=\"dash-value\">")
+				s.WriteString(html.EscapeString(formatTargetsDisplay(strings.Join(grp.Member, ","))))
+				s.WriteString("</span></div>")
+			}
 		}
 	}
 	s.WriteString("</div>")
@@ -294,6 +299,37 @@ func maskIfEmpty(v string) string {
 		return "<span class=\"dash-muted\">not set</span>"
 	}
 	return v
+}
+
+// formatTargetsDisplay renders a comma-separated target list (OPN_TARGETS or an
+// OPN_TARGETS_<GROUP> value) with '#' as the target unit separator, as used on
+// the config dashboard and the raw environment output. Empty entries produced
+// by trailing/doubled commas are dropped.
+func formatTargetsDisplay(raw string) string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, "#")
+}
+
+// isTargetEnvName reports whether name is a target-list env var whose value is
+// a comma-separated list of target units (OPN_TARGETS or OPN_TARGETS_<GROUP>,
+// excluding the _DESC_ and _IMGURL_ variants).
+func isTargetEnvName(name string) bool {
+	if name == "OPN_TARGETS" {
+		return true
+	}
+	if strings.HasPrefix(name, _opnTargetsPrefix) &&
+		!strings.HasPrefix(name, _opnTargetsDescPrefix) &&
+		!strings.HasPrefix(name, _opnTargetsImgPrefix) {
+		return true
+	}
+	return false
 }
 
 // urlCell renders a *url.URL as a clickable link, or a muted placeholder.
@@ -488,6 +524,9 @@ func renderRawEnvValue(name, val string) string {
 	}
 	if _rawEnvSecrets[name] {
 		return "<span class=\"dash-warn\">set (masked)</span>"
+	}
+	if isTargetEnvName(name) {
+		return "<code>" + html.EscapeString(formatTargetsDisplay(val)) + "</code>"
 	}
 	return "<code>" + html.EscapeString(val) + "</code>"
 }

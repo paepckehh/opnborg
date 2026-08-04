@@ -1435,6 +1435,43 @@ func TestConfigButtonInsideDashboard(t *testing.T) {
 
 // --- sync-master.go / sync-pkg.go ----------------------------------------
 
+// TestFormatTargetsDisplay covers the '#' target unit separator used on the
+// config dashboard and raw env output. Empty entries from trailing/doubled
+// commas are dropped, whitespace is trimmed.
+func TestFormatTargetsDisplay(t *testing.T) {
+	cases := map[string]string{
+		"":                              "",
+		"opn01.lan:8443":                "opn01.lan:8443",
+		"opn01.lan:8443,opn02.lan:8443": "opn01.lan:8443#opn02.lan:8443",
+		"opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02": "opn01.lan:8443#RACK-PROD01#opn02.lan:8443#RACK-PROD02",
+		" opn01 , opn02 , ": "opn01#opn02",
+		",,,":               "",
+	}
+	for in, want := range cases {
+		got := formatTargetsDisplay(in)
+		if got != want {
+			t.Errorf("formatTargetsDisplay(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestIsTargetEnvName covers the env var name classification that drives the
+// '#' separator in the raw environment section.
+func TestIsTargetEnvName(t *testing.T) {
+	yes := []string{"OPN_TARGETS", "OPN_TARGETS_INTRANET", "OPN_TARGETS_EXTERNAL"}
+	no := []string{"OPN_APIKEY", "OPN_TARGETS_DESC_INTRANET", "OPN_TARGETS_IMGURL_INTRANET", "", "OPN_PATH"}
+	for _, n := range yes {
+		if !isTargetEnvName(n) {
+			t.Errorf("isTargetEnvName(%q) = false, want true", n)
+		}
+	}
+	for _, n := range no {
+		if isTargetEnvName(n) {
+			t.Errorf("isTargetEnvName(%q) = true, want false", n)
+		}
+	}
+}
+
 // TestSplitPlugins covers the strings.Split("", ",") == [""] gotcha that used
 // to make checkInstallPKG attempt to install an empty-named package.
 func TestSplitPlugins(t *testing.T) {
