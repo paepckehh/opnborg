@@ -17,6 +17,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"math/big"
 	"net/http"
@@ -1438,17 +1439,24 @@ func TestConfigButtonInsideDashboard(t *testing.T) {
 
 // --- sync-master.go / sync-pkg.go ----------------------------------------
 
-// TestFormatTargetsDisplay covers the '#' target unit separator used on the
-// config dashboard and raw env output. Empty entries from trailing/doubled
-// commas are dropped, whitespace is trimmed.
+// TestFormatTargetsDisplay covers the per-unit target chip rendering used on
+// the config dashboard and raw env output. Each comma-separated unit becomes its
+// own <span class="target-chip">...</span> so the in-unit '#tag' suffix stays
+// visually grouped and unit boundaries are unambiguous (the prior '#' join
+// collided with the in-unit '#tag' separator). Empty entries from
+// trailing/doubled commas are dropped; whitespace is trimmed. The returned
+// string is already HTML-escaped and must not be re-escaped by callers.
 func TestFormatTargetsDisplay(t *testing.T) {
+	chip := func(v string) string { return "<span class=\"target-chip\">" + html.EscapeString(v) + "</span>" }
 	cases := map[string]string{
 		"":                              "",
-		"opn01.lan:8443":                "opn01.lan:8443",
-		"opn01.lan:8443,opn02.lan:8443": "opn01.lan:8443#opn02.lan:8443",
-		"opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02": "opn01.lan:8443#RACK-PROD01#opn02.lan:8443#RACK-PROD02",
-		" opn01 , opn02 , ": "opn01#opn02",
+		"opn01.lan:8443":                chip("opn01.lan:8443"),
+		"opn01.lan:8443,opn02.lan:8443": chip("opn01.lan:8443") + " " + chip("opn02.lan:8443"),
+		"opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02": chip("opn01.lan:8443#RACK-PROD01") + " " + chip("opn02.lan:8443#RACK-PROD02"),
+		" opn01 , opn02 , ": chip("opn01") + " " + chip("opn02"),
 		",,,":               "",
+		// HTML-special characters in a unit must be escaped, not echoed raw.
+		"fw01<a>,fw02&b": chip("fw01<a>") + " " + chip("fw02&b"),
 	}
 	for in, want := range cases {
 		got := formatTargetsDisplay(in)
@@ -1458,8 +1466,9 @@ func TestFormatTargetsDisplay(t *testing.T) {
 	}
 }
 
-// TestIsTargetEnvName covers the env var name classification that drives the
-// '#' separator in the raw environment section.
+// TestIsTargetEnvName covers the env var name classification that routes
+// target-list values through the per-unit chip renderer in the raw
+// environment section.
 func TestIsTargetEnvName(t *testing.T) {
 	yes := []string{"OPN_TARGETS", "OPN_TARGETS_INTRANET", "OPN_TARGETS_EXTERNAL"}
 	no := []string{"OPN_APIKEY", "OPN_TARGETS_DESC_INTRANET", "OPN_TARGETS_IMGURL_INTRANET", "", "OPN_PATH"}

@@ -103,7 +103,7 @@ func renderOPNPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OPNsense Backup</div>")
 	writeDashRow(&s, "Enabled", boolPill(c.Enable))
-	writeDashRow(&s, "Targets (raw)", maskIfEmpty(html.EscapeString(formatTargetsDisplay(c.Targets))))
+	writeDashRow(&s, "Targets (raw)", maskIfEmpty(formatTargetsDisplay(c.Targets)))
 	writeDashRow(&s, "API Key", secretPill(c.Key))
 	writeDashRow(&s, "API Secret", secretPill(c.Secret))
 	writeDashRow(&s, "TLS Key Pin", secretPill(c.TLSKeyPin))
@@ -127,7 +127,7 @@ func renderGroupsPanel(c *OPNCall) string {
 			s.WriteString("</span></div>")
 			if len(grp.Member) > 0 {
 				s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Members</span><span class=\"dash-value\">")
-				s.WriteString(html.EscapeString(formatTargetsDisplay(strings.Join(grp.Member, ","))))
+				s.WriteString(formatTargetsDisplay(strings.Join(grp.Member, ",")))
 				s.WriteString("</span></div>")
 			}
 		}
@@ -305,16 +305,30 @@ func maskIfEmpty(v string) string {
 // OPN_TARGETS_<GROUP> value) with '#' as the target unit separator, as used on
 // the config dashboard and the raw environment output. Empty entries produced
 // by trailing/doubled commas are dropped.
+// formatTargetsDisplay renders a comma-separated target list (OPN_TARGETS or an
+// OPN_TARGETS_<GROUP> value) as one styled chip per target unit, so the host and
+// its optional '#<asset-tag>' suffix stay visually grouped and the unit
+// boundaries are unambiguous (joining units with '#' would collide with the
+// in-unit '#tag' separator, e.g. "opn01.lan#RACK-PROD01#opn02.lan#RACK-PROD02").
+// Empty entries from trailing/doubled commas are dropped; whitespace is trimmed.
+// The returned string is already HTML-safe and must NOT be passed through
+// html.EscapeString again.
 func formatTargetsDisplay(raw string) string {
 	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
+	var b strings.Builder
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
+		if p == "" {
+			continue
 		}
+		if b.Len() > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString("<span class=\"target-chip\">")
+		b.WriteString(html.EscapeString(p))
+		b.WriteString("</span>")
 	}
-	return strings.Join(out, "#")
+	return b.String()
 }
 
 // isTargetEnvName reports whether name is a target-list env var whose value is
@@ -526,7 +540,7 @@ func renderRawEnvValue(name, val string) string {
 		return "<span class=\"dash-warn\">set (masked)</span>"
 	}
 	if isTargetEnvName(name) {
-		return "<code>" + html.EscapeString(formatTargetsDisplay(val)) + "</code>"
+		return formatTargetsDisplay(val)
 	}
 	return "<code>" + html.EscapeString(val) + "</code>"
 }
