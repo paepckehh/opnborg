@@ -104,7 +104,7 @@ const (
 .fd-line .fd-br{color:var(--muted);margin-right:.3rem}
 .fd-hint{color:var(--muted);font-size:.78rem;text-align:center}
 .fd-done .fd-hint{color:var(--ok)}
-.fd-done-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;text-align:center;background:rgba(11,15,20,.78);backdrop-filter:blur(4px);opacity:0;visibility:hidden;transform:scale(1.04);transition:opacity .35s ease-out,transform .35s ease-out,visibility .35s;z-index:2}
+.fd-done-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;text-align:center;opacity:0;visibility:hidden;transform:scale(1.04);transition:opacity .35s ease-out,transform .35s ease-out,visibility .35s;z-index:2}
 .fd-done-overlay.fd-show{opacity:1;visibility:visible;transform:scale(1)}
 .fd-done-ring{width:54px;height:54px;border-radius:50%;border:3px solid var(--ok);box-shadow:0 0 18px rgba(63,185,80,.55),inset 0 0 12px rgba(63,185,80,.4);animation:fd-pop .6s ease-out,fd-ringrot 4s linear infinite}
 .fd-done-title{font-size:1.4rem;font-weight:700;color:var(--ok);letter-spacing:.06em;text-transform:uppercase;animation:fd-pop .6s ease-out}
