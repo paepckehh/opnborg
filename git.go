@@ -119,12 +119,18 @@ const _refspec = "+refs/heads/*:refs/heads/*"
 // the push targets the currently configured upstream and the right refs. A
 // fresh remote is always created with the default head refspec so pushes have
 // a valid mapping even when callers omit an explicit RefSpecs list.
+//
+// The URL check requires an exact single-URL match: go-git merges every
+// configured fetch "url" and "pushurl" into one cfg.URLs slice (pushurls last)
+// and Remote.Push pushes to cfg.URLs[len-1]. A stale pushurl would therefore
+// pass a cfg.URLs[0] check while silently redirecting the push, so any extra
+// URL (mismatched or merely redundant) is treated as drift and repaired.
 func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 	rem, err := repo.Remote(_origin)
 	if err == nil {
 		cfg := rem.Config()
-		urlDrift := len(cfg.URLs) == 0 || cfg.URLs[0] != upstream
-		refspecDrift := len(cfg.Fetch) == 0 || cfg.Fetch[0] != gitcfg.RefSpec(_refspec)
+		urlDrift := len(cfg.URLs) != 1 || cfg.URLs[0] != upstream
+		refspecDrift := len(cfg.Fetch) != 1 || cfg.Fetch[0] != gitcfg.RefSpec(_refspec)
 		if urlDrift || refspecDrift {
 			if err := repo.DeleteRemote(_origin); err != nil {
 				return err

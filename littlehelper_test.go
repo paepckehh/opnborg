@@ -2300,6 +2300,55 @@ func TestGitEnsureOriginRecreatesOnMissingRefspec(t *testing.T) {
 	}
 }
 
+// TestGitEnsureOriginRecreatesOnStalePushURL verifies that gitEnsureOrigin
+// repairs an origin remote carrying an extra URL (e.g. a stale pushurl). go-git
+// merges every configured fetch url and pushurl into one cfg.URLs slice
+// (pushurls last) and Remote.Push targets cfg.URLs[len-1], so a stale pushurl
+// would pass a cfg.URLs[0] check while silently redirecting pushes to the wrong
+// repo. The drift check must require an exact single-URL match.
+func TestGitEnsureOriginRecreatesOnStalePushURL(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	upstream := "git@github.com:foo/repo.git"
+	stale := "git@github.com:foo/stale.git"
+	// Plant a remote whose first URL matches the configured upstream but which
+	// carries a second, stale URL. Push would target the stale (last) URL.
+	if _, err := repo.CreateRemote(&gitcfg.RemoteConfig{
+		Name: _origin,
+		URLs: []string{upstream, stale},
+	}); err != nil {
+		t.Fatalf("create remote with stale pushurl: %v", err)
+	}
+	if err := gitEnsureOrigin(repo, upstream); err != nil {
+		t.Fatalf("ensure origin: %v", err)
+	}
+	rem, err := repo.Remote(_origin)
+	if err != nil {
+		t.Fatalf("remote: %v", err)
+	}
+	cfg := rem.Config()
+	if len(cfg.URLs) != 1 || cfg.URLs[0] != upstream {
+		t.Fatalf("urls not repaired: %+v", cfg.URLs)
+	}
+	if len(cfg.Fetch) != 1 || string(cfg.Fetch[0]) != _refspec {
+		t.Fatalf("refspec not repaired: %+v", cfg.Fetch)
+	}
+}
+
 // TestGitCheckInRunsGC verifies that gitCheckIn runs the internal gc
 // equivalent after a successful commit: loose objects created by the commit
 // must be consolidated into a packfile, so the .git/objects loose object
