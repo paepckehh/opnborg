@@ -217,7 +217,7 @@ export OPN_HTTPD_COLOR_BG='orange'
 export OPN_PROMETHEUS_WEBUI='http://localhost:9191'
 export OPN_GRAFANA_WEBUI='http://localhost:9090'
 export OPN_GRAFANA_DASHBOARD_FREEBSD='Kczn-jPZz/node-exporter-freebsd'
-export OPN_GRAFANA_DASHBOARD_HAPROXY='rEqu1u5ue/haproxy-2-full'
+export OPN_GRAFANA_DASHBOARD_HAPROXY='P4zs3-ces/haproxy-2-full'
 export OPN_GRAFANA_DASHBOARD_UNIFI='g3kd0-3ds/unpoller'
 export OPN_WAZUH_WEBUI='http://localhost:9292'
 ```
@@ -426,7 +426,7 @@ If you run OPNBORG on NixOS:
 
    ```nix
    imports = [
-     ./opnborg-prometheus-grafana-wazuh.nix
+     ./opnborg-prometheus-grafana.nix
    ];
    ```
 

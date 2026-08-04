@@ -107,7 +107,7 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 ### HTTP WebUI (`srvHttpd.go`, `httpd-handler.go`, `httpd-ui.go`, `httpd-transport.go`)
 
-- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`, optional `/git` (go-git-http smart HTTP server, enabled by `OPN_GITSRV`).
+- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`.
 - Index handler renders HTML built from inlined SVG/HTML constants in `httpd-ui.go`. `_head`, `_forceRedirect` are assembled at `Setup()` time from `OPN_HTTPD_COLOR_FG` / `OPN_HTTPD_COLOR_BG`.
 - Status strings (`_ok`, `_fail`, `_na`, `_degraded`, `_unifi`) are inline animated SVGs defined as `const` in `httpd-ui.go`. `status.go` mutates the `hive` / `unifiStatus` / `unifiWatchStatus` strings under `hiveMutex` / `unifiMutex` / `unifiWatchMutex`.
 - A `addSecurityHeader` middleware wraps index and `/files/`.

@@ -31,7 +31,6 @@
             "OPN_SLEEP" = "60";
             "OPN_DEBUG" = "true";
             "OPN_SYNC_PKG" = "true";
-            "OPN_HTTPD_ENABLE" = "true";
             "OPN_HTTPD_SERVER" = "127.0.0.1:6464";
             "OPN_HTTPD_COLOR_FG" = "white";
             "OPN_HTTPD_COLOR_BG" = "grey";
@@ -39,8 +38,8 @@
             "OPN_RSYSLOG_SERVER" = "192.168.122.1:5140";
             "OPN_GRAFANA_WEBUI" = "http://localhost:9090";
             "OPN_GRAFANA_DASHBOARD_FREEBSD" = "Kczn-jPZz/node-exporter-freebsd";
-            "OPN_GRAFANA_DASHBOARD_HAPROXY" = "rEqu1u-5ue/haproxy-2-full";
-            "OPN_GRAFANA_DASHBOARD_UNPOLLER" = "bbtr-sdzvfd/unpoller";
+            "OPN_GRAFANA_DASHBOARD_HAPROXY" = "P4zs3-ces/haproxy-2-full";
+            "OPN_GRAFANA_DASHBOARD_UNIFI" = "g3kd0-3ds/unpoller";
             "OPN_UNIFI_WEBUI" = "http://localhost:9494";
             "OPN_WAZUH_WEBUI" = "http://localhost:9292";
             "OPN_PROMETHEUS_WEBUI" = "http://localhost:9191";
