@@ -90,7 +90,6 @@ func getStartHTML() string {
 	s.WriteString(getUnifiWatch())
 	s.WriteString(getPKG())
 	s.WriteString(getDashboard(_cfg))
-	s.WriteString(_configButton)
 	s.WriteString(_bodyFooter)
 	s.WriteString(_bodyEnd)
 	s.WriteString(_htmlEnd)

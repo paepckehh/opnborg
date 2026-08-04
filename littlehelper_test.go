@@ -1365,6 +1365,72 @@ func TestGetPKGModernHTML(t *testing.T) {
 	}
 }
 
+// TestGetPKGMasterURL verifies the Manage Plugins button href always points
+// at the configured Master Host firmware plugins page, even when package sync
+// (OPN_SYNC_PKG) is disabled. See setup.go::Setup() where pkgmaster is now set
+// whenever OPN_MASTER is set.
+func TestGetPKGMasterURL(t *testing.T) {
+	savedPkg := syncPKG
+	savedMaster := pkgmaster
+	t.Cleanup(func() {
+		syncPKG = savedPkg
+		pkgmaster = savedMaster
+	})
+	syncPKG = "os-foo,os-bar"
+	pkgmaster = "https://opn-master.example.com" + _plug
+	got := getPKG()
+	if !strings.Contains(got, pkgmaster) {
+		t.Errorf("Manage Plugins button should point at master URL %q: %q", pkgmaster, got)
+	}
+	if !strings.Contains(got, "Manage Plugins") {
+		t.Errorf("missing Manage Plugins label: %q", got)
+	}
+}
+
+// TestConfigButtonInsideDashboard verifies the [ Config Dashboard ] button is
+// rendered inside the BorgDASHBOARD tile (so an operator finds it at the end
+// of the dashboard) and reuses the Backup NOW button styling (btn-force).
+func TestConfigButtonInsideDashboard(t *testing.T) {
+	ensureDisplayDrained(t)
+	config := &OPNCall{Path: t.TempDir()}
+	got := getDashboard(config)
+	if !strings.Contains(got, _configButton) {
+		t.Errorf("dashboard tile should contain the Config Dashboard button: %q", got)
+	}
+	// The button must reuse the btn-force class (same design as Backup NOW).
+	if !strings.Contains(_configButton, "btn btn-force") {
+		t.Errorf("Config Dashboard button should reuse btn-force styling: %q", _configButton)
+	}
+	// The button must sit inside the dashboard tile: the dashboard opens with
+	// <div class="dashboard"> and closes with </div></div>; the button must
+	// appear before that final closing pair.
+	idx := strings.Index(got, _configButton)
+	closeIdx := strings.LastIndex(got, "</div></div>")
+	if idx < 0 || closeIdx < 0 || idx > closeIdx {
+		t.Errorf("Config Dashboard button should be inside the dashboard tile (btn@%d, close@%d): %q", idx, closeIdx, got)
+	}
+	// getStartHTML must no longer render a second copy of _configButton
+	// outside the dashboard tile.
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	savedCfg := _cfg
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+		_cfg = savedCfg
+	})
+	tg = nil
+	hive = nil
+	sleep = "60"
+	_cfg = config
+	full := getStartHTML()
+	if strings.Count(full, "Config Dashboard") != 1 {
+		t.Errorf("Config Dashboard button should appear exactly once in getStartHTML, got %d", strings.Count(full, "Config Dashboard"))
+	}
+}
+
 // --- sync-master.go / sync-pkg.go ----------------------------------------
 
 // TestSplitPlugins covers the strings.Split("", ",") == [""] gotcha that used

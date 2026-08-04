@@ -197,10 +197,14 @@ func Setup() (*OPNCall, error) {
 	if isEnv("OPN_MASTER") {
 		config.Sync.Enable = true
 		config.Sync.Master = os.Getenv("OPN_MASTER")
+		// The Manage Plugins button on the WebUI always points at the
+		// configured Master Host's firmware plugins page, even when package
+		// sync (OPN_SYNC_PKG) is disabled, so the operator can manage the
+		// master plugin set the hive is derived from.
+		pkghost = config.Sync.Master
+		pkgmaster = "https://" + config.Sync.Master + _plug
 		if _, ok := os.LookupEnv("OPN_SYNC_PKG"); ok {
 			config.Sync.PKG.Enable = true
-			pkghost = config.Sync.Master
-			pkgmaster = "https://" + config.Sync.Master + _plug
 		}
 	}
 
