@@ -47,6 +47,7 @@ Run the latest tagged release directly from source — no build step required:
 OPN_TARGETS="opn01.lan,opn02.lan" \
 OPN_APIKEY="..." \
 OPN_APISECRET="..." \
+OPN_UNIFI_WEBUI="127.0.0.1:6464" \
 go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
@@ -118,9 +119,11 @@ export OPN_TARGETS_STANDBY='opn00.lan:8443#RACK-LAB-2ND-FLOOR'
 export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
 export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01-VODAFONE,opn04.lan:8443#RACK-DMZ02-TELEKOM'
 
-export OPN_TARGETS_DESC_STANDBY='Hot standby firewalls'
-export OPN_TARGETS_DESC_INTRANET='Intranet firewalls'
-export OPN_TARGETS_DESC_EXTERNAL='External firewalls'
+export OPN_TARGETS_DESC_STANDBY='Hot-Standby'
+export OPN_TARGETS_DESC_INTRANET='Intranet Builder'
+export OPN_TARGETS_DESC_EXTERNAL='External Internet Gateways'
+
+# or alternative, some (custom) images (go wild ...) instead of text 
 
 export OPN_TARGETS_IMGURL_STANDBY='https://paepcke.de/res/hot.png'
 export OPN_TARGETS_IMGURL_INTRANET='https://paepcke.de/res/int.png'
@@ -132,6 +135,86 @@ The Unifi backup group accepts the same pair of options:
 ```sh
 export OPN_UNIFI_BACKUP_DESC='Network controller'
 export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/unifi.png'
+```
+
+### Unifi controller backup
+
+A complete, self-contained Unifi-only configuration (no OPNsense targets
+required) — opnborg pulls `.unf` backups on every poll cycle, mirrors a
+co-located controller autoBackup folder when present, and exports the Unifi
+inventory into the git-tracked store:
+
+```sh
+# store + git archive
+export OPN_PATH='/var/opnborg'
+export OPN_GIT_ENABLE='1'                         # opt-in: commit each backup pass
+# export OPN_GIT_UPSTREAM='git@github.com:user/opnborg-backups.git'
+# export OPN_GIT_SSH_KEY='/home/opnborg/.ssh/id_ed25519'
+
+# Unifi controller
+export OPN_UNIFI_WEBUI='https://192.168.1.10:8443#RACK-PROD03'
+export OPN_UNIFI_BACKUP_USER='backup'
+export OPN_UNIFI_BACKUP_SECRET='start'
+export OPN_UNIFI_VERSION='8.5.6'                  # required for backup
+export OPN_UNIFI_BACKUP_DESC='Network controller'
+
+# Optional: watch & mirror a co-located controller autoBackup folder
+export OPN_UNIFI_WATCH_PATH='/var/lib/unifi/data/backup/autobackup'
+
+# Optional: nightly inventory export (CSV by default)
+export OPN_UNIFI_EXPORT='1'
+export OPN_UNIFI_FORMAT='csv'
+export OPN_UNIFI_MONGODB_URI='mongodb://127.0.0.1:27117'
+
+# Daemon + WebUI
+export OPN_SLEEP='3600'
+export OPN_HTTPD_SERVER='127.0.0.1:6464'
+```
+
+### Full hive with sync, syslog, git push & dashboards
+
+```sh
+# Targets split into named groups with asset tags
+export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
+export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01,opn04.lan:8443#RACK-DMZ02'
+export OPN_TARGETS_DESC_INTRANET='Intranet firewalls'
+export OPN_TARGETS_DESC_EXTERNAL='External gateways'
+
+# Auth + keypin (see FAQ below for generating OPN_TLSKEYPIN)
+export OPN_APIKEY='+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD'
+export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p'
+export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
+
+# Master + plugin sync from opn01 to the rest of the hive
+export OPN_MASTER='opn01.lan:8443'
+export OPN_SYNC_PKG='1'
+
+# Store + git archive with upstream push
+export OPN_PATH='/var/opnborg'
+export OPN_GIT_ENABLE='1'
+export OPN_GIT_UPSTREAM='git@github.com:user/opnborg-backups.git'
+export OPN_GIT_SSH_KEY='/home/opnborg/.ssh/id_ed25519'
+
+# Internal RFC5424 syslog collector
+export OPN_RSYSLOG_ENABLE='1'
+export OPN_RSYSLOG_SERVER='192.168.0.1:5140'
+
+# Daemon + WebUI (HTTPS, mTLS-protected)
+export OPN_SLEEP='3600'
+export OPN_HTTPD_SERVER='127.0.0.1:6464'
+export OPN_HTTPD_CACERT='/etc/opnborg/server.crt'
+export OPN_HTTPD_CAKEY='/etc/opnborg/server.key'
+export OPN_HTTPD_CACLIENT='/etc/opnborg/ca.crt'   # set to enforce mTLS
+export OPN_HTTPD_COLOR_FG='black'
+export OPN_HTTPD_COLOR_BG='orange'
+
+# Observability dashboards
+export OPN_PROMETHEUS_WEBUI='http://localhost:9191'
+export OPN_GRAFANA_WEBUI='http://localhost:9090'
+export OPN_GRAFANA_DASHBOARD_FREEBSD='Kczn-jPZz/node-exporter-freebsd'
+export OPN_GRAFANA_DASHBOARD_HAPROXY='rEqu1u5ue/haproxy-2-full'
+export OPN_GRAFANA_DASHBOARD_UNIFI='g3kd0-3ds/unpoller'
+export OPN_WAZUH_WEBUI='http://localhost:9292'
 ```
 
 ---
@@ -162,8 +245,9 @@ export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/unifi.png'
           environment = {
             "OPN_PATH" = "/var/opnborg";
             "OPN_TARGETS" = "opn01.lan,opn02.lan";
-            "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD";
-            "OPN_APISECRET" = "8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p";
+            "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W...";
+            "OPN_APISECRET" = "8VbjM3HKKqQW2o...";
+            "OPN_UNIFI_WEBUI" = "127.0.0.1:6464";
           };
         };
       };
@@ -252,9 +336,10 @@ the upstream host is present there before enabling push.
 
 | Variable | Description |
 | --- | --- |
-| `OPN_UNIFI_WEBUI` | Unifi web console target & port (e.g. `http://localhost:8444`); `#` adds an asset tag |
-| `OPN_UNIFI_BACKUP_USER` | Unifi backup user account |
-| `OPN_UNIFI_BACKUP_SECRET` | Unifi backup user account password |
+| `OPN_UNIFI_WEBUI` | Unifi web console target & port (e.g. `https://localhost:8443`); `#` appends an asset tag (e.g. `https://localhost:8443#RACK-PROD03`) |
+| `OPN_UNIFI_BACKUP_USER` | Unifi backup user account (required when `OPN_UNIFI_WEBUI` is set) |
+| `OPN_UNIFI_BACKUP_SECRET` | Unifi backup user account password (required when `OPN_UNIFI_WEBUI` is set) |
+| `OPN_UNIFI_VERSION` | Unifi controller version string (e.g. `8.5.6`); **required** whenever Unifi backup is enabled |
 | `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
 | `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
 | `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a valid `autobackup_meta.json` marker in the folder |
@@ -275,13 +360,13 @@ See [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex) for details
 
 | Variable | Description |
 | --- | --- |
-| `OPN_WAZUH_WEBUI` | Wazuh web console target & port (e.g. `http://localhost:8446`) |
+| `OPN_WAZUH_WEBUI` | Wazuh web console target & port (e.g. `http://localhost:9292`) |
 
 ### Grafana
 
 | Variable | Description |
 | --- | --- |
-| `OPN_GRAFANA_WEBUI` | Grafana web console target & port (e.g. `http://localhost:8446`) |
+| `OPN_GRAFANA_WEBUI` | Grafana web console target & port (e.g. `http://localhost:9090`) |
 | `OPN_GRAFANA_DASHBOARD_FREEBSD` | FreeBSD node dashboard id / name (e.g. `Kczn-jPZz/node-exporter-freebsd`) |
 | `OPN_GRAFANA_DASHBOARD_HAPROXY` | HAProxy node dashboard id / name (e.g. `P4zs3-ces/haproxy-2-full`) |
 | `OPN_GRAFANA_DASHBOARD_UNIFI` | Unpoller dashboard id / name (e.g. `g3kd0-3ds/unpoller`) |
