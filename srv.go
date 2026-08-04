@@ -147,6 +147,10 @@ func srv(config *OPNCall) error {
 			if config.Debug {
 				displayChan <- []byte("[STARTING][BACKUP]")
 			}
+			// mark the backup pass as running so the forced-backup progress
+			// dashboard (armed by /force via forceSeq) can stream live log
+			// lines and detect completion.
+			beginBackupPass()
 			for id, server := range servers {
 				s := strings.Split(server, "#")
 				switch len(s) {
@@ -164,6 +168,7 @@ func srv(config *OPNCall) error {
 
 			// wait till all worker done
 			wg.Wait()
+			endBackupPass()
 		}
 
 		// check files into local git repo

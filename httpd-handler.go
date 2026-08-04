@@ -16,7 +16,10 @@ const (
 	_app   = " [ -= OPNBORG =- ] "
 )
 
-// getForceHandler
+// getForceHandler arms a fresh forced backup pass and returns the animated
+// progress dashboard page. The dashboard polls /progress and streams the live
+// log lines the backup emits, then redirects back to the hive view when the
+// forced pass ends.
 func getForceHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
 		// Non-blocking pokes: if a backup pass is already pending in the
@@ -47,8 +50,13 @@ func getForceHandler() http.Handler {
 			default:
 			}
 		}
+		// arm a fresh forced pass so the dashboard can detect completion
+		// even when a timer-tick pass was already queued in the channel.
+		force := bumpForceSeq()
 		r = headHTML(r)
-		_, _ = r.Write([]byte(_forceRedirect))
+		// inject the live forced-pass sequence into the dashboard so it can
+		// tell its own pass apart from a concurrent timer-tick pass.
+		_, _ = r.Write([]byte(strings.ReplaceAll(_forceRedirect, "%FORCE%", strconv.FormatUint(force, 10))))
 	}
 	return http.HandlerFunc(h)
 }

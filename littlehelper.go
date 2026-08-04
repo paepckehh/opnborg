@@ -31,6 +31,7 @@ var _cfg *OPNCall
 func startLog(config *OPNCall) {
 	go func() {
 		for msg := range displayChan {
+			appendProgress(msg)
 			outSlice(msg, config)
 		}
 		display.Done()

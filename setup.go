@@ -186,8 +186,14 @@ func Setup() (*OPNCall, error) {
 		css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
 		s.WriteString(css)
 		_head = s.String() + "<meta http-equiv=\"refresh\" content=\"15\">" + _lf + "</head>" + _lf
-		_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
-		_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceInfo + _bodyEnd + _htmlEnd
+		// The forced-backup dashboard polls /progress for live log lines and
+		// redirects via JS once the pass ends. The meta refresh is only a
+		// long fallback safety net in case JS is disabled or the pass hangs.
+		_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"180; url='../'\">" + _lf + "</head>" + _lf
+		// %FORCE% is left as a placeholder here and substituted per request
+		// by the /force handler with the live forced-pass sequence, so the
+		// dashboard can tell its own pass apart from a timer-tick pass.
+		_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceDashboard + _bodyEnd + _htmlEnd
 	}
 
 	// config master

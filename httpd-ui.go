@@ -24,6 +24,146 @@ const (
 	_forceButton  = "<a href=\"./force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
 	_configButton = "<a href=\"./config\" class=\"btn btn-force\" target=\"_blank\">[ Config Dashboard ]</a>"
 
+	// _forceDashboard is the animated forced-backup progress screen. It
+	// replaces the static "wait for redirect" page and streams the live log
+	// lines the backup pass emits (polled from /progress) into a terminal
+	// console, with a pulsing status, animated progress bar and live stats.
+	// The %FG% / %BG% tokens are substituted at Setup() time from the
+	// OPN_HTTPD_COLOR_FG / OPN_HTTPD_COLOR_BG theme colors so the dashboard
+	// inherits the operator's configured palette.
+	_forceDashboard = `<section class="force-dash">
+<div class="force-dash-inner">
+<div class="fd-status"><span class="fd-tag" id="fd-status-tag">[ performing backup ]</span><span class="fd-elapsed" id="fd-elapsed">00:00</span></div>
+<div class="fd-spinner"><span class="fd-spin-dot"></span><span class="fd-spin-dot"></span><span class="fd-spin-dot"></span></div>
+<div class="fd-progress"><div class="fd-progress-bar" id="fd-progress-bar"></div></div>
+<div class="fd-stats">
+<div class="fd-stat"><span class="fd-stat-n" id="fd-lines">0</span><span class="fd-stat-l">log lines</span></div>
+<div class="fd-stat"><span class="fd-stat-n" id="fd-servers">0</span><span class="fd-stat-l">servers</span></div>
+<div class="fd-stat"><span class="fd-stat-n" id="fd-changes">0</span><span class="fd-stat-l">changes</span></div>
+<div class="fd-stat"><span class="fd-stat-n" id="fd-errors">0</span><span class="fd-stat-l">errors</span></div>
+</div>
+<div class="fd-console-wrap">
+<div class="fd-console-head">live backup stream</div>
+<div class="fd-console" id="fd-console"><div class="fd-line fd-muted">waiting for backup pass to start...</div></div>
+</div>
+<div class="fd-hint">redirecting back to the hive view when the pass completes</div>
+</div>
+</section>
+<style>
+.force-dash{max-width:920px;margin:1.5rem auto;padding:1.25rem;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 0 0 1px rgba(74,158,255,.05),0 8px 32px rgba(0,0,0,.35)}
+.force-dash-inner{display:flex;flex-direction:column;gap:1rem}
+.fd-status{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.fd-tag{font-size:1.1rem;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;animation:fd-pulse 1.4s ease-in-out infinite}
+.fd-done .fd-tag{color:var(--ok);animation:none}
+.fd-elapsed{color:var(--muted);font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.fd-spinner{display:flex;gap:.4rem;justify-content:center;padding:.25rem 0}
+.fd-spin-dot{width:11px;height:11px;border-radius:50%;background:var(--accent);animation:fd-bounce 1.2s ease-in-out infinite}
+.fd-spin-dot:nth-child(2){animation-delay:.18s}
+.fd-spin-dot:nth-child(3){animation-delay:.36s}
+.fd-done .fd-spin-dot{background:var(--ok);animation:none}
+.fd-progress{height:8px;background:var(--bg);border:1px solid var(--border);border-radius:99px;overflow:hidden;position:relative}
+.fd-progress-bar{position:absolute;inset:0 100% 0 0;background:linear-gradient(90deg,transparent,var(--accent),var(--accent),transparent);background-size:200% 100%;animation:fd-shimmer 1.6s linear infinite;border-radius:99px}
+.fd-done .fd-progress-bar{inset:0;background:var(--ok);animation:none}
+.fd-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem}
+.fd-stat{display:flex;flex-direction:column;align-items:center;padding:.5rem;background:var(--card-2);border:1px solid var(--border);border-radius:8px}
+.fd-stat-n{font-size:1.5rem;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums;line-height:1}
+.fd-stat-l{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-top:.2rem}
+.fd-console-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0f14}
+.fd-console-head{padding:.35rem .7rem;background:#141a22;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.4rem}
+.fd-console-head::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:fd-blink 1.2s ease-in-out infinite}
+.fd-done .fd-console-head::before{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:none}
+.fd-console{height:300px;overflow-y:auto;padding:.5rem .7rem;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.45}
+.fd-line{white-space:pre-wrap;word-break:break-all;padding:.1rem 0;border-bottom:1px solid rgba(255,255,255,.02);animation:fd-in .25s ease-out}
+.fd-muted{color:var(--muted);font-style:italic}
+.fd-ok{color:var(--ok)}
+.fd-err{color:var(--err)}
+.fd-warn{color:var(--warn)}
+.fd-info{color:var(--accent)}
+.fd-line .fd-ts{color:var(--muted);margin-right:.4rem;opacity:.7}
+.fd-line .fd-br{color:var(--muted);margin-right:.3rem}
+.fd-hint{color:var(--muted);font-size:.78rem;text-align:center}
+.fd-done .fd-hint{color:var(--ok)}
+@keyframes fd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes fd-bounce{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-8px);opacity:1}}
+@keyframes fd-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes fd-blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fd-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+@media(max-width:640px){.fd-stats{grid-template-columns:repeat(2,1fr)}.fd-console{height:240px}}
+</style>
+<script>
+(function(){
+  const FORCE=%FORCE%;
+  const POLL_MS=800;
+  const MAX_WAIT_MS=180000;
+  const el={
+    root:document.querySelector('.force-dash'),
+    status:document.getElementById('fd-status-tag'),
+    elapsed:document.getElementById('fd-elapsed'),
+    bar:document.getElementById('fd-progress-bar'),
+    console:document.getElementById('fd-console'),
+    lines:document.getElementById('fd-lines'),
+    servers:document.getElementById('fd-servers'),
+    changes:document.getElementById('fd-changes'),
+    errors:document.getElementById('fd-errors')
+  };
+  let since=0, lineCount=0, seen=new Set(), sawBusy=false, redirected=false;
+  const esc=(s)=>s.replace(/[&<>]/g,(c)=>({'&':'&','<':'<','>':'>'}[c]));
+  function classify(msg){
+    if(/ERROR|FAIL|UNABLE/.test(msg))return'fd-err';
+    if(/WARN/.test(msg))return'fd-warn';
+    if(/OK|SUCCESS|FINISH|SUCCESSFUL|UPTODATE/.test(msg))return'fd-ok';
+    if(/BACKUP|START|FETCH|GIT|SYNC|UNIFI|SERVICE/.test(msg))return'fd-info';
+    return'';
+  }
+  function fmtMs(ms){
+    const s=Math.max(0,Math.floor(ms/1000));
+    return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  }
+  function addLine(l){
+    if(seen.has(l.seq))return;
+    seen.add(l.seq);
+    lineCount++;
+    const d=new Date(l.ts);
+    const ts=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+    const div=document.createElement('div');
+    div.className='fd-line '+classify(l.msg);
+    div.innerHTML='<span class="fd-ts">'+ts+'</span><span class="fd-br">|</span>'+esc(l.msg);
+    el.console.appendChild(div);
+    el.console.scrollTop=el.console.scrollHeight;
+  }
+  function setStats(lines){
+    el.lines.textContent=lineCount;
+    let srv=0,ch=0,er=0;
+    for(const m of lines){
+      if(/\[BACKUP\]\[START\]\[SERVER\]|\[BACKUP\]\[SERVER\]\[NO-CHANGE\]|\[BACKUP\]\[OK\]|\[BACKUP\]\[ERROR\]/.test(m.msg)){
+        const mm=/SERVER\] ([^ ]+)/.exec(m.msg);if(mm&&!seen.has(mm[1]+'$')){seen.add(mm[1]+'$');srv++;}
+      }
+      if(/OK|SUCCESS|STORE-CHECKIN/.test(m.msg))ch++;
+      if(/ERROR|FAIL/.test(m.msg))er++;
+    }
+    el.servers.textContent=srv;el.changes.textContent=ch;el.errors.textContent=er;
+  }
+  function redirect(){if(redirected)return;redirected=true;el.root.classList.add('fd-done');el.status.textContent='[ backup complete ]';setTimeout(()=>window.location.href='../',1200);}
+  async function poll(){
+    if(redirected)return;
+    try{
+      const r=await fetch('progress?since='+since,{cache:'no-store',headers:{'Cache-Control':'no-store'}});
+      const d=await r.json();
+      const fresh=[];
+      for(const l of d.lines||[]){if(l.seq>since){since=l.seq;fresh.push(l);}addLine(l);}
+      setStats(fresh);
+      el.elapsed.textContent=fmtMs(d.elapsed_ms||0);
+      if(d.busy)sawBusy=true;
+      if(sawBusy&&!d.busy){redirect();return;}
+      if(FORCE>0&&d.pass>=FORCE&&!d.busy){redirect();return;}
+    }catch(e){/* transient */}
+    setTimeout(poll,POLL_MS);
+  }
+  setTimeout(()=>{if(!redirected){document.querySelector('.fd-hint').textContent='timeout: redirecting back to the hive view';redirect();}},MAX_WAIT_MS);
+  poll();
+})();
+</script>`
+
 	_git = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" /></svg><span>Git</span>`
 
 	_social = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M18.648 15.254c-1.816 1.763 -6.648 1.626 -6.648 1.626a18.262 18.262 0 0 1 -3.288 -.256c1.127 1.985 4.12 2.81 8.982 2.475c-1.945 2.013 -13.598 5.257 -13.668 -7.636l-.026 -1.154c0 -3.036 .023 -4.115 1.352 -5.633c1.671 -1.91 6.648 -1.666 6.648 -1.666s4.977 -.243 6.648 1.667c1.329 1.518 1.352 2.597 1.352 5.633s-.456 4.074 -1.352 4.944z" /><path d="M12 11.204v-2.926c0 -1.258 -.895 -2.278 -2 -2.278s-2 1.02 -2 2.278v4.722m4 -4.722c0 -1.258 .895 -2.278 2 -2.278s2 1.02 2 2.278v4.722" /></svg><span>Mastodon</span>`

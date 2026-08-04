@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -2695,5 +2697,211 @@ func TestGetForceHandlerNonBlocking(t *testing.T) {
 		// handler returned without blocking — pass
 	case <-time.After(2 * time.Second):
 		t.Fatal("getForceHandler blocked on a full update channel (non-blocking poke regressed)")
+	}
+}
+
+// --- progress.go: capture ring + busy/pass/force trackers ----------------
+
+// resetProgressState restores the progress package-global state to a clean
+// baseline. Tests mutate these globals; the dashboard and display engine both
+// read them, so leaving stale state would cross-contaminate tests.
+func resetProgressState() {
+	progressMu.Lock()
+	progressRing = make([]progressLine, 0, _progressCap)
+	progressSeq = 0
+	progressStart = time.Time{}
+	progressMu.Unlock()
+	backupBusy.Store(false)
+	passSeq.Store(0)
+	forceSeq.Store(0)
+}
+
+// TestAppendProgressAppend verifies lines are captured in order and each gets
+// a strictly increasing sequence number.
+func TestAppendProgressAppend(t *testing.T) {
+	resetProgressState()
+	for _, msg := range []string{"[BACKUP][START][SERVER] opn01", "[BACKUP][OK] done", "[GIT][REPO][COMMIT] x"} {
+		appendProgress([]byte(msg))
+	}
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	if len(progressRing) != 3 {
+		t.Fatalf("captured %d lines, want 3", len(progressRing))
+	}
+	for i := 1; i < len(progressRing); i++ {
+		if progressRing[i].Seq <= progressRing[i-1].Seq {
+			t.Errorf("line %d seq %d not greater than prev %d", i, progressRing[i].Seq, progressRing[i-1].Seq)
+		}
+	}
+	if progressRing[2].Msg != "[GIT][REPO][COMMIT] x" {
+		t.Errorf("last msg = %q", progressRing[2].Msg)
+	}
+}
+
+// TestAppendProgressRingCap verifies the ring buffer never grows beyond the
+// configured cap and that the newest entries are retained once it overflows.
+func TestAppendProgressRingCap(t *testing.T) {
+	resetProgressState()
+	for i := 0; i < _progressCap+50; i++ {
+		appendProgress([]byte("line-" + strconv.Itoa(i)))
+	}
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	if len(progressRing) != _progressCap {
+		t.Fatalf("ring grew to %d, want cap %d", len(progressRing), _progressCap)
+	}
+	// the newest retained entry must be the most recently appended line
+	last := progressRing[len(progressRing)-1]
+	if last.Msg != "line-"+strconv.Itoa(_progressCap+49) {
+		t.Errorf("newest = %q, want line-%d", last.Msg, _progressCap+49)
+	}
+	// the oldest retained entry must be exactly the one that survived eviction
+	oldest := progressRing[0]
+	want := "line-" + strconv.Itoa(50)
+	if oldest.Msg != want {
+		t.Errorf("oldest = %q, want %q", oldest.Msg, want)
+	}
+	// sequence numbers must remain strictly increasing across the whole ring
+	for i := 1; i < len(progressRing); i++ {
+		if progressRing[i].Seq <= progressRing[i-1].Seq {
+			t.Fatalf("ring ordering broke at index %d", i)
+		}
+	}
+}
+
+// TestBackupPassLifecycle verifies beginBackupPass/endBackupPass flip the
+// atomic busy flag and bump the pass counter.
+func TestBackupPassLifecycle(t *testing.T) {
+	resetProgressState()
+	if backupBusy.Load() {
+		t.Fatal("busy should start false")
+	}
+	before := passSeq.Load()
+	beginBackupPass()
+	if !backupBusy.Load() {
+		t.Error("busy should be true after beginBackupPass")
+	}
+	if passSeq.Load() != before+1 {
+		t.Errorf("passSeq = %d, want %d", passSeq.Load(), before+1)
+	}
+	if progressStart.IsZero() {
+		t.Error("progressStart should be set by beginBackupPass")
+	}
+	endBackupPass()
+	if backupBusy.Load() {
+		t.Error("busy should be false after endBackupPass")
+	}
+}
+
+// TestBumpForceSeq verifies each /force poke increments the force counter and
+// returns the new value.
+func TestBumpForceSeq(t *testing.T) {
+	resetProgressState()
+	a := bumpForceSeq()
+	b := bumpForceSeq()
+	if b != a+1 {
+		t.Errorf("second bump = %d, want %d", b, a+1)
+	}
+	if forceSeq.Load() != b {
+		t.Errorf("forceSeq = %d, want %d", forceSeq.Load(), b)
+	}
+}
+
+// TestProgressHandlerJSON verifies the /progress endpoint returns incremental
+// log lines (since cursor), the busy state, and counters as JSON.
+func TestProgressHandlerJSON(t *testing.T) {
+	resetProgressState()
+	appendProgress([]byte("[BACKUP][START][SERVER] opn01"))
+	appendProgress([]byte("[BACKUP][OK] done"))
+	beginBackupPass()
+	defer endBackupPass()
+
+	h := getProgressHandler()
+
+	// first poll: full snapshot
+	req := httptest.NewRequest(http.MethodGet, "/progress", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("content-type = %q, want json", got)
+	}
+	var snap progressSnapshot
+	if err := json.Unmarshal(rr.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("unmarshal: %v\nbody: %s", err, rr.Body.String())
+	}
+	if !snap.Busy {
+		t.Error("busy should be true during a pass")
+	}
+	if len(snap.Lines) != 2 {
+		t.Fatalf("lines = %d, want 2", len(snap.Lines))
+	}
+	if snap.Lines[0].Msg != "[BACKUP][START][SERVER] opn01" {
+		t.Errorf("first line = %q", snap.Lines[0].Msg)
+	}
+
+	// the highest seq we have seen so far
+	since := snap.Lines[1].Seq
+
+	// append one more, then poll with ?since=<highest> and expect only the new
+	appendProgress([]byte("[FINISH][BACKUP][ALL]"))
+
+	req2 := httptest.NewRequest(http.MethodGet, "/progress?since="+strconv.FormatUint(since, 10), nil)
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, req2)
+	var snap2 progressSnapshot
+	if err := json.Unmarshal(rr2.Body.Bytes(), &snap2); err != nil {
+		t.Fatalf("unmarshal 2: %v\nbody: %s", err, rr2.Body.String())
+	}
+	if len(snap2.Lines) != 1 {
+		t.Fatalf("incremental lines = %d, want 1", len(snap2.Lines))
+	}
+	if snap2.Lines[0].Msg != "[FINISH][BACKUP][ALL]" {
+		t.Errorf("incremental line = %q", snap2.Lines[0].Msg)
+	}
+	if snap2.Lines[0].Seq <= since {
+		t.Errorf("new seq %d not greater than since %d", snap2.Lines[0].Seq, since)
+	}
+}
+
+// TestProgressHandlerEmptyLinesIsArray verifies the endpoint emits a JSON
+// array (not null) when no lines are available, so the browser JS can safely
+// iterate.
+func TestProgressHandlerEmptyLinesIsArray(t *testing.T) {
+	resetProgressState()
+	req := httptest.NewRequest(http.MethodGet, "/progress", nil)
+	rr := httptest.NewRecorder()
+	getProgressHandler().ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), `"lines":[]`) {
+		t.Errorf("expected empty lines array, got: %s", rr.Body.String())
+	}
+}
+
+// TestGetForceHandlerInjectsForceSeq verifies the /force handler substitutes
+// the live forced-pass sequence into the served dashboard HTML (the %FORCE%
+// placeholder set by Setup) so the dashboard can distinguish its own pass
+// from a concurrent timer-tick pass.
+func TestGetForceHandlerInjectsForceSeq(t *testing.T) {
+	resetProgressState()
+	// Simulate the template Setup would have built. The dashboard JS reads
+	// the injected FORCE value to detect when its forced pass has run.
+	saved := _forceRedirect
+	_forceRedirect = "<html><body>FORCE=%FORCE% force-dash</body></html>"
+	t.Cleanup(func() { _forceRedirect = saved })
+
+	rr := httptest.NewRecorder()
+	req := &http.Request{Header: http.Header{}}
+	getForceHandler().ServeHTTP(rr, req)
+
+	body := rr.Body.String()
+	if strings.Contains(body, "%FORCE%") {
+		t.Errorf("placeholder not substituted: %s", body)
+	}
+	if !strings.Contains(body, "force-dash") {
+		t.Errorf("dashboard body missing: %s", body)
+	}
+	// the injected value must equal the current forceSeq counter
+	want := strconv.FormatUint(forceSeq.Load(), 10)
+	if !strings.Contains(body, "FORCE="+want) {
+		t.Errorf("body %q does not contain injected FORCE=%s", body, want)
 	}
 }
