@@ -2422,6 +2422,24 @@ func TestDashboardGatherBackupFolderAndGitRepo(t *testing.T) {
 		}
 	}
 
+	// one Unifi controller backup slot with two .unf archive entries
+	{
+		srv := _uniWatch
+		archDir := filepath.Join(store, srv, ".archive", "2024", "06")
+		if err := os.MkdirAll(archDir, 0770); err != nil {
+			t.Fatalf("mkdir unifi: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(archDir, "20240601T100000.000Z-"+srv+".unf"), []byte("unifi1"), 0660); err != nil {
+			t.Fatalf("write unifi archive: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(archDir, "20240602T100000.000Z-"+srv+".unf"), []byte("unifi2"), 0660); err != nil {
+			t.Fatalf("write unifi archive: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, srv, "current.unf"), []byte("unifi2"), 0660); err != nil {
+			t.Fatalf("write current.unf: %v", err)
+		}
+	}
+
 	// init git + commit so HEAD is non-empty
 	if err := gitInit(config); err != nil {
 		t.Fatalf("gitInit: %v", err)
@@ -2431,11 +2449,14 @@ func TestDashboardGatherBackupFolderAndGitRepo(t *testing.T) {
 	}
 
 	d := gatherDashboard(config)
-	if d.servers != 2 {
-		t.Errorf("servers = %d, want 2", d.servers)
+	if d.servers != 3 {
+		t.Errorf("servers = %d, want 3", d.servers)
 	}
-	if d.archives != 2 {
-		t.Errorf("archives = %d, want 2", d.archives)
+	if d.archives != 4 {
+		t.Errorf("archives = %d, want 4", d.archives)
+	}
+	if d.unifiArchives != 2 {
+		t.Errorf("unifiArchives = %d, want 2", d.unifiArchives)
 	}
 	if d.archiveBytes < 6 {
 		t.Errorf("archiveBytes = %d, want >=6", d.archiveBytes)

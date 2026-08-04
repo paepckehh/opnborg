@@ -25,6 +25,7 @@ type dashboardStats struct {
 	storePath     string
 	servers       int
 	archives      int
+	unifiArchives int // archive entries with a .unf extension (Unifi controller backups)
 	archiveBytes  int64
 	newestArchive time.Time
 	// git local repo
@@ -124,6 +125,9 @@ func gatherBackupFolder(config *OPNCall, d *dashboardStats) {
 		// an archive entry lives under a <server>/.archive/... subtree
 		if strings.Contains(filepath.ToSlash(path), "/"+_archive+"/") {
 			d.archives++
+			if strings.HasSuffix(info.Name(), ".unf") {
+				d.unifiArchives++
+			}
 			if fi, err := info.Info(); err == nil {
 				d.archiveBytes += fi.Size()
 				if fi.ModTime().After(d.newestArchive) {
@@ -323,6 +327,7 @@ func getDashboard(config *OPNCall) string {
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Path</span><span class=\"dash-value\">" + html.EscapeString(d.storePath) + "</span></div>")
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Servers</span><span class=\"dash-value\">" + strconv.Itoa(d.servers) + "</span></div>")
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Archives</span><span class=\"dash-value\">" + strconv.Itoa(d.archives) + "</span></div>")
+	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Unifi Backups</span><span class=\"dash-value\">" + strconv.Itoa(d.unifiArchives) + "</span></div>")
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Size</span><span class=\"dash-value\">" + humanBytes(d.archiveBytes) + "</span></div>")
 	newest := "n/a"
 	if !d.newestArchive.IsZero() {
