@@ -21,8 +21,9 @@ const (
 	_bodySemVer = "<div class=\"semver\">[ " + SemVer + " ]</div>" + _lf
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
-	_forceInfo   = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
-	_forceButton = "<a href=\"./force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
+	_forceInfo    = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
+	_forceButton  = "<a href=\"./force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
+	_configButton = "<a href=\"./config\" class=\"btn btn-cfg\">[ Config Dashboard ]</a>"
 
 	_git = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" /></svg><span>Git</span>`
 
@@ -74,6 +75,9 @@ nav a button:hover{border-color:var(--accent);background:var(--card-2)}
 .backup-section b{color:var(--accent)}
 .btn-force{display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600}
 .btn-force:hover{filter:brightness(1.1)}
+.btn-cfg{display:inline-block;margin:.5rem .5rem .5rem 0;padding:.5rem 1rem;background:var(--card-2);color:var(--fg);border:1px solid var(--border);border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:.85rem}
+.btn-cfg:hover{border-color:var(--accent);filter:brightness(1.1)}
+.cfg-intro{color:var(--muted);font-size:.8rem;margin-bottom:.75rem}
 .force-info{text-align:center;padding:2rem 0}
 .force-info h2{color:var(--accent)}
 footer{margin-top:2rem;padding:1rem 0;border-top:2px solid var(--border);display:flex;flex-direction:column;gap:.3rem}

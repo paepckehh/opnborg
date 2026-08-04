@@ -38,6 +38,7 @@ func startWeb(c *OPNCall) {
 
 	// handler
 	mux.Handle("/", addSecurityHeader(getIndexHandler()))
+	mux.Handle("/config", addSecurityHeader(getConfigDashboardHandler()))
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path)))))
 	mux.Handle("/force", getForceHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())

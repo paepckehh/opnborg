@@ -86,6 +86,7 @@ func getStartHTML() string {
 	s.WriteString(_bodyStart)
 	s.WriteString(_bodyHead)
 	s.WriteString(getNavi())
+	s.WriteString(_configButton)
 	s.WriteString(getHive())
 	s.WriteString(getUnifiWatch())
 	s.WriteString(getPKG())
