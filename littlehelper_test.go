@@ -1401,13 +1401,13 @@ func TestConfigButtonInsideDashboard(t *testing.T) {
 	if !strings.Contains(_configButton, "btn btn-force") {
 		t.Errorf("Config Dashboard button should reuse btn-force styling: %q", _configButton)
 	}
-	// The button must sit inside the dashboard tile: the dashboard opens with
-	// <div class="dashboard"> and closes with </div></div>; the button must
-	// appear before that final closing pair.
-	idx := strings.Index(got, _configButton)
-	closeIdx := strings.LastIndex(got, "</div></div>")
-	if idx < 0 || closeIdx < 0 || idx > closeIdx {
-		t.Errorf("Config Dashboard button should be inside the dashboard tile (btn@%d, close@%d): %q", idx, closeIdx, got)
+	// The button must sit inside the dashboard tile but OUTSIDE the
+	// dashboard-grid, so it renders as a full-width last line below the
+	// panels (mirroring the Backup NOW / Manage Plugins buttons). The grid
+	// wrapper closes with </div> immediately before the button, and only
+	// the dashboard's own closing </div> follows it.
+	if !strings.Contains(got, "</div>"+_configButton+"</div>") {
+		t.Errorf("Config Dashboard button should be on its own line after the dashboard-grid close and before the dashboard close: %q", got)
 	}
 	// getStartHTML must no longer render a second copy of _configButton
 	// outside the dashboard tile.

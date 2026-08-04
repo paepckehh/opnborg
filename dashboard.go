@@ -408,8 +408,8 @@ func getDashboard(config *OPNCall) string {
 	}
 	s.WriteString("</div>")
 
+	s.WriteString("</div>")
 	s.WriteString(_configButton)
-
-	s.WriteString("</div></div>")
+	s.WriteString("</div>")
 	return s.String()
 }
