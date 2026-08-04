@@ -134,6 +134,7 @@ func Setup() (*OPNCall, error) {
 	config.Git.Enable = isEnv("OPN_GIT_ENABLE")
 	config.Git.Upstream = os.Getenv("OPN_GIT_UPSTREAM")
 	config.Git.SSHKey = os.Getenv("OPN_GIT_SSH_KEY")
+	config.Git.SSHHostKey = os.Getenv("OPN_GIT_SSH_HOSTKEY")
 	if err := validateGitConfig(config); err != nil {
 		return nil, err
 	}

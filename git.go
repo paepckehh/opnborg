@@ -3,6 +3,7 @@ package opnborg
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	xssh "golang.org/x/crypto/ssh"
 )
 
 const (
@@ -97,16 +99,60 @@ func sshUserFromURL(upstream string) string {
 	return _defaultSSHUser
 }
 
-// gitSSHAuth builds an SSH public-key auth method from the private key file at
-// keyPath, using the user derived from the upstream URL. Host key verification
-// relies on go-git's default known-hosts callback (~/.ssh/known_hosts).
-func gitSSHAuth(upstream, keyPath string) (*ssh.PublicKeys, error) {
+// gitSSHAuth builds an SSH public-key auth method from the private key file
+// at keyPath, using the user derived from the upstream URL. Host key
+// verification never reads or writes a known_hosts file (go-git's default
+// callback would fail with "cannot create known hosts callback: $HOME is not
+// defined" in container/CI runs that unset HOME). Instead:
+//
+//   - When hostKeyFingerprint is empty, host key verification is skipped
+//     entirely (insecure) so the upstream push works in unattended
+//     environments. Pin a fingerprint whenever the upstream is reachable over
+//     an untrusted network.
+//   - When hostKeyFingerprint is set, only an upstream host whose presented
+//     public key SHA-256 fingerprint matches is accepted; any other key
+//     aborts the push.
+//
+// The fingerprint may be given either in the OpenSSH presentation form
+// ("SHA256:<base64-no-pad>") or as the raw base64 body, and is matched
+// case-insensitively against xssh.FingerprintSHA256(remote).
+func gitSSHAuth(upstream, keyPath, hostKeyFingerprint string) (*ssh.PublicKeys, error) {
 	auth, err := ssh.NewPublicKeysFromFile(sshUserFromURL(upstream), keyPath, "")
 	if err != nil {
 		return nil, fmt.Errorf("ssh key %s: %w", keyPath, err)
 	}
+	want := normalizeFingerprint(hostKeyFingerprint)
+	if want == "" {
+		auth.HostKeyCallback = xssh.InsecureIgnoreHostKey()
+		return auth, nil
+	}
+	auth.HostKeyCallback = func(_ string, _ net.Addr, key xssh.PublicKey) error {
+		got := normalizeFingerprint(xssh.FingerprintSHA256(key))
+		if strings.EqualFold(got, want) {
+			return nil
+		}
+		return fmt.Errorf("upstream host key fingerprint mismatch: got SHA256:%s, want SHA256:%s", got, want)
+	}
 	return auth, nil
 }
+
+// normalizeFingerprint reduces a host-key fingerprint to its comparable base64
+// body so both "SHA256:<base64>" and bare "<base64>" inputs match. An empty
+// input yields an empty result.
+func normalizeFingerprint(fp string) string {
+	fp = strings.TrimSpace(fp)
+	if fp == "" {
+		return ""
+	}
+	if strings.HasPrefix(fp, _sshFingerprintPrefix) {
+		fp = fp[len(_sshFingerprintPrefix):]
+	}
+	return fp
+}
+
+// _sshFingerprintPrefix is the OpenSSH SHA-256 fingerprint prefix used by
+// xssh.FingerprintSHA256 and ssh-keyscan output.
+const _sshFingerprintPrefix = "SHA256:"
 
 // _refspec is the default fetch/push refspec written into the origin remote so
 // every local branch tracks its upstream counterpart. The leading "+" makes the
@@ -205,7 +251,7 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 		recordPush(false, "missing OPN_GIT_SSH_KEY")
 		return errors.New("git push: upstream configured but OPN_GIT_SSH_KEY is empty")
 	}
-	auth, err := gitSSHAuth(upstream, config.Git.SSHKey)
+	auth, err := gitSSHAuth(upstream, config.Git.SSHKey, config.Git.SSHHostKey)
 	if err != nil {
 		recordPush(false, "ssh key: "+err.Error())
 		return err

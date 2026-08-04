@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.124"
+const SemVer = "v0.1.125"
 
 // global var
 var (
@@ -60,6 +60,17 @@ type OPNCall struct {
 		Enable   bool   // manage the backup storage folder as a local git repo with auto commit (default: false)
 		Upstream string // upstream SSH git URL to sync with (e.g. git@github.com:user/repo.git); empty disables push
 		SSHKey   string // path to the PEM-encoded SSH private key used for upstream auth (required when Upstream is set)
+		// SSHHostKey is the optional SHA-256 fingerprint of the upstream SSH
+		// host public key (format "SHA256:base64...", matching the output of
+		// `ssh-keyscan -t rsa,ed25519 <host>` / ssh's "Server host key"
+		// banner). When set, the upstream connection refuses any host whose
+		// presented fingerprint does not match. When unset, host key
+		// verification is skipped entirely (insecure): opnborg never writes
+		// or reads a known_hosts file, so in unattended container/CI
+		// deployments where $HOME is undefined this avoids the go-git
+		// "cannot create known hosts callback" fatal exit. Pin a fingerprint
+		// whenever the upstream is reachable over an untrusted network.
+		SSHHostKey string
 	}
 	Unifi struct {
 		WebUI   *url.URL

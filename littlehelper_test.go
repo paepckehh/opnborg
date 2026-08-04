@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,6 +14,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +31,7 @@ import (
 	"time"
 
 	gitcfg "github.com/go-git/go-git/v5/config"
+	xssh "golang.org/x/crypto/ssh"
 )
 
 // withEnv sets an env var for the duration of the test and restores the
@@ -2059,6 +2062,98 @@ func TestSSHUserFromURL(t *testing.T) {
 	}
 }
 
+// TestNormalizeFingerprint covers the host-key fingerprint normalisation: the
+// OpenSSH "SHA256:" prefix is optional and both forms must compare equal.
+func TestNormalizeFingerprint(t *testing.T) {
+	cases := map[string]string{
+		"":              "",
+		"  ":            "",
+		"abc":           "abc",
+		"SHA256:abc":    "abc",
+		"SHA256:AbC==":  "AbC==",
+		"  SHA256:abc ": "abc",
+	}
+	for in, want := range cases {
+		if got := normalizeFingerprint(in); got != want {
+			t.Errorf("normalizeFingerprint(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestGitSSHAuthHostKeyCallback verifies gitSSHAuth installs a host-key
+// callback rather than relying on go-git's default known_hosts file lookup
+// (which fails with "cannot create known hosts callback: $HOME is not
+// defined" in container/CI runs that unset HOME). With no fingerprint
+// configured the callback must accept any host key (insecure mode); with a
+// fingerprint set, only a matching key is accepted.
+func TestGitSSHAuthHostKeyCallback(t *testing.T) {
+	upstream := "git@github.com:user/repo.git"
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	// Generate a real ed25519 key pair so ssh.ParsePrivateKey succeeds.
+	goodPub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	pemBlock, err := xssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatalf("marshal private key: %v", err)
+	}
+	if err := os.WriteFile(key, pem.EncodeToMemory(pemBlock), 0600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	// Build x/crypto/ssh PublicKey instances for the good and a wrong key.
+	goodSSHKey, err := xssh.NewPublicKey(goodPub)
+	if err != nil {
+		t.Fatalf("new good ssh pubkey: %v", err)
+	}
+	wrongPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate wrong key: %v", err)
+	}
+	wrongSSHKey, err := xssh.NewPublicKey(wrongPub)
+	if err != nil {
+		t.Fatalf("new wrong ssh pubkey: %v", err)
+	}
+	goodFP := xssh.FingerprintSHA256(goodSSHKey)
+
+	// Insecure mode (no fingerprint) must yield a non-nil callback.
+	auth, err := gitSSHAuth(upstream, key, "")
+	if err != nil {
+		t.Fatalf("insecure gitSSHAuth: %v", err)
+	}
+	if auth.HostKeyCallback == nil {
+		t.Fatalf("insecure mode must set a HostKeyCallback (nil would fall back to known_hosts)")
+	}
+	if err := auth.HostKeyCallback("host", nil, goodSSHKey); err != nil {
+		t.Fatalf("insecure callback must accept any key: %v", err)
+	}
+
+	// Pinned mode: only a matching fingerprint is accepted.
+	auth2, err := gitSSHAuth(upstream, key, goodFP)
+	if err != nil {
+		t.Fatalf("pinned gitSSHAuth: %v", err)
+	}
+	if auth2.HostKeyCallback == nil {
+		t.Fatalf("pinned mode must set a HostKeyCallback")
+	}
+	if err := auth2.HostKeyCallback("host", nil, goodSSHKey); err != nil {
+		t.Fatalf("pinned callback must accept matching key: %v", err)
+	}
+	if err := auth2.HostKeyCallback("host", nil, wrongSSHKey); err == nil {
+		t.Fatalf("pinned callback must reject a mismatching key")
+	}
+
+	// The bare-base64 form (no "SHA256:" prefix) must compare equal too.
+	auth3, err := gitSSHAuth(upstream, key, strings.TrimPrefix(goodFP, "SHA256:"))
+	if err != nil {
+		t.Fatalf("bare-fp gitSSHAuth: %v", err)
+	}
+	if err := auth3.HostKeyCallback("host", nil, goodSSHKey); err != nil {
+		t.Fatalf("bare-fp pinned callback must accept matching key: %v", err)
+	}
+}
+
 func TestValidateGitConfigDisabledClearsFields(t *testing.T) {
 	config := &OPNCall{}
 	config.Git.Enable = false
@@ -2075,9 +2170,10 @@ func TestValidateGitConfigDisabledClearsFields(t *testing.T) {
 
 func TestValidateGitConfigEnabledNoUpstream(t *testing.T) {
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true}}
 	if err := validateGitConfig(config); err != nil {
 		t.Fatalf("enabled with no upstream/key must not error, got %v", err)
@@ -2086,9 +2182,10 @@ func TestValidateGitConfigEnabledNoUpstream(t *testing.T) {
 
 func TestValidateGitConfigUpstreamWithoutKey(t *testing.T) {
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true, Upstream: "git@github.com:user/repo.git"}}
 	if err := validateGitConfig(config); err == nil {
 		t.Fatalf("upstream without key must error")
@@ -2101,9 +2198,10 @@ func TestValidateGitConfigKeyWithoutUpstream(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true, SSHKey: key}}
 	if err := validateGitConfig(config); err == nil {
 		t.Fatalf("key without upstream must error")
@@ -2113,9 +2211,10 @@ func TestValidateGitConfigKeyWithoutUpstream(t *testing.T) {
 func TestValidateGitConfigKeyMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: missing}}
 	if err := validateGitConfig(config); err == nil {
 		t.Fatalf("missing key file must error")
@@ -2125,9 +2224,10 @@ func TestValidateGitConfigKeyMissingFile(t *testing.T) {
 func TestValidateGitConfigKeyIsDir(t *testing.T) {
 	dir := t.TempDir()
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: dir}}
 	if err := validateGitConfig(config); err == nil {
 		t.Fatalf("key path pointing at a directory must error")
@@ -2140,9 +2240,10 @@ func TestValidateGitConfigKeyFileOK(t *testing.T) {
 		t.Fatalf("write key: %v", err)
 	}
 	config := &OPNCall{Git: struct {
-		Enable   bool
-		Upstream string
-		SSHKey   string
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
 	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: key}}
 	if err := validateGitConfig(config); err != nil {
 		t.Fatalf("valid upstream+key must not error, got %v", err)
