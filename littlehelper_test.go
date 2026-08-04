@@ -1471,13 +1471,8 @@ func setupUnifiWatchEnv(t *testing.T, markerContent string) (*OPNCall, string) {
 			return config, src
 		}
 		metaPath := filepath.Join(watchPath, "autobackup_meta.json")
-		metaData, err := os.ReadFile(metaPath)
-		if err != nil {
-			config.Unifi.Watch.SetupErr = "META-FILE-NOT-FOUND: " + err.Error()
-			return config, src
-		}
-		if !isValidXML(string(metaData)) {
-			config.Unifi.Watch.SetupErr = "META-FILE-INVALID-XML: " + metaPath
+		if _, err := os.ReadFile(metaPath); err != nil {
+			config.Unifi.Watch.SetupErr = "META-FILE-NOT-READABLE: " + err.Error()
 			return config, src
 		}
 		config.Unifi.Watch.Enable = true
@@ -1533,7 +1528,11 @@ func TestUnifiWatchSetupDisabledWhenMarkerMissing(t *testing.T) {
 	}
 }
 
-func TestUnifiWatchSetupDisabledWhenMarkerInvalidXML(t *testing.T) {
+// TestUnifiWatchSetupEnabledWhenMarkerNotXML verifies that the watcher is
+// armed as long as the marker file exists and is readable — its contents are
+// no longer parsed or validated, so a non-XML marker must not block the
+// feature (the previous behaviour rejected it as invalid XML).
+func TestUnifiWatchSetupEnabledWhenMarkerNotXML(t *testing.T) {
 	savedEnable := unifiWatchEnable.Load()
 	savedPath := unifiWatchPath
 	t.Cleanup(func() {
@@ -1541,15 +1540,15 @@ func TestUnifiWatchSetupDisabledWhenMarkerInvalidXML(t *testing.T) {
 		unifiWatchPath = savedPath
 	})
 	config, _ := setupUnifiWatchEnv(t, "{this is not valid xml")
-	if config.Unifi.Watch.Enable {
-		t.Errorf("watch should be disabled when marker fails XML validation")
+	if !config.Unifi.Watch.Enable {
+		t.Errorf("watch should be enabled when marker exists and is readable (contents are not validated)")
 	}
-	if unifiWatchEnable.Load() {
-		t.Errorf("unifiWatchEnable should be false when marker is invalid XML")
+	if !unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable should be true when marker is readable")
 	}
 }
 
-func TestUnifiWatchSetupEnabledWhenMarkerValidXML(t *testing.T) {
+func TestUnifiWatchSetupEnabledWhenMarkerReadable(t *testing.T) {
 	savedEnable := unifiWatchEnable.Load()
 	savedPath := unifiWatchPath
 	t.Cleanup(func() {
@@ -1558,7 +1557,7 @@ func TestUnifiWatchSetupEnabledWhenMarkerValidXML(t *testing.T) {
 	})
 	config, src := setupUnifiWatchEnv(t, `<autobackup><version>8.5.6</version></autobackup>`)
 	if !config.Unifi.Watch.Enable {
-		t.Errorf("watch should be enabled when folder + valid-XML marker exist")
+		t.Errorf("watch should be enabled when folder + readable marker exist")
 	}
 	if !unifiWatchEnable.Load() {
 		t.Errorf("unifiWatchEnable should be true")

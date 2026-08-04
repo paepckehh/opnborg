@@ -64,10 +64,11 @@ func Setup() (*OPNCall, error) {
 	// directory (e.g. /var/lib/unifi/data/backup/autobackup) the daemon arms a
 	// goroutine that watches for filesystem change events (add/delete/rename)
 	// and mirrors the newest .unf backup into the local store. The watcher is
-	// only enabled when the directory exists AND contains an
-	// autobackup_meta.json marker file that parses as valid XML; otherwise the
-	// feature is silently disabled so opnborg keeps running on hosts that do
-	// not host a co-located controller.
+	// only enabled when the directory exists AND contains a readable
+	// autobackup_meta.json marker file (existence + read access is enough; its
+	// contents are not parsed or validated); otherwise the feature is silently
+	// disabled so opnborg keeps running on hosts that do not host a co-located
+	// controller.
 	//
 	// This block runs BEFORE the minimum-requirements gate so a watch-only
 	// deployment (no OPN_TARGETS, no OPN_UNIFI_WEBUI fetcher) is a valid
@@ -86,13 +87,12 @@ func Setup() (*OPNCall, error) {
 			displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "]")
 		} else {
 			metaPath := filepath.Join(watchPath, "autobackup_meta.json")
-			metaData, err := os.ReadFile(metaPath)
-			if err != nil {
-				config.Unifi.Watch.SetupErr = "META-FILE-NOT-FOUND: " + err.Error()
+			// the marker file only needs to exist and be readable; its contents
+			// are not parsed or validated, so a controller-emitted marker that
+			// is not well-formed XML no longer blocks the watcher.
+			if _, err := os.ReadFile(metaPath); err != nil {
+				config.Unifi.Watch.SetupErr = "META-FILE-NOT-READABLE: " + err.Error()
 				displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "] " + metaPath)
-			} else if !isValidXML(string(metaData)) {
-				config.Unifi.Watch.SetupErr = "META-FILE-INVALID-XML: " + metaPath
-				displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "]")
 			} else {
 				config.Unifi.Watch.Enable = true
 				config.Unifi.Watch.Path = watchPath

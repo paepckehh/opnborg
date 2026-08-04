@@ -19,8 +19,9 @@ const _uniWatch = "unifi-autobackup"
 // srvUnifiWatch mirrors Unifi controller autoBackup files from a co-located
 // source folder (OPN_UNIFI_WATCH_PATH, typically
 // /var/lib/unifi/data/backup/autobackup) into the opnborg store. It is only
-// armed at Setup() time when the folder exists and contains an
-// autobackup_meta.json marker that parses as valid XML.
+// armed at Setup() time when the folder exists and contains a readable
+// autobackup_meta.json marker file (existence + read access only; the marker
+// contents are not parsed or validated).
 //
 // On every watched change event (create/write/remove/rename) it copies the
 // newest .unf file into the local backup store via checkIntoStore (which
