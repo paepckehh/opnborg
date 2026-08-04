@@ -1269,7 +1269,7 @@ func TestSetupUnifiExportURIDefault(t *testing.T) {
 		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
 		"OPN_UNIFI_WEBUI", "OPN_UNIFI_BACKUP_USER", "OPN_UNIFI_BACKUP_SECRET",
 		"OPN_UNIFI_VERSION", "OPN_UNIFI_EXPORT", "OPN_UNIFI_MONGODB_URI",
-		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_NOGIT",
+		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_GIT_ENABLE", "OPN_GIT_UPSTREAM", "OPN_GIT_SSH_KEY",
 	} {
 		old, had := os.LookupEnv(k)
 		_ = os.Unsetenv(k)
@@ -1313,7 +1313,7 @@ func TestSetupUnifiExportURIOverride(t *testing.T) {
 		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
 		"OPN_UNIFI_WEBUI", "OPN_UNIFI_BACKUP_USER", "OPN_UNIFI_BACKUP_SECRET",
 		"OPN_UNIFI_VERSION", "OPN_UNIFI_EXPORT", "OPN_UNIFI_MONGODB_URI",
-		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_NOGIT",
+		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_GIT_ENABLE", "OPN_GIT_UPSTREAM", "OPN_GIT_SSH_KEY",
 	} {
 		old, had := os.LookupEnv(k)
 		_ = os.Unsetenv(k)
@@ -1891,5 +1891,136 @@ func TestGitCheckInCommitsAndIdempotent(t *testing.T) {
 	}
 	if committed {
 		t.Errorf("clean worktree must report committed=false")
+	}
+}
+
+// --- setup.go: httpd enable gating ---------------------------------------
+
+// TestSetupHttpdDisabledInOneShotMode verifies the httpd is NOT armed when the
+// daemon is disabled (OPN_NODAEMON set). Previously Httpd.Enable defaulted to
+// true and the daemon-mode block never ran in one-shot mode, leaving Enable=true
+// with an empty Server address — startWeb would then bind a random port and
+// leak a listener for a process that exits immediately.
+func TestSetupHttpdDisabledInOneShotMode(t *testing.T) {
+	ensureDisplayDrained(t)
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_NODAEMON", "OPN_HTTPD_DISABLE", "OPN_HTTPD_SERVER",
+		"OPN_GIT_ENABLE", "OPN_GIT_UPSTREAM", "OPN_GIT_SSH_KEY",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+	withEnv(t, "OPN_APIKEY", "k", true)
+	withEnv(t, "OPN_APISECRET", "s", true)
+	withEnv(t, "OPN_TARGETS", "fw01.lan", true)
+	withEnv(t, "OPN_NODAEMON", "1", true) // one-shot mode
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if config.Daemon {
+		t.Fatalf("expected Daemon=false in one-shot mode")
+	}
+	if config.Httpd.Enable {
+		t.Errorf("Httpd.Enable must be false in one-shot mode (was %v); startWeb would bind an empty address", config.Httpd.Enable)
+	}
+	if config.Httpd.Server != "" {
+		t.Errorf("Httpd.Server must be empty when disabled, got %q", config.Httpd.Server)
+	}
+}
+
+// TestSetupHttpdHonorsDisableFlag verifies that OPN_HTTPD_DISABLE actually
+// disables the httpd in daemon mode. Previously Enable defaulted to true and
+// the daemon block only set it true again, so the disable flag was a no-op.
+func TestSetupHttpdHonorsDisableFlag(t *testing.T) {
+	ensureDisplayDrained(t)
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_NODAEMON", "OPN_HTTPD_DISABLE", "OPN_HTTPD_SERVER",
+		"OPN_GIT_ENABLE", "OPN_GIT_UPSTREAM", "OPN_GIT_SSH_KEY",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+	withEnv(t, "OPN_APIKEY", "k", true)
+	withEnv(t, "OPN_APISECRET", "s", true)
+	withEnv(t, "OPN_TARGETS", "fw01.lan", true)
+	// OPN_NODAEMON unset => daemon mode
+	withEnv(t, "OPN_HTTPD_DISABLE", "1", true)
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if !config.Daemon {
+		t.Fatalf("expected Daemon=true")
+	}
+	if config.Httpd.Enable {
+		t.Errorf("Httpd.Enable must be false when OPN_HTTPD_DISABLE is set, got %v", config.Httpd.Enable)
+	}
+}
+
+// --- httpd-handler.go: non-blocking /force pokes -------------------------
+
+// TestGetForceHandlerNonBlocking verifies the /force handler never blocks on a
+// full update channel. Previously it used blocking sends; if a tick was
+// already pending in the buffered channel, the handler (and the HTTP client)
+// would hang for a full backup cycle. Now it uses non-blocking selects.
+func TestGetForceHandlerNonBlocking(t *testing.T) {
+	ensureDisplayDrained(t)
+	// Drain the update channels in the background so the handler's selects
+	// stay non-blocking even after we fill them.
+	for _, ch := range []chan bool{updateOPN, updateUnifiBackup, updateUnifiExport, updateUnifiWatch} {
+		// pre-fill the buffered channel so the handler MUST drop the value
+		select {
+		case ch <- true:
+		default:
+		}
+	}
+	unifiBackupEnable.Store(true)
+	unifiExportEnable.Store(true)
+	unifiWatchEnable.Store(true)
+	t.Cleanup(func() {
+		unifiBackupEnable.Store(false)
+		unifiExportEnable.Store(false)
+		unifiWatchEnable.Store(false)
+		// drain
+		for _, ch := range []chan bool{updateOPN, updateUnifiBackup, updateUnifiExport, updateUnifiWatch} {
+			select {
+			case <-ch:
+			default:
+			}
+		}
+	})
+
+	h := getForceHandler()
+	done := make(chan struct{})
+	go func() {
+		rr := httptest.NewRecorder()
+		req := &http.Request{Header: http.Header{}}
+		h.ServeHTTP(rr, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// handler returned without blocking — pass
+	case <-time.After(2 * time.Second):
+		t.Fatal("getForceHandler blocked on a full update channel (non-blocking poke regressed)")
 	}
 }

@@ -74,6 +74,9 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		if !backup {
 			state = _degraded
+			if notice != "" {
+				state = strings.ReplaceAll(state, "DEGRADED", html.EscapeString(notice))
+			}
 		}
 		export := ""
 		if config.Unifi.Export.Enable {

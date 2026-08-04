@@ -13,7 +13,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 3. **Test** — `go test -count=1 ./...` must be ok
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
 > 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
->    (the current release series; the latest tag is `v0.1.98`). Never move,
+>    (the current release series; the latest tag is `v0.1.99`). Never move,
 >    delete, or reuse an existing tag. Also bump the `SemVer` constant in
 >    `api.go` to match the new tag.
 >
@@ -34,7 +34,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 - Test every change via build and unit tests
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
-  the **patch** segment, the last segment (e.g. `v0.1.98` → `v0.1.99` → `v0.1.100`).
+  the **patch** segment, the last segment (e.g. `v0.1.99` → `v0.1.100`).
   The other two first segments (major, minor) stay unmodified,
   increment only the last part by +1. Never move, delete, or rewrite an existing tag.
 
@@ -66,13 +66,13 @@ make deps
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-`make check` is the canonical pre-PR gate; it runs `gofmt -l .`, `go vet ./...`, and `go mod tidy -diff`. There is no `staticcheck` wiring in the Makefile or CI; gopls `unusedparams` diagnostics (e.g. the `notice` parameter on `setUnifiStatus`) are known and intentional — do not "fix" them without checking call sites.
+`make check` is the canonical pre-PR gate; it runs `gofmt -l .`, `go vet ./...`, and `go mod tidy -diff`. There is no `staticcheck` wiring in the Makefile or CI.
 
 ### Releasing
 
 - Releases are tag-driven (`v*`). Pushing a `v*` tag triggers both `.github/workflows/release.yml` (goreleaser cross-compile via `.goreleaser.yml`) and `.github/workflows/ghcr.yml` (build/push `ghcr.io/paepckehh/opnborg:latest`).
 - goreleaser builds target linux/freebsd/darwin/netbsd/openbsd/windows on amd64 + arm64, `CGO_ENABLED=0`.
-- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.98` → `v0.1.99`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
+- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.99` → `v0.1.100`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
 
 ## Architecture & Control Flow
 
@@ -86,14 +86,15 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 ### `srv()` main loop (`srv.go`)
 
-- Spins up goroutines for: display/log engine (`startLog`), background timer, internal HTTP server (`startWeb`), RFC5424 syslog server (`startRSysLog`), Unifi backup (`srvUnifiBackup`), and Unifi asset export (`srvUnifiExport`), each guarded by its respective `config.*.Enable` flag.
+- Spins up goroutines for: display/log engine (`startLog`), background timer, internal HTTP server (`startWeb`), RFC5424 syslog server (`startRSysLog`), Unifi backup (`srvUnifiBackup`), Unifi asset export (`srvUnifiExport`), and Unifi autoBackup folder watch (`srvUnifiWatch`), each guarded by its respective `config.*.Enable` flag.
+- When `config.Git.Enable`, `gitInit(config)` runs once at startup (before the first worker pass) to open-or-init the storage repo and write `.gitignore`.
 - Builds the `servers` slice by splitting `config.Targets` on commas; each entry may carry an asset tag separated by `#` (e.g. `opn01.lan#edge-1`). The split-on-`#` switch is duplicated in `srv()` (status init) and the main loop (worker dispatch) -- keep them in sync.
 - Main loop body per tick:
-  1. `gitCheckIn(config)` to reset the worktree state and clear `config.dirty`.
+  1. Reset `config.dirty` to false.
   2. If `config.Sync.Enable`: `readMasterConf(config)` pulls the master OPNsense XML and derives the package list (`sync-master.go`).
   3. For each server: `go actionOPN(...)` with a `sync.WaitGroup`; `wg.Wait()` blocks until the whole hive finishes a pass.
-  4. If `config.dirty.Load()` (set atomically by workers when they wrote new XML), run `gitCheckIn` again.
-  5. In daemon mode, block on `<-updateOPN` (tick channel from the background timer, or poked by the `/force` HTTP handler). In one-shot mode (`OPN_NODAEMON`), close `displayChan`, wait, and return.
+  4. If `config.dirty.Load()` (set atomically by workers when they wrote new XML), run `gitCheckIn` (commit + optional push).
+  5. In daemon mode, block on `<-updateOPN` (tick channel from the background timer, or poked by the `/force` HTTP handler via a non-blocking select). In one-shot mode (`OPN_NODAEMON`), close `displayChan`, wait, and return.
 
 ### Per-server backup (`actionOPN.go`)
 
@@ -102,14 +103,16 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 3. `checkRSysLogConfig` (`rsyslog-clientconf.go`) ensures the remote-syslog client config matches.
 4. `fetchXML` (`transport.go`) downloads the actual backup XML via `/api/core/backup/download/this` with HTTP basic auth.
 5. SHA-256 the new XML; compare to the previous `CONFIG-CURRENT` (`store.go::lastSum`). If unchanged, mark status and skip storage.
-6. On change: `checkIntoStore` writes the timestamped archive file, rotates the `current.xml` / `last.xml` symlinks, and sets `config.dirty.Store(true)` so the main loop will commit.
+6. On change: `checkIntoStore` writes the timestamped archive file, rotates the `current.<ext>` / `CONFIG-CURRENT` / `CONFIG-LAST` pointers, and sets `config.dirty.Store(true)` so the main loop will commit. `checkIntoStore` resolves all paths against `config.Path` and does **not** call `os.Chdir`.
 
 ### HTTP WebUI (`srvHttpd.go`, `httpd-handler.go`, `httpd-ui.go`, `httpd-transport.go`)
 
-- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`.
+- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`, optional `/git` (go-git-http smart HTTP server, enabled by `OPN_GITSRV`).
 - Index handler renders HTML built from inlined SVG/HTML constants in `httpd-ui.go`. `_head`, `_forceRedirect` are assembled at `Setup()` time from `OPN_HTTPD_COLOR_FG` / `OPN_HTTPD_COLOR_BG`.
-- Status strings (`_ok`, `_fail`, `_na`, `_degraded`, `_unifi`) are inline animated SVGs defined as `const` in `httpd-ui.go`. `status.go` mutates the `hive` / `unifiStatus` strings under `hiveMutex` / `unifiMutex`.
+- Status strings (`_ok`, `_fail`, `_na`, `_degraded`, `_unifi`) are inline animated SVGs defined as `const` in `httpd-ui.go`. `status.go` mutates the `hive` / `unifiStatus` / `unifiWatchStatus` strings under `hiveMutex` / `unifiMutex` / `unifiWatchMutex`.
 - A `addSecurityHeader` middleware wraps index and `/files/`.
+- The `/force` handler pokes the `updateOPN` / `updateUnifiBackup` / `updateUnifiExport` / `updateUnifiWatch` channels with non-blocking selects (buffer-1 channels): if a backup pass is already pending it drops the duplicate rather than blocking the HTTP client for a full backup cycle.
+- The httpd is armed only in daemon mode and only when `OPN_HTTPD_DISABLE` is unset. In one-shot mode (`OPN_NODAEMON`) `config.Httpd.Enable` stays false so `startWeb` is never called — previously it defaulted to true with an empty listen address.
 - TLS is opt-in via `OPN_HTTPD_CACERT` + `OPN_HTTPD_CAKEY`; setting `OPN_HTTPD_CACLIENT` enables mTLS enforcement (`httpd-transport.go::getHTTPTLS`).
 
 ### OPNsense API endpoints (`transport.go`)
@@ -124,8 +127,9 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 ## Configuration Conventions (ENV)
 
 - **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`) as long as the value is non-empty. To disable, unset the var. The only exception is the empty string, which `isEnv` treats as false.
-- `OPN_NODAEMON` inverts the default (daemon defaults to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`.
-- The backup storage git repo feature is opt-in via `OPN_GIT_ENABLE` (presence-based). `OPN_GIT_UPSTREAM` sets an upstream SSH git URL to push to, and `OPN_GIT_SSH_KEY` points at the PEM-encoded private key used for upstream auth; both are validated together in `validateGitConfig` (`git.go`). Host key verification relies on go-git's default `~/.ssh/known_hosts` callback.
+- `OPN_NODAEMON` inverts the default (daemon defaults to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`. In one-shot mode the httpd, rsyslog server, and Unifi goroutines are not armed.
+- The backup storage git repo feature is opt-in via `OPN_GIT_ENABLE` (presence-based). `OPN_GIT_UPSTREAM` sets an upstream SSH git URL to push to, and `OPN_GIT_SSH_KEY` points at the PEM-encoded private key used for upstream auth; both are validated together in `validateGitConfig` (`git.go`). Host key verification relies on go-git's default `~/.ssh/known_hosts` callback. (`OPN_NOGIT` is no longer honored — the feature is opt-in, not opt-out.)
+- The internal httpd is armed only in daemon mode and only when `OPN_HTTPD_DISABLE` is unset (daemon mode + flag unset → enable; everything else → disable).
 - Either OPN backup (`OPN_APIKEY` + `OPN_APISECRET`) or Unifi backup (`OPN_UNIFI_BACKUP_USER` + `OPN_UNIFI_BACKUP_SECRET` + `OPN_UNIFI_VERSION`) must be configured or `Setup()` returns a fatal error.
 - `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description, and `OPN_TARGETS_IMGURL_<GROUPNAME>` supplies a custom image URL that replaces the text headline (the description then becomes the image's tooltip).
 - `OPN_TARGETS` / `OPN_MASTER` entries must include a port suffix if not `:443` (e.g. `192.168.0.1:8443`). Clear-text HTTP is unsupported.
@@ -150,11 +154,13 @@ For a configured `OPN_PATH` (default `.`):
   Logs/current.log                   # rotated by lumberjack (256MB, 256 backups, 180d, gzipped)
 ```
 
-`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` (`git.PlainOpen` / `git.PlainInit` on first run) plus `gitEnsureIgnore` run once at startup; `gitCheckIn` (`os.Chdir(config.Path)`, open repo, `wtree.Status()` fast-path, `wtree.Add(".")`, commit authored as `OPNBORG-AUTO-COMMIT <config.Email>`) runs per tick when `config.dirty` is set. When `OPN_GIT_UPSTREAM` is set, `gitPush` recreates the `origin` remote if its URL drifted and pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`; host key verification uses go-git's default `~/.ssh/known_hosts` callback. All git operations use the native `go-git` library — no external `git` binary is invoked. Multiple call sites `os.Chdir` into subdirectories — be careful when adding new code that assumes a stable CWD; restore or re-`Chdir` as needed.
+`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` (`git.PlainOpen` / `git.PlainInit` on first run) plus `gitEnsureIgnore` run once at startup; `gitCheckIn` (`os.Chdir(config.Path)`, open repo, `wtree.Status()` fast-path, `wtree.Add(".")`, commit authored as `OPNBORG-AUTO-COMMIT <config.Email>`) runs per tick when `config.dirty` is set. When `OPN_GIT_UPSTREAM` is set, `gitPush` recreates the `origin` remote if its URL drifted and pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`; host key verification uses go-git's default `~/.ssh/known_hosts` callback. All git operations use the native `go-git` library — no external `git` binary is invoked.
+
+`checkIntoStore` (`store.go`) resolves every path against `config.Path` and does **not** call `os.Chdir`, so it is safe to invoke from the concurrent per-server worker goroutines. The `CONFIG-CURRENT` / `CONFIG-LAST` symlinks use a relative target (the `.archive/...` path) so the store tree stays portable when copied or moved. The only remaining `os.Chdir` call sites are `gitInit` / `gitCheckIn` (both Chdir to `config.Path`, the same directory) and `startWeb` / `startRSysLog` (startup only, before workers run).
 
 ## Testing
 
-The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing (`isEnv`, `Setup`), URL helpers, the OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, and the syslog config comparison. Run it via `make test` (`go test -race -count=1 ./...`). CI (`.github/workflows/golang.yml`) still runs only `go build ./...` and `go vet ./...` on go 1.23 across ubuntu/macos/windows; tests are not yet wired into CI. When adding code, prefer extending the existing table-driven tests and keeping the `make check` gate green.
+The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing (`isEnv`, `Setup`), URL helpers, the OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, the syslog config comparison, the git init/checkin round-trip, the Unifi autoBackup watch setup/sync, `checkIntoStore` rotation, the compression helpers, the httpd enable gating, and the non-blocking `/force` handler. Run it via `make test` (`go test -race -count=1 ./...`) — note that `-race` requires CGO + a C compiler, so on minimal/CGO-disabled toolchains use `go test -count=1 ./...` instead. CI (`.github/workflows/golang.yml`) still runs only `go build ./...` and `go vet ./...` on go 1.23 across ubuntu/macos/windows; tests are not yet wired into CI. When adding code, prefer extending the existing table-driven tests and keeping the `make check` gate green.
 
 ## Coding Conventions
 
@@ -164,27 +170,28 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - Logging: never use `log`/`fmt.Println` directly inside the daemon hot paths -- send `[]byte` to the `displayChan` channel so the background `startLog` goroutine serializes output. `fmt.Println` is acceptable in `srvHttpd.go` startup error paths only because it runs before the display engine is ready.
 - HTTP handlers return `http.Handler` constructed via `http.HandlerFunc` closure; apply `addSecurityHeader` middleware at `mux.Handle` registration time, not inside the handler.
 - `config.dirty` is an `atomic.Bool` -- always `.Store()`/`.Load()`, never `=`.
-- `hive` and `unifiStatus` are package globals guarded by `hiveMutex`/`unifiMutex`. Mutate only under the lock.
+- `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
 
 ## Gotchas
 
 - **Duplicate `#` split logic** in `srv.go` (lines ~88 and ~136) parses `server#tag` in two places. Changes to the host/tag format must update both, plus `actionOPN`'s signature.
-- **`os.Chdir` is called from multiple goroutines** (`gitCheckIn`, `checkIntoStore`, `startWeb`, `startRSysLog`). The process-wide working directory is a shared resource. Workers run concurrently per server; rely on `config.Path` for absolute pathing and minimize `Chdir`.
+- **`os.Chdir` is called from a few startup paths** (`gitInit`, `gitCheckIn`, `startWeb`, `startRSysLog`). `checkIntoStore` no longer Chdirs — it resolves paths against `config.Path` — so the per-server worker goroutines do not race on the process-wide CWD. The remaining Chdir sites either run at startup (before workers) or Chdir to the same `config.Path`, so they do not observably race; still, prefer absolute paths when adding new code.
 - **`make deps` deletes `go.mod` and `go.sum` and re-runs `go mod init`** -- only run it when you intend to fully refresh the module graph.
-- **`status.go::setUnifiStatus` has an unused `notice` parameter** (gopls `unusedparams` diagnostic). This is known and currently intentional; do not "fix" it without checking call sites.
 - **`SemVer` in `api.go` is the single source of truth** for the version string (CLI banner via `cmd/opnborg/main.go` + WebUI footer). goreleaser consumes git tags, not this constant. Bump it in lockstep with each release tag (see *Releasing* above).
 - **Dockerfile Go version (`1.24`) and CI Go version (`1.23`) lag behind `go.mod` (`1.26.4`)**. If you adopt newer language features, verify the Docker/CI builds still pass or bump these in the same change.
 - **OPNsense API does not support legacy backup endpoints** -- only `/api/core/backup/download/this` is wired in (`_apiBackupXML`). Don't fall back to alternatives without explicit requirement.
 - **HTTPS chain verification via the OS trust store is disabled by default**; security relies on `OPN_TLSKEYPIN`. Documenting "just use system CAs" would be wrong.
 - The `resources/` directory contains the embedded favicon (`borg.png`) and sample screenshots referenced from `README.md`; the `resources/opnborg/index.html` is the legacy static demo page, not the live UI.
+- **`OPN_NOGIT` is no longer honored** — the git feature is opt-in via `OPN_GIT_ENABLE`. Stale references in older docs to `OPN_NOGIT` inverting the default are obsolete; the only env-inverted flag is `OPN_NODAEMON`.
 
 ## External Dependencies of Note
 
 - `github.com/go-git/go-git/v5` -- pure-Go git for local repo management, commits, and SSH push to upstream.
 - `github.com/cnaude/go-syslog/syslog/v3` -- RFC5424 syslog server.
 - `github.com/natefinch/lumberjack` + `github.com/sirupsen/logrus` -- log rotation/formatting for the syslog sink.
+- `github.com/fsnotify/fsnotify` -- filesystem watcher for the Unifi autoBackup folder sync (`srvUnifiWatch.go`).
 - `paepcke.de/uniex` -- Unifi inventory export logic (delegated to that module; opnborg only wires the env config).
 
 Dependabot keeps these current via `.github/dependabot.yml`.

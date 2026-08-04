@@ -39,55 +39,55 @@ func lastSum(config *OPNCall, server string) [32]byte {
 	return sha256.Sum256(data)
 }
 
-// checkIntoStore
+// checkIntoStore writes a new backup payload into the per-server archive tree,
+// rotates the current.xml/CONFIG-CURRENT/CONFIG-LAST pointers, and appends the
+// SHA-256 entry to sha256.db. All paths are resolved against config.Path so
+// the function does NOT call os.Chdir — the process working directory is a
+// shared resource and the OPN backup workers call this concurrently, so Chdir
+// here would race with the git and httpd goroutines. The CONFIG-CURRENT
+// symlink target stays relative (archiveFile is already relative to the
+// server dir) so the store remains portable when copied/moved.
 func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts time.Time, sum [32]byte) error {
-
-	// prep storage
 	ext = "." + ext
-
-	//current := "current" + ext
 	year, month, _ := ts.Date()
 
-	// create store structure
+	// per-server archive subtree: <OPN_PATH>/<server>/.archive/<YYYY>/<MM>/
 	store := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
-	fullPath := filepath.Join(config.Path, server, store)
+	serverRoot := filepath.Join(config.Path, server)
+	fullPath := filepath.Join(serverRoot, store)
 	if err := os.MkdirAll(fullPath, 0770); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-CREATE-FILE-STORAGE", fullPath)
 		return err
 	}
 
-	// change thread into store-root (needed for relative symlink creation)
-	dirStoreRoot := filepath.Join(config.Path, server)
-	if err := os.Chdir(dirStoreRoot); err != nil {
-		logBackupErr("FAIL:UNABLE-TO-CHANGE-INTO-STORAGE-DIR", dirStoreRoot)
-		return err
-	}
-
-	// write archive file
+	// write the timestamped archive entry
 	name := ts.UTC().Format("20060102T150405Z") + "-" + server + ext
-	archiveFile := filepath.Join(store, name)
-	if err := os.WriteFile(archiveFile, serverXML, 0660); err != nil {
+	archiveRel := filepath.Join(store, name) // relative to serverRoot
+	archiveAbs := filepath.Join(serverRoot, archiveRel)
+	if err := os.WriteFile(archiveAbs, serverXML, 0660); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-FILE", server)
 		return err
 	}
 
-	// remove pre-existing current.xml file & write again
-	file := "current" + ext
-	_ = os.Remove(file)
-	if err := os.WriteFile(file, serverXML, 0660); err != nil {
-		logBackupErr("FAIL:UNABLE-TO-CREATE-CURRENT-FILE", archiveFile)
+	// refresh the regular current.<ext> file (served by the WebUI /files/ handler)
+	currentFile := filepath.Join(serverRoot, "current"+ext)
+	_ = os.Remove(currentFile)
+	if err := os.WriteFile(currentFile, serverXML, 0660); err != nil {
+		logBackupErr("FAIL:UNABLE-TO-CREATE-CURRENT-FILE", archiveRel)
 		return err
 	}
 
-	// write hashsum log entry
+	// append the sha256.db entry
 	logEntry := name + _tab + base64.StdEncoding.EncodeToString(sum[:]) + _linefeed
-	hashFile, err := os.OpenFile(_hashFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	hashPath := filepath.Join(serverRoot, _hashFile)
+	hashFile, err := os.OpenFile(hashPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		logBackupErr("FAIL:UNABLE-TO-OPEN-OR-CREATE-HASHSHUM-FILE", server)
 		return err
 	}
 	if _, err := hashFile.Write([]byte(logEntry)); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-WRITE-TO-HASHSHUM-FILE", server)
+		_ = hashFile.Close()
 		return err
 	}
 	if err := hashFile.Close(); err != nil {
@@ -95,14 +95,15 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 		return err
 	}
 
-	// remove pre-existing last symlink (if any exist)
-	_ = os.Remove(_last)
-
-	// rename current link pointer to last (if any exist)
-	_ = os.Rename(_current, _last)
-
-	// write current symlink pointer
-	if err = os.Symlink(archiveFile, _current); err != nil {
+	// rotate the CONFIG-LAST / CONFIG-CURRENT symlinks. The symlink target
+	// stays relative (archiveRel) so the store tree is portable. Remove
+	// pre-existing links before rename/create to avoid EEXIST on filesystems
+	// that do not overwrite symlinks in place.
+	currentLink := filepath.Join(serverRoot, _current)
+	lastLink := filepath.Join(serverRoot, _last)
+	_ = os.Remove(lastLink)
+	_ = os.Rename(currentLink, lastLink)
+	if err := os.Symlink(archiveRel, currentLink); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK", server)
 		return err
 	}

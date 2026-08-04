@@ -19,14 +19,26 @@ const (
 // getForceHandler
 func getForceHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		updateOPN <- true
+		// Non-blocking pokes: if a backup pass is already pending in the
+		// buffered channel, drop the duplicate rather than blocking the HTTP
+		// handler (and the client) for a full backup cycle.
+		select {
+		case updateOPN <- true:
+		default:
+		}
 		if unifiBackupEnable.Load() {
 			unifiBackupNow.Store(true)
-			updateUnifiBackup <- true
+			select {
+			case updateUnifiBackup <- true:
+			default:
+			}
 		}
 		if unifiExportEnable.Load() {
 			unifiExportNow.Store(true)
-			updateUnifiExport <- true
+			select {
+			case updateUnifiExport <- true:
+			default:
+			}
 		}
 		if unifiWatchEnable.Load() {
 			unifiWatchNow.Store(true)
@@ -217,6 +229,12 @@ func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
 func writeGroupMember(s *strings.Builder, grp OPNGroup, srv string) {
 	if grp.OPN {
 		target := strings.Split(srv, "#")
+		// Guard against empty member entries (e.g. trailing comma in
+		// OPN_TARGETS): strings.Contains(line, "") is always true and would
+		// otherwise render the first hive slot for every empty member.
+		if len(target) == 0 || target[0] == "" {
+			return
+		}
 		for _, line := range hive {
 			if strings.Contains(line, target[0]) {
 				s.WriteString(line)

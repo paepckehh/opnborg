@@ -99,42 +99,42 @@ func Setup() (*OPNCall, error) {
 		}
 	}
 
-	// configure httpd
-	config.Httpd.Enable = true
-	if config.Daemon {
-		if !isEnv("OPN_HTTPD_DISABLE") {
-			config.Httpd.Enable = true
-			config.Httpd.Server = "127.0.0.1:6464"
-			if isEnv("OPN_HTTPD_SERVER") {
-				config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
-				if len(strings.Split(config.Httpd.Server, ":")) < 2 {
-					return nil, fmt.Errorf("env variable 'OPN_HTTPD_SERVER' format error, example \"127.0.0.1:6464\"")
-				}
+	// configure httpd (disabled by default; only armed in daemon mode and only
+	// when OPN_HTTPD_DISABLE is unset). Previously Enable defaulted to true,
+	// which leaked an empty-address listener in one-shot mode and ignored the
+	// OPN_HTTPD_DISABLE flag.
+	config.Httpd.Enable = false
+	if config.Daemon && !isEnv("OPN_HTTPD_DISABLE") {
+		config.Httpd.Enable = true
+		config.Httpd.Server = "127.0.0.1:6464"
+		if isEnv("OPN_HTTPD_SERVER") {
+			config.Httpd.Server = os.Getenv("OPN_HTTPD_SERVER")
+			if len(strings.Split(config.Httpd.Server, ":")) < 2 {
+				return nil, fmt.Errorf("env variable 'OPN_HTTPD_SERVER' format error, example \"127.0.0.1:6464\"")
 			}
-			config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
-			config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
-			config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
-			config.Httpd.Color.FG = "white"
-			config.Httpd.Color.BG = "#333333"
-			if isEnv("OPN_HTTPD_COLOR_FG") {
-				config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
-			}
-			if isEnv("OPN_HTTPD_COLOR_BG") {
-				config.Httpd.Color.BG = os.Getenv("OPN_HTTPD_COLOR_BG")
-			}
-
-			var s strings.Builder
-			s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
-			s.WriteString("<meta charset=\"UTF-8\">" + _lf)
-			s.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" + _lf)
-			s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
-			css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
-			s.WriteString(css)
-			_head = s.String() + "<meta http-equiv=\"refresh\" content=\"15\">" + _lf + "</head>" + _lf
-			_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
-			_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceInfo + _bodyEnd + _htmlEnd
-
 		}
+		config.Httpd.CAcert = os.Getenv("OPN_HTTPD_CACERT")
+		config.Httpd.CAkey = os.Getenv("OPN_HTTPD_CAKEY")
+		config.Httpd.CAClient = os.Getenv("OPN_HTTPD_CACLIENT")
+		config.Httpd.Color.FG = "white"
+		config.Httpd.Color.BG = "#333333"
+		if isEnv("OPN_HTTPD_COLOR_FG") {
+			config.Httpd.Color.FG = os.Getenv("OPN_HTTPD_COLOR_FG")
+		}
+		if isEnv("OPN_HTTPD_COLOR_BG") {
+			config.Httpd.Color.BG = os.Getenv("OPN_HTTPD_COLOR_BG")
+		}
+
+		var s strings.Builder
+		s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
+		s.WriteString("<meta charset=\"UTF-8\">" + _lf)
+		s.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" + _lf)
+		s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
+		css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
+		s.WriteString(css)
+		_head = s.String() + "<meta http-equiv=\"refresh\" content=\"15\">" + _lf + "</head>" + _lf
+		_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"8; url='../'\">" + _lf + "</head>" + _lf
+		_forceRedirect = _htmlStart + _headForce + _bodyStart + _forceInfo + _bodyEnd + _htmlEnd
 	}
 
 	// config master

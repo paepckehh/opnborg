@@ -162,29 +162,21 @@ func srvUnifiBackup(config *OPNCall) {
 					if backupOK {
 						if len(unf) < 1024 {
 							backupOK = false
-							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL] "
-							if err != nil {
-								notice = notice + err.Error()
-							}
+							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL]"
 							displayChan <- []byte(notice)
 						}
 
 						// check into store
 						if backupOK {
-
-							// check into store
 							if err := checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf)); err != nil {
 								backupOK = false
 								notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-WRITE-BACKUP-FILE-INTO-STORE] " + err.Error()
 								displayChan <- []byte(notice)
+							} else {
+								// flag git store as dirty only on a successful checkin
+								config.dirty.Store(true)
+								displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
 							}
-
-							// flag git store as dirty
-							config.dirty.Store(true)
-
-							// notify
-							displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
-
 						}
 					}
 				}

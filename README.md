@@ -31,6 +31,7 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 - **Central Package Management** — replicate installed OPNsense plugins from one master host to every target.
 - **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive for auditable change-log trails and rapid restore.
 - **Central Log Consolidation** — built-in RFC5424 syslog collector with rotation and archiving.
+- **Unifi Controller Backup** — download and archive Unifi controller `.unf` backups, mirror a co-located autoBackup folder, and export the Unifi inventory to CSV/JSON.
 - **Single Static Binary** — no runtime dependencies; cross OS & hardware via Go (Linux, FreeBSD, OpenBSD, NetBSD, Windows; amd64, arm64, armv7).
 - **NixOS Integration** — ready-made modules for Prometheus + Grafana (WIP: Wazuh, Influx, Graylog).
 - **Complementary Sidekick** — designed as a small companion to [OPNCentral](https://opnsense.org/), not a replacement.
@@ -87,7 +88,7 @@ Ready-made service modules live in this repo:
 
 OPNBORG is configured entirely through **environment variables** — the binary itself accepts only `-v` / `-h`. A local `.env` file in the working directory is auto-loaded via `godotenv` if present.
 
-> ⚠️ **Booleans are presence-based.** Setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to **true**. To disable a flag, **unset** the variable. The only exception is the empty string, which is treated as false. `OPN_NODAEMON` and `OPN_NOGIT` invert this default (they default to `true` when unset).
+> ⚠️ **Booleans are presence-based.** Setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to **true**. To disable a flag, **unset** the variable. The only exception is the empty string, which is treated as false. `OPN_NODAEMON` inverts the default (daemon mode is on when unset). The git repo feature is **opt-in** via `OPN_GIT_ENABLE` (unset = off).
 
 Example configurations are provided in the repo root:
 
@@ -257,6 +258,8 @@ the upstream host is present there before enabling push.
 | `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
 | `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
 | `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a valid `autobackup_meta.json` marker in the folder |
+
+When `OPN_UNIFI_WATCH_PATH` points at a co-located controller's autoBackup folder, opnborg watches it for filesystem events and mirrors the newest `.unf` backup into the store (deduplicated by SHA-256 against the previous `CONFIG-CURRENT`) on every change. The watcher is only armed when the folder exists **and** contains an `autobackup_meta.json` marker that parses as valid XML, so opnborg keeps running unchanged on hosts that do not co-locate a controller.
 
 ### Unifi Inventory Export
 
