@@ -22,12 +22,13 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 ---
 
-## 📸 WebUI 
+## 📸 WebUI - ShowTime
 
-Screenshots say more than 1000 Words:
+![OPNBORG Sample Screenshot 01](resources/sc01.png)
 
-![OPNBORG Sample Screenshot](resources/sc02.png)
-![OPNBORG Sample Screenshot](resources/sc03.png)
+![OPNBORG Sample Screenshot 02](resources/sc02.png)
+
+![OPNBORG Sample Screenshot 03](resources/sc03.png)
 
 ---
 
