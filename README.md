@@ -19,9 +19,12 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 ---
 
-## 📸 WebUI
+## 📸 WebUI 
+
+Screenshots say more than 1000 Words:
 
 ![OPNBORG Sample Screenshot](resources/screenshot02.png)
+![OPNBORG Sample Screenshot](resources/screenshot03.png)
 
 ---
 
