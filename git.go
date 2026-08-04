@@ -17,12 +17,22 @@ import (
 
 const (
 	_currentDir     = "."
+	_dotGit         = ".git"
 	_gitignore      = ".gitignore"
 	_ignore         = ".archive\nCONFIG*\nLogs\n"
 	_origin         = "origin"
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"
 	_defaultSSHUser = "git"
+	// _aggressivePackWindow is the delta-compression window applied to the
+	// storage repo so the per-tick repack behaves like `git gc --aggressive`
+	// (git's aggressive default is pack.deltaWindow=250). It is written once
+	// during gitInit.
+	_aggressivePackWindow = uint(250)
+	// _pruneGrace is how recently an unreachable loose object must have been
+	// created to be spared from pruning, mirroring git's gc.pruneExpire safety
+	// window so a concurrent tick never loses an object it still needs.
+	_pruneGrace = time.Hour
 )
 
 // gitLastPush tracks the outcome of the most recent upstream push so the
@@ -245,7 +255,10 @@ func recordPush(ok bool, msg string) {
 }
 
 // gitInit ensures the storage folder is a git repository and the .gitignore is
-// in place. It is safe to call repeatedly (open-or-init semantics).
+// in place. It is safe to call repeatedly (open-or-init semantics). It also
+// raises the repo's pack.deltaWindow to the aggressive value so the per-tick
+// repack (gitGC) behaves like `git gc --aggressive` rather than the default
+// 10-object window.
 func gitInit(config *OPNCall) error {
 	if err := os.Chdir(config.Path); err != nil {
 		return err
@@ -253,10 +266,11 @@ func gitInit(config *OPNCall) error {
 	if err := gitEnsureIgnore(config); err != nil {
 		return err
 	}
-	if _, err := gitRepo(config.Path); err != nil {
+	repo, err := gitRepo(config.Path)
+	if err != nil {
 		return err
 	}
-	return nil
+	return gitEnsureAggressiveWindow(repo)
 }
 
 // validateGitConfig enforces the cross-field rules of the git backup feature:
@@ -289,9 +303,58 @@ func validateGitConfig(config *OPNCall) error {
 	return nil
 }
 
-// gitCheckIn is the per-tick entry point: open the storage git repository,
-// commit any pending backup changes, and push to the upstream remote when one
-// is configured. It returns committed=true when a new commit was created.
+// gitEnsureAggressiveWindow raises the repository's pack.deltaWindow to the
+// aggressive value when it is still at or below the go-git default (10). This
+// makes the per-tick repack performed by gitGC use the same wider delta window
+// as `git gc --aggressive` (pack.deltaWindow=250). It is a no-op once the
+// window is already at or above the target, and it never lowers a user-set
+// higher value. Called once at gitInit.
+func gitEnsureAggressiveWindow(repo *git.Repository) error {
+	cfg, err := repo.ConfigScoped(gitcfg.LocalScope)
+	if err != nil {
+		return err
+	}
+	if cfg.Pack.Window >= _aggressivePackWindow {
+		return nil
+	}
+	cfg.Pack.Window = _aggressivePackWindow
+	return repo.SetConfig(cfg)
+}
+
+// gitGC performs the internal go-git equivalent of `git gc --aggressive`: it
+// repacks all reachable objects into a fresh packfile (consolidating loose
+// objects and old packs via OFS deltas, using the aggressive delta window set
+// by gitEnsureAggressiveWindow) and then prunes unreachable loose objects
+// older than the grace window. It runs after every successful commit+push so
+// the on-disk backup store stays compact over time without invoking an
+// external git binary. Both steps are no-ops on storages that do not support
+// packing/loose objects (e.g. the in-memory test backend).
+func gitGC(repo *git.Repository) error {
+	if err := repo.RepackObjects(&git.RepackConfig{
+		UseRefDeltas: false,
+	}); err != nil {
+		if errors.Is(err, git.ErrPackedObjectsNotSupported) {
+			return nil
+		}
+		return err
+	}
+	if err := repo.Prune(git.PruneOptions{
+		OnlyObjectsOlderThan: time.Now().Add(-_pruneGrace),
+		Handler:              repo.DeleteObject,
+	}); err != nil {
+		if errors.Is(err, git.ErrLooseObjectsNotSupported) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// commit any pending backup changes, push to the upstream remote when one is
+// configured, and finally run the internal equivalent of `git gc --aggressive`
+// so the on-disk backup store stays compact. The gc only runs when a new
+// commit was created this tick (a clean worktree needs no repack). It returns
+// committed=true when a new commit was created.
 func gitCheckIn(config *OPNCall) (bool, error) {
 	if err := os.Chdir(config.Path); err != nil {
 		return false, err
@@ -314,5 +377,10 @@ func gitCheckIn(config *OPNCall) (bool, error) {
 	if err := gitPush(config, repo); err != nil {
 		return true, err
 	}
+	if err := gitGC(repo); err != nil {
+		displayChan <- []byte("[GIT][REPO][GC][FAIL] " + err.Error())
+		return true, err
+	}
+	displayChan <- []byte("[GIT][REPO][GC][FINISH]")
 	return true, nil
 }

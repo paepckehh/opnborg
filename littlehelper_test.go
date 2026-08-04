@@ -13,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -1986,6 +1987,136 @@ func TestGitEnsureOriginRecreatesOnMissingRefspec(t *testing.T) {
 	if len(rem.Config().Fetch) == 0 || string(rem.Config().Fetch[0]) != _refspec {
 		t.Fatalf("refspec not repaired after drift: %+v", rem.Config().Fetch)
 	}
+}
+
+// TestGitCheckInRunsGC verifies that gitCheckIn runs the internal gc
+// equivalent after a successful commit: loose objects created by the commit
+// must be consolidated into a packfile, so the .git/objects loose object
+// directory is emptied for the committed blobs.
+func TestGitCheckInRunsGC(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// Several distinct blobs so the commit produces multiple loose objects.
+	for i := 0; i < 5; i++ {
+		if err := os.WriteFile(
+			filepath.Join(store, fmt.Sprintf("file%d.xml", i)),
+			[]byte(fmt.Sprintf("<x>%d</x>", i)), 0660); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	committed, err := gitCheckIn(config)
+	if err != nil {
+		t.Fatalf("gitCheckIn: %v", err)
+	}
+	if !committed {
+		t.Fatalf("expected committed=true")
+	}
+	// After gc, loose objects for the committed blobs should be packed away.
+	loose, err := looseObjectCount(store)
+	if err != nil {
+		t.Fatalf("count loose: %v", err)
+	}
+	if loose != 0 {
+		t.Errorf("expected 0 loose objects after gc, got %d", loose)
+	}
+	// At least one packfile must exist.
+	packs, err := packfileCount(store)
+	if err != nil {
+		t.Fatalf("count packs: %v", err)
+	}
+	if packs == 0 {
+		t.Errorf("expected at least one packfile after gc")
+	}
+}
+
+// TestGitEnsureAggressiveWindow verifies gitInit raises the repo's pack window
+// to the aggressive value so subsequent repacks behave like git gc --aggressive.
+func TestGitEnsureAggressiveWindow(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	cfg, err := repo.ConfigScoped(gitcfg.LocalScope)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if cfg.Pack.Window != _aggressivePackWindow {
+		t.Errorf("pack window = %d, want %d", cfg.Pack.Window, _aggressivePackWindow)
+	}
+	// Re-running gitInit must not lower or break an already-aggressive window.
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit (2nd): %v", err)
+	}
+	cfg, err = repo.ConfigScoped(gitcfg.LocalScope)
+	if err != nil {
+		t.Fatalf("config (2nd): %v", err)
+	}
+	if cfg.Pack.Window != _aggressivePackWindow {
+		t.Errorf("pack window after 2nd init = %d, want %d", cfg.Pack.Window, _aggressivePackWindow)
+	}
+}
+
+// looseObjectCount counts loose object files under <store>/.git/objects (any
+// two-hex-digit subdirectory containing a 38-hex-char file).
+func looseObjectCount(store string) (int, error) {
+	objDir := filepath.Join(store, _dotGit, "objects")
+	entries, err := os.ReadDir(objDir)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	for _, e := range entries {
+		if !e.IsDir() || len(e.Name()) != 2 {
+			continue
+		}
+		subs, err := os.ReadDir(filepath.Join(objDir, e.Name()))
+		if err != nil {
+			return 0, err
+		}
+		n += len(subs)
+	}
+	return n, nil
+}
+
+// packfileCount counts .pack files under <store>/.git/objects/pack.
+func packfileCount(store string) (int, error) {
+	packDir := filepath.Join(store, _dotGit, "objects", "pack")
+	entries, err := os.ReadDir(packDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	var n int
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".pack") {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // TestDashboardGatherBackupFolderAndGitRepo verifies the dashboard stats
