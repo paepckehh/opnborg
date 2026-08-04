@@ -32,6 +32,7 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 - **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive for auditable change-log trails and rapid restore.
 - **Central Log Consolidation** — built-in RFC5424 syslog collector with rotation and archiving.
 - **Unifi Controller Backup** — download and archive Unifi controller `.unf` backups, mirror a co-located autoBackup folder, and export the Unifi inventory to CSV/JSON.
+- **Backup Dashboard** — the WebUI renders a bottom-of-page `BorgDASHBOARD` panel showing the on-disk backup store stats (servers, archive count, total size, newest archive), the local git repo state (HEAD, commit count, last commit, dirty worktree), and the upstream sync health (in sync / ahead / behind / diverged / never pushed, last push result) — all gathered from local state with no network round-trip on render.
 - **Single Static Binary** — no runtime dependencies; cross OS & hardware via Go (Linux, FreeBSD, OpenBSD, NetBSD, Windows; amd64, arm64, armv7).
 - **NixOS Integration** — ready-made modules for Prometheus + Grafana (WIP: Wazuh, Influx, Graylog).
 - **Complementary Sidekick** — designed as a small companion to [OPNCentral](https://opnsense.org/), not a replacement.
@@ -349,6 +350,8 @@ the upstream host is present there before enabling push.
 | `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a valid `autobackup_meta.json` marker in the folder |
 
 When `OPN_UNIFI_WATCH_PATH` points at a co-located controller's autoBackup folder, opnborg watches it for filesystem events and mirrors the newest `.unf` backup into the store (deduplicated by SHA-256 against the previous `CONFIG-CURRENT`) on every change. The watcher is only armed when the folder exists **and** contains an `autobackup_meta.json` marker that parses as valid XML, so opnborg keeps running unchanged on hosts that do not co-locate a controller.
+
+A watch-only deployment is a valid configuration: when `OPN_UNIFI_WATCH_PATH` points at a valid autoBackup folder and neither `OPN_TARGETS` nor `OPN_UNIFI_WEBUI`/`OPN_UNIFI_BACKUP_*` are set, the file watcher is the sole source of backups and opnborg starts normally (the minimum-requirements gate accepts the watch as a backup source).
 
 ### Unifi Inventory Export
 

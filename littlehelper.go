@@ -22,6 +22,11 @@ func outSlice(msg []byte, config *OPNCall) {
 // displayChan channel for the display engine
 var displayChan, display, wg = make(chan []byte, 20), sync.WaitGroup{}, sync.WaitGroup{}
 
+// _cfg is the package-level handle on the live OPNCall config, captured when
+// the httpd arms so the WebUI render path (which has no config parameter) can
+// reach the storage path and git settings for the dashboard panels.
+var _cfg *OPNCall
+
 // startLog is a non-blocking, conditional, concurrent-save background output handler
 func startLog(config *OPNCall) {
 	go func() {

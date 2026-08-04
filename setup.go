@@ -55,10 +55,56 @@ func Setup() (*OPNCall, error) {
 	config.Enable = checkSetRequiredOPN()
 	config.Targets = os.Getenv("OPN_TARGETS")
 
-	// check if we meet basic requirements
+	// check if we meet basic unifi web-fetch backup requirements
 	config.Unifi.Backup.Enable = checkSetRequiredUnifi()
-	if !config.Enable && !config.Unifi.Backup.Enable {
-		return nil, errors.New("please enable either OPN or Unifi backup, Please set OPN_TARGETS and OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_WEBUI and OPN_UNIFI_BACKUP_USER & SECRET")
+
+	// unifi autoBackup folder watch & sync
+	//
+	// When OPN_UNIFI_WATCH_PATH points at the Unifi controller autoBackup
+	// directory (e.g. /var/lib/unifi/data/backup/autobackup) the daemon arms a
+	// goroutine that watches for filesystem change events (add/delete/rename)
+	// and mirrors the newest .unf backup into the local store. The watcher is
+	// only enabled when the directory exists AND contains an
+	// autobackup_meta.json marker file that parses as valid XML; otherwise the
+	// feature is silently disabled so opnborg keeps running on hosts that do
+	// not host a co-located controller.
+	//
+	// This block runs BEFORE the minimum-requirements gate so a watch-only
+	// deployment (no OPN_TARGETS, no OPN_UNIFI_WEBUI fetcher) is a valid
+	// configuration: the file watcher is the sole source of backups.
+	unifiWatchEnable.Store(false)
+	config.Unifi.Watch.Enable = false
+	if isEnv("OPN_UNIFI_WATCH_PATH") {
+		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
+		info, err := os.Stat(watchPath)
+		if err != nil || !info.IsDir() {
+			displayChan <- []byte("[UNIFI][WATCH][DISABLED][SOURCE-FOLDER-NOT-FOUND] " + watchPath)
+		} else {
+			metaPath := filepath.Join(watchPath, "autobackup_meta.json")
+			metaData, err := os.ReadFile(metaPath)
+			if err != nil {
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-NOT-FOUND] " + metaPath)
+			} else if !isValidXML(string(metaData)) {
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-INVALID-XML] " + metaPath)
+			} else {
+				config.Unifi.Watch.Enable = true
+				config.Unifi.Watch.Path = watchPath
+				config.Unifi.Watch.Meta = metaPath
+				if fi, err := os.Stat(metaPath); err == nil {
+					config.Unifi.Watch.LastTS = fi.ModTime()
+				}
+				unifiWatchEnable.Store(true)
+				unifiWatchPath = watchPath
+				displayChan <- []byte("[UNIFI][WATCH][ENABLED][SOURCE] " + watchPath)
+			}
+		}
+	}
+
+	// check if we meet basic requirements: at least one backup source (OPN
+	// hive, Unifi web-fetch backup, or Unifi autoBackup folder watch) must be
+	// enabled, otherwise opnborg has nothing to do.
+	if !config.Enable && !config.Unifi.Backup.Enable && !config.Unifi.Watch.Enable {
+		return nil, errors.New("please enable either OPN or Unifi backup, Please set OPN_TARGETS and OPN_APIKEY & OPN_APISECRET or OPN_UNIFI_WEBUI and OPN_UNIFI_BACKUP_USER & SECRET, or point OPN_UNIFI_WATCH_PATH at a co-located Unifi autoBackup folder")
 	}
 
 	// setup app name
@@ -196,44 +242,6 @@ func Setup() (*OPNCall, error) {
 				if d := os.Getenv("OPN_UNIFI_FORMAT"); d == "json" {
 					config.Unifi.Export.Format = "json"
 				}
-			}
-		}
-	}
-
-	// unifi autoBackup folder watch & sync
-	//
-	// When OPN_UNIFI_WATCH_PATH points at the Unifi controller autoBackup
-	// directory (e.g. /var/lib/unifi/data/backup/autobackup) the daemon arms a
-	// goroutine that watches for filesystem change events (add/delete/rename)
-	// and mirrors the newest .unf backup into the local store. The watcher is
-	// only enabled when the directory exists AND contains an
-	// autobackup_meta.json marker file that parses as valid XML; otherwise the
-	// feature is silently disabled so opnborg keeps running on hosts that do
-	// not host a co-located controller.
-	unifiWatchEnable.Store(false)
-	config.Unifi.Watch.Enable = false
-	if isEnv("OPN_UNIFI_WATCH_PATH") {
-		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
-		info, err := os.Stat(watchPath)
-		if err != nil || !info.IsDir() {
-			displayChan <- []byte("[UNIFI][WATCH][DISABLED][SOURCE-FOLDER-NOT-FOUND] " + watchPath)
-		} else {
-			metaPath := filepath.Join(watchPath, "autobackup_meta.json")
-			metaData, err := os.ReadFile(metaPath)
-			if err != nil {
-				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-NOT-FOUND] " + metaPath)
-			} else if !isValidXML(string(metaData)) {
-				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-INVALID-XML] " + metaPath)
-			} else {
-				config.Unifi.Watch.Enable = true
-				config.Unifi.Watch.Path = watchPath
-				config.Unifi.Watch.Meta = metaPath
-				if fi, err := os.Stat(metaPath); err == nil {
-					config.Unifi.Watch.LastTS = fi.ModTime()
-				}
-				unifiWatchEnable.Store(true)
-				unifiWatchPath = watchPath
-				displayChan <- []byte("[UNIFI][WATCH][ENABLED][SOURCE] " + watchPath)
 			}
 		}
 	}

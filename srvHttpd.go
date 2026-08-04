@@ -9,6 +9,11 @@ import (
 // httpd spinup the http internal web server
 func startWeb(c *OPNCall) {
 
+	// capture the live config handle for the WebUI render path (the dashboard
+	// gathers backup folder + git state on every render and needs the storage
+	// path / git settings).
+	_cfg = c
+
 	// create store structure
 	if err := os.MkdirAll(c.Path, 0770); err != nil {
 		fmt.Println(err)

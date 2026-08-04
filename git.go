@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -22,6 +23,17 @@ const (
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"
 	_defaultSSHUser = "git"
+)
+
+// gitLastPush tracks the outcome of the most recent upstream push so the
+// WebUI dashboard can surface upstream sync health. It is mutated only from
+// gitPush (which runs inside gitCheckIn on the main loop) and read from the
+// httpd render goroutine, so a dedicated mutex guards it.
+var (
+	gitLastPushMu  sync.Mutex
+	gitLastPushTS  time.Time
+	gitLastPushOK  bool
+	gitLastPushMsg string
 )
 
 // gitRepo opens the existing git repository at the given path, or initialises a
@@ -150,7 +162,8 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 
 // gitPush pushes the current branch to the configured upstream SSH repository,
 // authenticating with the private key at config.Git.SSHKey. It is a no-op when
-// no upstream is configured.
+// no upstream is configured. The outcome (timestamp, success flag, message) is
+// recorded for the WebUI dashboard upstream-sync panel.
 func gitPush(config *OPNCall, repo *git.Repository) error {
 	upstream := config.Git.Upstream
 	if upstream == "" {
@@ -158,9 +171,11 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 	}
 	auth, err := gitSSHAuth(upstream, config.Git.SSHKey)
 	if err != nil {
+		recordPush(false, "ssh key: "+err.Error())
 		return err
 	}
 	if err := gitEnsureOrigin(repo, upstream); err != nil {
+		recordPush(false, "origin: "+err.Error())
 		return err
 	}
 	if err := repo.Push(&git.PushOptions{
@@ -168,10 +183,23 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 		Auth:       auth,
 	}); err != nil {
 		displayChan <- []byte("[GIT][REPO][PUSH][FAIL] " + err.Error())
+		recordPush(false, err.Error())
 		return err
 	}
 	displayChan <- []byte("[GIT][REPO][PUSH][FINISH] " + upstream)
+	recordPush(true, "pushed to "+upstream)
 	return nil
+}
+
+// recordPush stores the outcome of an upstream push attempt under gitLastPushMu
+// so the WebUI dashboard can render upstream sync health without re-running the
+// push.
+func recordPush(ok bool, msg string) {
+	gitLastPushMu.Lock()
+	gitLastPushTS = time.Now()
+	gitLastPushOK = ok
+	gitLastPushMsg = msg
+	gitLastPushMu.Unlock()
 }
 
 // gitInit ensures the storage folder is a git repository and the .gitignore is

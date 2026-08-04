@@ -89,6 +89,7 @@ func getStartHTML() string {
 	s.WriteString(getHive())
 	s.WriteString(getUnifiWatch())
 	s.WriteString(getPKG())
+	s.WriteString(getDashboard(_cfg))
 	s.WriteString(_bodySemVer)
 	s.WriteString(_bodyFooter)
 	s.WriteString(_bodyEnd)

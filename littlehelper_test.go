@@ -1091,6 +1091,7 @@ func TestGetStartHTMLStructure(t *testing.T) {
 		"BorgBACKUP",
 		"60 seconds",
 		"Backup NOW",
+		"BorgDASHBOARD",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("getStartHTML missing %q", want)
@@ -1896,6 +1897,117 @@ func TestGitCheckInCommitsAndIdempotent(t *testing.T) {
 
 // --- setup.go: httpd enable gating ---------------------------------------
 
+// TestDashboardGatherBackupFolderAndGitRepo verifies the dashboard stats
+// gatherer counts server archive trees, archive entries, total bytes, newest
+// archive mtime, and the local git repo state (HEAD hash, commit count,
+// dirty worktree) from a populated store with git enabled.
+func TestDashboardGatherBackupFolderAndGitRepo(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	savedPush := func() {
+		gitLastPushMu.Lock()
+		savedTS, savedOK, savedMsg := gitLastPushTS, gitLastPushOK, gitLastPushMsg
+		gitLastPushMu.Unlock()
+		t.Cleanup(func() {
+			gitLastPushMu.Lock()
+			gitLastPushTS, gitLastPushOK, gitLastPushMsg = savedTS, savedOK, savedMsg
+			gitLastPushMu.Unlock()
+		})
+	}
+	savedPush()
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+
+	// two server slots with archive entries
+	for _, srv := range []string{"fw01.lan", "fw02.lan"} {
+		archDir := filepath.Join(store, srv, ".archive", "2024", "06")
+		if err := os.MkdirAll(archDir, 0770); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(archDir, "20240601T100000Z-"+srv+".xml"), []byte("<x/>"), 0660); err != nil {
+			t.Fatalf("write archive: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, srv, "current.xml"), []byte("<x/>"), 0660); err != nil {
+			t.Fatalf("write current: %v", err)
+		}
+	}
+
+	// init git + commit so HEAD is non-empty
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	if committed, err := gitCheckIn(config); err != nil || !committed {
+		t.Fatalf("gitCheckIn: committed=%v err=%v", committed, err)
+	}
+
+	d := gatherDashboard(config)
+	if d.servers != 2 {
+		t.Errorf("servers = %d, want 2", d.servers)
+	}
+	if d.archives != 2 {
+		t.Errorf("archives = %d, want 2", d.archives)
+	}
+	if d.archiveBytes < 6 {
+		t.Errorf("archiveBytes = %d, want >=6", d.archiveBytes)
+	}
+	if d.newestArchive.IsZero() {
+		t.Errorf("newestArchive should be populated")
+	}
+	if !d.gitRepo {
+		t.Errorf("gitRepo should be true after gitInit")
+	}
+	if d.gitHead == "" {
+		t.Errorf("gitHead should be non-empty after a commit")
+	}
+	if d.gitCommits < 1 {
+		t.Errorf("gitCommits = %d, want >=1", d.gitCommits)
+	}
+	if d.gitDirty != 0 {
+		t.Errorf("gitDirty = %d, want 0 after checkin", d.gitDirty)
+	}
+	if d.upstreamConfigured {
+		t.Errorf("upstreamConfigured should be false when OPN_GIT_UPSTREAM unset")
+	}
+}
+
+// TestDashboardRenderDisabledGit verifies the dashboard renders the three
+// panels (with the git + upstream panels collapsed to disabled state) when git
+// management is disabled, and that the HTML structure is present.
+func TestDashboardRenderDisabledGit(t *testing.T) {
+	ensureDisplayDrained(t)
+	config := &OPNCall{Path: t.TempDir()}
+	html := getDashboard(config)
+	for _, want := range []string{
+		"BorgDASHBOARD",
+		"dash-panel",
+		"Backup Store",
+		"Local Git Repo",
+		"Upstream Sync",
+		"git management disabled",
+		"no upstream configured",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("dashboard missing %q", want)
+		}
+	}
+}
+
+// TestDashboardNilConfigPlaceholder verifies getDashboard does not panic when
+// the config handle is nil (e.g. httpd not armed yet in tests) and emits the
+// placeholder.
+func TestDashboardNilConfigPlaceholder(t *testing.T) {
+	if got := getDashboard(nil); !strings.Contains(got, "awaiting config") {
+		t.Errorf("nil config should render placeholder, got: %q", got)
+	}
+}
+
 // TestSetupHttpdDisabledInOneShotMode verifies the httpd is NOT armed when the
 // daemon is disabled (OPN_NODAEMON set). Previously Httpd.Enable defaulted to
 // true and the daemon-mode block never ran in one-shot mode, leaving Enable=true
@@ -1977,6 +2089,63 @@ func TestSetupHttpdHonorsDisableFlag(t *testing.T) {
 }
 
 // --- httpd-handler.go: non-blocking /force pokes -------------------------
+
+// TestSetupWatchOnlyNoWebFetcher verifies that a watch-only deployment (only
+// OPN_UNIFI_WATCH_PATH set, no OPN_TARGETS, no OPN_UNIFI_WEBUI fetcher) is a
+// valid configuration and Setup does NOT abort with the "please enable either
+// OPN or Unifi backup" error. Previously the minimum-requirements gate ran
+// before the watch parsing block, so a watch-only host could never start.
+func TestSetupWatchOnlyNoWebFetcher(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+	})
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_UNIFI_WEBUI", "OPN_UNIFI_BACKUP_USER", "OPN_UNIFI_BACKUP_SECRET",
+		"OPN_UNIFI_VERSION", "OPN_UNIFI_EXPORT", "OPN_UNIFI_MONGODB_URI",
+		"OPN_UNIFI_FORMAT", "OPN_UNIFI_WATCH_PATH",
+		"OPN_NODAEMON", "OPN_GIT_ENABLE", "OPN_GIT_UPSTREAM", "OPN_GIT_SSH_KEY",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+
+	// prepare a watch folder with a valid-XML marker
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "autobackup_meta.json"), []byte(`<autobackup><version>8.5.6</version></autobackup>`), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	withEnv(t, "OPN_UNIFI_WATCH_PATH", src, true)
+	withEnv(t, "OPN_NODAEMON", "1", true) // one-shot so no httpd/rsyslog goroutines arm
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup returned err for watch-only config: %v", err)
+	}
+	if config.Enable {
+		t.Errorf("OPN hive should be disabled in watch-only mode")
+	}
+	if config.Unifi.Backup.Enable {
+		t.Errorf("Unifi web-fetch backup should be disabled in watch-only mode")
+	}
+	if !config.Unifi.Watch.Enable {
+		t.Errorf("Unifi watch should be enabled")
+	}
+	if !unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable global should be true")
+	}
+}
 
 // TestGetForceHandlerNonBlocking verifies the /force handler never blocks on a
 // full update channel. Previously it used blocking sends; if a tick was
