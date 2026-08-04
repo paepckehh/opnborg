@@ -1255,6 +1255,93 @@ func TestCheckSetRequiredUnifiWithDesc(t *testing.T) {
 	}
 }
 
+// --- Setup: Unifi export MongoDB URI default --------------------------------
+
+// TestSetupUnifiExportURIDefault verifies that Setup keeps the default
+// MongoDB URI when OPN_UNIFI_MONGODB_URI is unset. Previously checkURL
+// returned (nil, nil) for an unset var and overwrote the default, causing a
+// nil-pointer panic in srvUnifiExport when it called URI.String().
+func TestSetupUnifiExportURIDefault(t *testing.T) {
+	ensureDisplayDrained(t)
+
+	// Snapshot and restore the env vars Setup reads for the unifi export path.
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_UNIFI_WEBUI", "OPN_UNIFI_BACKUP_USER", "OPN_UNIFI_BACKUP_SECRET",
+		"OPN_UNIFI_VERSION", "OPN_UNIFI_EXPORT", "OPN_UNIFI_MONGODB_URI",
+		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_NOGIT",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+
+	// Configure unifi backup + export but leave OPN_UNIFI_MONGODB_URI unset.
+	withEnv(t, "OPN_UNIFI_WEBUI", "https://unifi.example.com:8443", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_USER", "user", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_SECRET", "secret", true)
+	withEnv(t, "OPN_UNIFI_VERSION", "8.5.6", true)
+	withEnv(t, "OPN_UNIFI_EXPORT", "1", true)
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if !config.Unifi.Export.Enable {
+		t.Fatal("Unifi export should be enabled")
+	}
+	if config.Unifi.Export.URI == nil {
+		t.Fatal("Unifi export URI must not be nil when OPN_UNIFI_MONGODB_URI is unset; srvUnifiExport would panic on URI.String()")
+	}
+	if got := config.Unifi.Export.URI.String(); got != "mongodb://127.0.0.1:27117" {
+		t.Errorf("Unifi export URI = %q, want default mongodb://127.0.0.1:27117", got)
+	}
+}
+
+// TestSetupUnifiExportURIOverride verifies the default is overridden when the
+// env var is set.
+func TestSetupUnifiExportURIOverride(t *testing.T) {
+	ensureDisplayDrained(t)
+
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_UNIFI_WEBUI", "OPN_UNIFI_BACKUP_USER", "OPN_UNIFI_BACKUP_SECRET",
+		"OPN_UNIFI_VERSION", "OPN_UNIFI_EXPORT", "OPN_UNIFI_MONGODB_URI",
+		"OPN_UNIFI_FORMAT", "OPN_NODAEMON", "OPN_NOGIT",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+
+	withEnv(t, "OPN_UNIFI_WEBUI", "https://unifi.example.com:8443", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_USER", "user", true)
+	withEnv(t, "OPN_UNIFI_BACKUP_SECRET", "secret", true)
+	withEnv(t, "OPN_UNIFI_VERSION", "8.5.6", true)
+	withEnv(t, "OPN_UNIFI_EXPORT", "1", true)
+	withEnv(t, "OPN_UNIFI_MONGODB_URI", "mongodb://10.0.0.5:27017", true)
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if got := config.Unifi.Export.URI.String(); got != "mongodb://10.0.0.5:27017" {
+		t.Errorf("Unifi export URI = %q, want mongodb://10.0.0.5:27017", got)
+	}
+}
+
 // --- getPKG: modern HTML structure ---------------------------------------
 
 func TestGetPKGModernHTML(t *testing.T) {

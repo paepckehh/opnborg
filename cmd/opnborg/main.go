@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"paepcke.de/opnborg"
@@ -29,7 +30,7 @@ func main() {
 			log.Println(_app + "[HELP] Visit [paepcke.de/opnborg|github.com/paepckehh/opnborg] for details.")
 			os.Exit(0)
 		default:
-			log.Fatalf(_app+"[ERROR][EXIT][COMMANDLINE-OPTIONS-NOT-SUPPORTED]: %s\n", os.Args[1:])
+			log.Fatalf(_app+"[ERROR][EXIT][COMMANDLINE-OPTIONS-NOT-SUPPORTED]: %s\n", strings.Join(os.Args[1:], " "))
 		}
 	}
 

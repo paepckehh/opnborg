@@ -233,7 +233,7 @@ the upstream host is present there before enabling push.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `OPN_HTTPD_DISABLE` | `false` | Disable the internal HTTPD server |
+| `OPN_HTTPD_DISABLE` | unset (= httpd on) | Disable the internal HTTPD server |
 | `OPN_HTTPD_SERVER` | `127.0.0.1:6464` | HTTPD listen address |
 | `OPN_HTTPD_CACERT` | _empty_ | Server CA X.509 certificate; empty disables HTTPS |
 | `OPN_HTTPD_CAKEY` | _empty_ | Server CA key; empty disables HTTPS |
@@ -256,6 +256,7 @@ the upstream host is present there before enabling push.
 | `OPN_UNIFI_BACKUP_SECRET` | Unifi backup user account password |
 | `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
 | `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
+| `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a valid `autobackup_meta.json` marker in the folder |
 
 ### Unifi Inventory Export
 
@@ -317,7 +318,7 @@ See [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex) for details
 
 ### Operational notes
 
-- The internal web server listens on `0.0.0.0:6464` (daemon mode only) → <http://localhost:6464>.
+- The internal web server listens on `127.0.0.1:6464` by default (daemon mode only) → <http://localhost:6464>.
 - Boolean env vars are always `true` when defined — the assigned value is irrelevant.
 - `OPN_TARGETS` & `OPN_MASTER` must hold reachable WebUI interfaces (e.g. `192.168.0.1`) including a port if not `:443` (e.g. `192.168.0.1:8443`).
 - Clear-text HTTP is unsupported — enable HTTPS for your admin interface (self-signed certificates are fine).

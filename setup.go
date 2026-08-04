@@ -183,8 +183,14 @@ func Setup() (*OPNCall, error) {
 				if config.Unifi.Export.URI, err = url.Parse("mongodb://127.0.0.1:27117"); err != nil {
 					panic(err) // unreachable internal error in default mongodb uri
 				}
-				if config.Unifi.Export.URI, err = checkURL("OPN_UNIFI_MONGODB_URI"); err != nil {
-					return config, err
+				// Only override the default when the env var is set; checkURL
+				// returns (nil, nil) when the var is absent, which would
+				// otherwise wipe the default and cause a nil-pointer panic in
+				// srvUnifiExport when it calls URI.String().
+				if _, ok := os.LookupEnv("OPN_UNIFI_MONGODB_URI"); ok {
+					if config.Unifi.Export.URI, err = checkURL("OPN_UNIFI_MONGODB_URI"); err != nil {
+						return config, err
+					}
 				}
 				config.Unifi.Export.Format = "csv"
 				if d := os.Getenv("OPN_UNIFI_FORMAT"); d == "json" {
