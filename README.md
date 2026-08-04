@@ -195,9 +195,25 @@ export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/unifi.png'
 | `OPN_SLEEP` | `3600` | Daemon poll interval in seconds (minimum `10`) |
 | `OPN_EMAIL` | `git@opnborg` | Email address used for local git commits |
 | `OPN_NODAEMON` | unset (= daemon on) | Quit after one loop instead of running as a daemon |
-| `OPN_NOGIT` | unset (= git on) | Do not create/update a local git repo |
-| `OPN_GITPUSH` | unset | Push all changes to the upstream git repo (requires `.git/config` upstream) |
 | `OPN_DEBUG` | unset | Verbose debug log mode |
+
+### Backup Storage Git Repo
+
+opnborg can manage the backup storage folder (`OPN_PATH`) as a local git
+repository: it auto-initialises the repo when none is present, keeps a
+`.gitignore` for the archive/history artifacts, and commits every change after
+a backup pass. When an upstream SSH remote is configured it also pushes the
+fresh commit, all via the native `go-git` library (no external `git` binary is
+required or invoked).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPN_GIT_ENABLE` | unset | Manage `OPN_PATH` as a git repo with auto commit (opt-in) |
+| `OPN_GIT_UPSTREAM` | _empty_ | Upstream SSH git URL to sync with (e.g. `git@github.com:user/repo.git`); empty disables push |
+| `OPN_GIT_SSH_KEY` | _empty_ | Path to the PEM-encoded SSH private key used for upstream auth (required when `OPN_GIT_UPSTREAM` is set) |
+
+Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
+the upstream host is present there before enabling push.
 
 ### Package Installation Sync
 

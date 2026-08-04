@@ -1636,3 +1636,173 @@ func TestSyncUnifiWatchSkipsTooSmall(t *testing.T) {
 		t.Errorf("too-small backup should not be checked into store")
 	}
 }
+
+// --- git.go: sshUserFromURL + validateGitConfig --------------------------
+
+func TestSSHUserFromURL(t *testing.T) {
+	cases := map[string]string{
+		"git@github.com:user/repo.git":   "git",
+		"deploy@example.org:org/repo":    "deploy",
+		"ssh://git@github.com/user/repo": "git",
+		"ssh://backup@host.io:22/r.git":  "backup",
+		"ssh://host.io/path":             "git", // ssh:// without user
+		"github.com:user/repo.git":       "git", // no user => default
+		"":                               "git",
+		"@hostonly:path":                 "git", // leading '@' => default (no user before '@')
+	}
+	for in, want := range cases {
+		if got := sshUserFromURL(in); got != want {
+			t.Errorf("sshUserFromURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestValidateGitConfigDisabledClearsFields(t *testing.T) {
+	config := &OPNCall{}
+	config.Git.Enable = false
+	config.Git.Upstream = "git@github.com:user/repo.git"
+	config.Git.SSHKey = "/tmp/key"
+	if err := validateGitConfig(config); err != nil {
+		t.Fatalf("disabled feature must not error, got %v", err)
+	}
+	if config.Git.Upstream != "" || config.Git.SSHKey != "" {
+		t.Errorf("disabled feature should clear upstream/key, got upstream=%q key=%q",
+			config.Git.Upstream, config.Git.SSHKey)
+	}
+}
+
+func TestValidateGitConfigEnabledNoUpstream(t *testing.T) {
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true}}
+	if err := validateGitConfig(config); err != nil {
+		t.Fatalf("enabled with no upstream/key must not error, got %v", err)
+	}
+}
+
+func TestValidateGitConfigUpstreamWithoutKey(t *testing.T) {
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true, Upstream: "git@github.com:user/repo.git"}}
+	if err := validateGitConfig(config); err == nil {
+		t.Fatalf("upstream without key must error")
+	}
+}
+
+func TestValidateGitConfigKeyWithoutUpstream(t *testing.T) {
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte("dummy"), 0600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true, SSHKey: key}}
+	if err := validateGitConfig(config); err == nil {
+		t.Fatalf("key without upstream must error")
+	}
+}
+
+func TestValidateGitConfigKeyMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: missing}}
+	if err := validateGitConfig(config); err == nil {
+		t.Fatalf("missing key file must error")
+	}
+}
+
+func TestValidateGitConfigKeyIsDir(t *testing.T) {
+	dir := t.TempDir()
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: dir}}
+	if err := validateGitConfig(config); err == nil {
+		t.Fatalf("key path pointing at a directory must error")
+	}
+}
+
+func TestValidateGitConfigKeyFileOK(t *testing.T) {
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte("dummy"), 0600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	config := &OPNCall{Git: struct {
+		Enable   bool
+		Upstream string
+		SSHKey   string
+	}{Enable: true, Upstream: "git@github.com:user/repo.git", SSHKey: key}}
+	if err := validateGitConfig(config); err != nil {
+		t.Fatalf("valid upstream+key must not error, got %v", err)
+	}
+}
+
+// --- git.go: gitInit + gitCheckIn end-to-end -------------------------------
+
+func TestGitInitCreatesRepoAndIgnore(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store, ".git")); err != nil {
+		t.Errorf(".git metadata not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store, _gitignore)); err != nil {
+		t.Errorf(".gitignore not created: %v", err)
+	}
+	// idempotent: a second init must not fail and must keep the gitignore.
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit (2nd): %v", err)
+	}
+}
+
+func TestGitCheckInCommitsAndIdempotent(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "current.xml"), []byte("<x/>"), 0660); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	committed, err := gitCheckIn(config)
+	if err != nil {
+		t.Fatalf("gitCheckIn: %v", err)
+	}
+	if !committed {
+		t.Fatalf("first checkin with new file must report committed=true")
+	}
+	// second pass with no changes must report committed=false (clean worktree)
+	committed, err = gitCheckIn(config)
+	if err != nil {
+		t.Fatalf("gitCheckIn (2nd): %v", err)
+	}
+	if committed {
+		t.Errorf("clean worktree must report committed=false")
+	}
+}

@@ -74,13 +74,15 @@ func Setup() (*OPNCall, error) {
 	// validate bools
 	config.Daemon = !isEnv("OPN_NODAEMON")
 	config.Debug = isEnv("OPN_DEBUG")
-	config.Git = !isEnv("OPN_NOGIT")
-	config.GitPush = isEnv("OPN_GITPUSH")
 
-	// configure git repo https server
-	config.GitSrv.Enable = false
-	if isEnv("OPN_GITSRV") {
-		config.GitSrv.Enable = true
+	// configure backup storage git repo management (init + auto commit +
+	// optional upstream SSH sync). The feature is opt-in via OPN_GIT_ENABLE;
+	// when disabled the storage folder is left as a plain directory tree.
+	config.Git.Enable = isEnv("OPN_GIT_ENABLE")
+	config.Git.Upstream = os.Getenv("OPN_GIT_UPSTREAM")
+	config.Git.SSHKey = os.Getenv("OPN_GIT_SSH_KEY")
+	if err := validateGitConfig(config); err != nil {
+		return nil, err
 	}
 
 	// configure remote syslog server

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
-	githttp "github.com/AaronO/go-git-http"
 )
 
 // httpd spinup the http internal web server
@@ -38,14 +36,6 @@ func startWeb(c *OPNCall) {
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path)))))
 	mux.Handle("/force", getForceHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())
-
-	// spin up internal git repo https server
-	state := "[DISABLED]"
-	if c.GitSrv.Enable {
-		mux.Handle("/git", githttp.New(c.Path))
-		state = "[ENABLED]"
-	}
-	displayChan <- []byte("[GITSRV-HTTP]" + state)
 
 	// httpsrv
 	httpsrv := &http.Server{

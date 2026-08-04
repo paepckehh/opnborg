@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.97"
+const SemVer = "v0.1.98"
 
 // global var
 var (
@@ -44,8 +44,6 @@ type OPNCall struct {
 	Sleep     int64       // number of seconds to sleep between polls
 	Daemon    bool        // daemonize (run in background), default: true
 	Debug     bool        // verbose debug logs, defaults to false
-	Git       bool        // create and commit all xml files & changes to local .git repo, default: true
-	GitPush   bool        // push .git repo to configured upstream, default: false
 	dirty     atomic.Bool // git global (atomic) worktree state
 	Httpd     struct {
 		Enable   bool   // enable internal web server
@@ -58,8 +56,10 @@ type OPNCall struct {
 			BG string // color theme foreground
 		}
 	}
-	GitSrv struct {
-		Enable bool
+	Git struct {
+		Enable   bool   // manage the backup storage folder as a local git repo with auto commit (default: false)
+		Upstream string // upstream SSH git URL to sync with (e.g. git@github.com:user/repo.git); empty disables push
+		SSHKey   string // path to the PEM-encoded SSH private key used for upstream auth (required when Upstream is set)
 	}
 	Unifi struct {
 		WebUI   *url.URL

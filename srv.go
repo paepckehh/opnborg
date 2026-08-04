@@ -115,14 +115,20 @@ func srv(config *OPNCall) error {
 	}
 	displayChan <- []byte("[SERVICE][OPN-BACKUP-AND-MONITORING]" + state)
 
+	// ensure the backup storage git repo is initialised before the first
+	// worker pass runs, so the .git metadata and .gitignore exist up front.
+	if config.Git.Enable {
+		if err := gitInit(config); err != nil {
+			displayChan <- []byte("[GIT][REPO][INIT][FAIL] " + err.Error())
+			return err
+		}
+		displayChan <- []byte("[GIT][REPO][INIT][" + config.Path + "]")
+	}
+
 	// main loop
 	for {
 		// reset global (atomic) git worktree state tracker
-		if config.Git {
-			// init git repo
-			_ = gitCheckIn(config)
-			config.dirty.Store(false)
-		}
+		config.dirty.Store(false)
 
 		// is opnsense hive is enabled
 		if config.Enable {
@@ -162,12 +168,13 @@ func srv(config *OPNCall) error {
 
 		// check files into local git repo
 		if config.dirty.Load() {
-			if config.Git {
-				if err := gitCheckIn(config); err != nil {
-					displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL]")
+			if config.Git.Enable {
+				if committed, err := gitCheckIn(config); err != nil {
+					displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL] " + err.Error())
 					return err
+				} else if committed {
+					displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
 				}
-				displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
 			}
 			displayChan <- []byte("[CHANGES-DETECTED][UPDATES-DONE][FINISH]")
 		}

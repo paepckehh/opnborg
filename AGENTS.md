@@ -106,7 +106,7 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 ### HTTP WebUI (`srvHttpd.go`, `httpd-handler.go`, `httpd-ui.go`, `httpd-transport.go`)
 
-- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`, optional `/git` (go-git-http smart HTTP server, enabled by `OPN_GITSRV`).
+- `mux`: `/` (index), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/favicon.ico`.
 - Index handler renders HTML built from inlined SVG/HTML constants in `httpd-ui.go`. `_head`, `_forceRedirect` are assembled at `Setup()` time from `OPN_HTTPD_COLOR_FG` / `OPN_HTTPD_COLOR_BG`.
 - Status strings (`_ok`, `_fail`, `_na`, `_degraded`, `_unifi`) are inline animated SVGs defined as `const` in `httpd-ui.go`. `status.go` mutates the `hive` / `unifiStatus` strings under `hiveMutex` / `unifiMutex`.
 - A `addSecurityHeader` middleware wraps index and `/files/`.
@@ -124,7 +124,8 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 ## Configuration Conventions (ENV)
 
 - **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`) as long as the value is non-empty. To disable, unset the var. The only exception is the empty string, which `isEnv` treats as false.
-- `OPN_NODAEMON` and `OPN_NOGIT` invert the default (both default to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`, `Git = !isEnv("OPN_NOGIT")`.
+- `OPN_NODAEMON` inverts the default (daemon defaults to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`.
+- The backup storage git repo feature is opt-in via `OPN_GIT_ENABLE` (presence-based). `OPN_GIT_UPSTREAM` sets an upstream SSH git URL to push to, and `OPN_GIT_SSH_KEY` points at the PEM-encoded private key used for upstream auth; both are validated together in `validateGitConfig` (`git.go`). Host key verification relies on go-git's default `~/.ssh/known_hosts` callback.
 - Either OPN backup (`OPN_APIKEY` + `OPN_APISECRET`) or Unifi backup (`OPN_UNIFI_BACKUP_USER` + `OPN_UNIFI_BACKUP_SECRET` + `OPN_UNIFI_VERSION`) must be configured or `Setup()` returns a fatal error.
 - `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description, and `OPN_TARGETS_IMGURL_<GROUPNAME>` supplies a custom image URL that replaces the text headline (the description then becomes the image's tooltip).
 - `OPN_TARGETS` / `OPN_MASTER` entries must include a port suffix if not `:443` (e.g. `192.168.0.1:8443`). Clear-text HTTP is unsupported.
@@ -149,7 +150,7 @@ For a configured `OPN_PATH` (default `.`):
   Logs/current.log                   # rotated by lumberjack (256MB, 256 backups, 180d, gzipped)
 ```
 
-`gitCheckIn` does `os.Chdir(config.Path)` then `git.PlainOpen`/`git.PlainInit` (SHA256 object format on new repos), `wtree.Add(".")`, and commits with message `"opnborg auto update"` authored as `OPNBORG-AUTO-COMMIT <config.Email>` (default `git@opnborg`). It also runs `repo.RepackObjects` and, when `OPN_GITPUSH` is set, pushes to the configured upstream. Multiple call sites `os.Chdir` into subdirectories — be careful when adding new code that assumes a stable CWD; restore or re-`Chdir` as needed.
+`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` (`git.PlainOpen` / `git.PlainInit` on first run) plus `gitEnsureIgnore` run once at startup; `gitCheckIn` (`os.Chdir(config.Path)`, open repo, `wtree.Status()` fast-path, `wtree.Add(".")`, commit authored as `OPNBORG-AUTO-COMMIT <config.Email>`) runs per tick when `config.dirty` is set. When `OPN_GIT_UPSTREAM` is set, `gitPush` recreates the `origin` remote if its URL drifted and pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`; host key verification uses go-git's default `~/.ssh/known_hosts` callback. All git operations use the native `go-git` library — no external `git` binary is invoked. Multiple call sites `os.Chdir` into subdirectories — be careful when adding new code that assumes a stable CWD; restore or re-`Chdir` as needed.
 
 ## Testing
 
@@ -181,9 +182,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 
 ## External Dependencies of Note
 
-- `github.com/go-git/go-git/v5` -- pure-Go git for local repo management and commits.
-- `github.com/AaronO/go-git-http` -- smart HTTP git server mounted at `/git` when `OPN_GITSRV` is set.
-- `github.com/alecthomas/chroma/v2` -- syntax highlighting for the WebUI (referenced from `git.go`).
+- `github.com/go-git/go-git/v5` -- pure-Go git for local repo management, commits, and SSH push to upstream.
 - `github.com/cnaude/go-syslog/syslog/v3` -- RFC5424 syslog server.
 - `github.com/natefinch/lumberjack` + `github.com/sirupsen/logrus` -- log rotation/formatting for the syslog sink.
 - `paepcke.de/uniex` -- Unifi inventory export logic (delegated to that module; opnborg only wires the env config).

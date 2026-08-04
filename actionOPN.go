@@ -67,7 +67,7 @@ func actionOPN(server, tag string, config *OPNCall, id int, wg *sync.WaitGroup) 
 	}
 
 	// set git global (atomic) worktree state tracker
-	if config.Git {
+	if config.Git.Enable {
 		config.dirty.Store(true)
 	}
 
