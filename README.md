@@ -44,14 +44,19 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 Run the latest tagged release directly from source — no build step required:
 
 ```sh
-OPN_TARGETS="opn01.lan,opn02.lan" \
-OPN_APIKEY="..." \
-OPN_APISECRET="..." \
-OPN_UNIFI_WEBUI="127.0.0.1:6464" \
+OPN_PATH='/tmp/opn' \
+OPN_TARGETS='opn01.lan:8443,opn02.lan:8443' \
+OPN_APIKEY='...' \
+OPN_APISECRET='...' \
 go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-Then open the WebUI at <http://localhost:6464>.
+In daemon mode (the default) the internal WebUI comes up at
+<http://localhost:6464>. Add `OPN_NODAEMON=1` to run a single backup pass and
+exit instead. See the [Minimal example](#minimal-example) below for a copy &
+paste baseline, and the [Unifi controller backup](#unifi-controller-backup)
+section when you want to back up a Unifi controller instead of (or alongside)
+OPNsense.
 
 ---
 
@@ -244,10 +249,9 @@ export OPN_WAZUH_WEBUI='http://localhost:9292'
           extraOptions = ["--network=host"];
           environment = {
             "OPN_PATH" = "/var/opnborg";
-            "OPN_TARGETS" = "opn01.lan,opn02.lan";
+            "OPN_TARGETS" = "opn01.lan:8443,opn02.lan:8443";
             "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W...";
             "OPN_APISECRET" = "8VbjM3HKKqQW2o...";
-            "OPN_UNIFI_WEBUI" = "127.0.0.1:6464";
           };
         };
       };
@@ -323,8 +327,8 @@ the upstream host is present there before enabling push.
 | `OPN_HTTPD_CACERT` | _empty_ | Server CA X.509 certificate; empty disables HTTPS |
 | `OPN_HTTPD_CAKEY` | _empty_ | Server CA key; empty disables HTTPS |
 | `OPN_HTTPD_CACLIENT` | _empty_ | Client CA certificate; if set, enforces mTLS |
-| `OPN_HTTPD_COLOR_FG` | — | WebUI foreground color (e.g. `black` or `#000000`) |
-| `OPN_HTTPD_COLOR_BG` | — | WebUI background color (e.g. `orange` or `#ffa500`) |
+| `OPN_HTTPD_COLOR_FG` | `white` | WebUI foreground color (e.g. `black` or `#000000`) |
+| `OPN_HTTPD_COLOR_BG` | `#333333` | WebUI background color (e.g. `orange` or `#ffa500`) |
 
 ### Prometheus
 
@@ -354,7 +358,7 @@ See [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex) for details
 | --- | --- | --- |
 | `OPN_UNIFI_EXPORT` | unset | Enable nightly Unifi inventory export into the git repo (e.g. `1`) |
 | `OPN_UNIFI_FORMAT` | `csv` | Export format; optional `json` |
-| `OPN_UNIFI_MONGODB_URI` | `mongodb://localhost:27117` | Unifi MongoDB database URI |
+| `OPN_UNIFI_MONGODB_URI` | `mongodb://127.0.0.1:27117` | Unifi MongoDB database URI |
 
 ### Wazuh
 
