@@ -13,7 +13,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 3. **Test** — `go test -count=1 ./...` must be ok
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
 > 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
->    (the current release series; the latest tag is `v0.1.99`). Never move,
+>    (the current release series; the latest tag is `v0.1.116`). Never move,
 >    delete, or reuse an existing tag. Also bump the `SemVer` constant in
 >    `api.go` to match the new tag.
 >
@@ -25,7 +25,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 `opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary itself accepts only `-v` / `-h`. Output is emitted to stdout via an internal `displayChan` log engine, and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
 
 - Module path: `paepcke.de/opnborg`
-- Go version: see `go.mod` (currently `1.26.4`); CI pins `1.23`, Dockerfile pins `1.24`
+- Go version: see `go.mod` (currently `1.26.5`); CI `golang.yml` pins `1.23`, Dockerfile + `release.yml` pin `1.26`
 - Entry point: `cmd/opnborg/main.go` -> `opnborg.Start(config)` -> `srv(config)`
 - License: BSD 3-Clause
 
@@ -34,7 +34,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 - Test every change via build and unit tests
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
-  the **patch** segment, the last segment (e.g. `v0.1.99` → `v0.1.100`).
+  the **patch** segment, the last segment (e.g. `v0.1.116` → `v0.1.117`).
   The other two first segments (major, minor) stay unmodified,
   increment only the last part by +1. Never move, delete, or rewrite an existing tag.
 
@@ -72,7 +72,7 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 
 - Releases are tag-driven (`v*`). Pushing a `v*` tag triggers both `.github/workflows/release.yml` (goreleaser cross-compile via `.goreleaser.yml`) and `.github/workflows/ghcr.yml` (build/push `ghcr.io/paepckehh/opnborg:latest`).
 - goreleaser builds target linux/freebsd/darwin/netbsd/openbsd/windows on amd64 + arm64, `CGO_ENABLED=0`.
-- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.99` → `v0.1.100`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
+- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.116` → `v0.1.117`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
 
 ## Architecture & Control Flow
 
@@ -180,7 +180,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - **`os.Chdir` is called from a few startup paths** (`gitInit`, `gitCheckIn`, `startWeb`, `startRSysLog`). `checkIntoStore` no longer Chdirs — it resolves paths against `config.Path` — so the per-server worker goroutines do not race on the process-wide CWD. The remaining Chdir sites either run at startup (before workers) or Chdir to the same `config.Path`, so they do not observably race; still, prefer absolute paths when adding new code.
 - **`make deps` deletes `go.mod` and `go.sum` and re-runs `go mod init`** -- only run it when you intend to fully refresh the module graph.
 - **`SemVer` in `api.go` is the single source of truth** for the version string (CLI banner via `cmd/opnborg/main.go` + WebUI footer). goreleaser consumes git tags, not this constant. Bump it in lockstep with each release tag (see *Releasing* above).
-- **Dockerfile Go version (`1.24`) and CI Go version (`1.23`) lag behind `go.mod` (`1.26.4`)**. If you adopt newer language features, verify the Docker/CI builds still pass or bump these in the same change.
+- **CI Go version (`1.23` in `.github/workflows/golang.yml`) lags behind `go.mod` (`1.26.5`) and the Dockerfile / `release.yml` (`1.26`)**. If you adopt newer language features, verify the Docker/CI builds still pass or bump these in the same change.
 - **OPNsense API does not support legacy backup endpoints** -- only `/api/core/backup/download/this` is wired in (`_apiBackupXML`). Don't fall back to alternatives without explicit requirement.
 - **HTTPS chain verification via the OS trust store is disabled by default**; security relies on `OPN_TLSKEYPIN`. Documenting "just use system CAs" would be wrong.
 - The `resources/` directory contains the embedded favicon (`borg.png`) and sample screenshots referenced from `README.md`; the `resources/opnborg/index.html` is the legacy static demo page, not the live UI.

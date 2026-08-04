@@ -11,6 +11,9 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 [![Go Build](https://github.com/paepckehh/opnborg/actions/workflows/golang.yml/badge.svg)](https://github.com/paepckehh/opnborg/actions/workflows/golang.yml)
 [![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
 [![SemVer](https://img.shields.io/github/v/release/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/releases/latest)
+ 
+... 
+
 [![built with nix](https://builtwithnix.org/badge.svg)](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg)
 
 [paepcke.de/opnborg](https://paepcke.de/opnborg/) · [Releases](https://github.com/paepckehh/opnborg/releases) · [Docs](https://pkg.go.dev/paepcke.de/opnborg) · [Issues](https://github.com/paepckehh/opnborg/issues)
@@ -23,8 +26,8 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 Screenshots say more than 1000 Words:
 
-![OPNBORG Sample Screenshot](resources/screenshot02.png)
-![OPNBORG Sample Screenshot](resources/screenshot03.png)
+![OPNBORG Sample Screenshot](resources/sc02.png)
+![OPNBORG Sample Screenshot](resources/sc03.png)
 
 ---
 
@@ -350,9 +353,9 @@ the upstream host is present there before enabling push.
 | `OPN_UNIFI_VERSION` | Unifi controller version string (e.g. `8.5.6`); **required** whenever Unifi backup is enabled |
 | `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
 | `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
-| `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a valid `autobackup_meta.json` marker in the folder |
+| `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a readable `autobackup_meta.json` marker file in the folder (contents are not parsed) |
 
-When `OPN_UNIFI_WATCH_PATH` points at a co-located controller's autoBackup folder, opnborg watches it for filesystem events and mirrors the newest `.unf` backup into the store (deduplicated by SHA-256 against the previous `CONFIG-CURRENT`) on every change. The watcher is only armed when the folder exists **and** contains an `autobackup_meta.json` marker that parses as valid XML, so opnborg keeps running unchanged on hosts that do not co-locate a controller.
+When `OPN_UNIFI_WATCH_PATH` points at a co-located controller's autoBackup folder, opnborg watches it for filesystem events and mirrors the newest `.unf` backup into the store (deduplicated by SHA-256 against the previous `CONFIG-CURRENT`) on every change. The watcher is only armed when the folder exists **and** contains a readable `autobackup_meta.json` marker file — its contents are neither parsed nor validated, so a controller-emitted marker that is not well-formed XML no longer blocks the watcher — so opnborg keeps running unchanged on hosts that do not co-locate a controller.
 
 A watch-only deployment is a valid configuration: when `OPN_UNIFI_WATCH_PATH` points at a valid autoBackup folder and neither `OPN_TARGETS` nor `OPN_UNIFI_WEBUI`/`OPN_UNIFI_BACKUP_*` are set, the file watcher is the sole source of backups and opnborg starts normally (the minimum-requirements gate accepts the watch as a backup source).
 
