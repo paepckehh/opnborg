@@ -103,7 +103,7 @@ func renderOPNPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OPNsense Backup</div>")
 	writeDashRow(&s, "Enabled", boolPill(c.Enable))
-	writeDashRow(&s, "Targets (raw)", maskIfEmpty(formatTargetsDisplay(c.Targets)))
+	writeDashRowBelow(&s, "Targets (raw)", maskIfEmpty(formatTargetsDisplay(c.Targets)))
 	writeDashRow(&s, "API Key", secretPill(c.Key))
 	writeDashRow(&s, "API Secret", secretPill(c.Secret))
 	writeDashRow(&s, "TLS Key Pin", secretPill(c.TLSKeyPin))
@@ -272,6 +272,18 @@ func writeDashRow(s *strings.Builder, label, value string) {
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">")
 	s.WriteString(html.EscapeString(label))
 	s.WriteString("</span><span class=\"dash-value\">")
+	s.WriteString(value)
+	s.WriteString("</span></div>")
+}
+
+// writeDashRowBelow emits a label on its own line, with the value rendered
+// directly underneath (left-aligned, wrapping). Used for multi-unit lists
+// such as "Targets (raw)" so the chips flow below the label instead of being
+// squeezed into the right-aligned value column.
+func writeDashRowBelow(s *strings.Builder, label, value string) {
+	s.WriteString("<div class=\"dash-row dash-row-below\"><span class=\"dash-label\">")
+	s.WriteString(html.EscapeString(label))
+	s.WriteString("</span><span class=\"dash-value dash-value-below\">")
 	s.WriteString(value)
 	s.WriteString("</span></div>")
 }
