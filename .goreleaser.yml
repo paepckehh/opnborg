@@ -1,3 +1,7 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# goreleaser v2 configuration
+version: 2
+
 builds:
   -
     id: "opnborg"
@@ -27,9 +31,13 @@ checksum:
 snapshot:
   name_template: "{{ .Tag }}-next"
 changelog:
+  use: github
   sort: asc
   filters:
     exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
 nfpms:
   -
     file_name_template: "opnborg_package_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

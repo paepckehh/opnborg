@@ -1,9 +1,12 @@
-FROM golang:1.24 as app
-RUN mkdir -p /opnborg
+FROM golang:1.26 AS app
 WORKDIR /opnborg
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" ./cmd/opnborg
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 go build -ldflags="-w -s" ./cmd/opnborg
 
 FROM gcr.io/distroless/base
-COPY --from=app /opnborg/opnborg /
+COPY --from=app /opnborg/opnborg /opnborg
 ENTRYPOINT ["/opnborg"]
