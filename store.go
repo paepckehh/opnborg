@@ -60,8 +60,11 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 		return err
 	}
 
-	// write the timestamped archive entry
-	name := ts.UTC().Format("20060102T150405Z") + "-" + server + ext
+	// write the timestamped archive entry. Millisecond precision avoids
+	// archive-name collisions when several distinct payloads are checked in
+	// during the same second (e.g. the initial Unifi autoBackup sync pass
+	// mirroring multiple pre-existing .unf files at once).
+	name := ts.UTC().Format("20060102T150405.000Z") + "-" + server + ext
 	archiveRel := filepath.Join(store, name) // relative to serverRoot
 	archiveAbs := filepath.Join(serverRoot, archiveRel)
 	if err := os.WriteFile(archiveAbs, serverXML, 0660); err != nil {

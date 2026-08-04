@@ -129,7 +129,11 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 		unifiWatchStatus = strings.Replace(unifiWatchStatus, "<div class=\"member-status\"></div>", "", 1)
 		unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiWatchStatus
 		if unifiWatchStatus == "<div class=\"member-status\">"+_fail+"</div>" {
-			unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: unreachable Last Sync: " + lastSeen + "</span></div>"
+			reason := config.Unifi.Watch.SetupErr
+			if reason == "" {
+				reason = "watcher unreachable"
+			}
+			unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: " + html.EscapeString(reason) + " Last Sync: " + lastSeen + "</span></div>"
 		}
 		return
 	}
@@ -139,6 +143,18 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 		state = _degraded
 	}
 	seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Sync</span><span class=\"meta-value\">" + lastSeen + "</span></div>"
+	// sync stats: files seen / synced / skipped on the last pass, mirroring the
+	// OPN backup tiles that surface per-server backup state.
+	statsBox := "<div class=\"meta-box meta-sync\"><span class=\"meta-label\">Synced</span><span class=\"meta-value\">" + strconv.Itoa(config.Unifi.Watch.SyncedFiles) + " / " + strconv.Itoa(config.Unifi.Watch.SourceFiles) + "</span></div>"
+	skipBox := "<div class=\"meta-box meta-skip\"><span class=\"meta-label\">Skipped</span><span class=\"meta-value\">" + strconv.Itoa(config.Unifi.Watch.SkippedFiles) + "</span></div>"
+	lastFileBox := ""
+	if config.Unifi.Watch.LastFile != "" {
+		lastFileBox = "<div class=\"meta-box meta-file\"><span class=\"meta-label\">Last File</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Watch.LastFile) + "</span></div>"
+	}
+	errBox := ""
+	if config.Unifi.Watch.LastSyncErr != "" {
+		errBox = "<div class=\"meta-box meta-err\"><span class=\"meta-label\">Error</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Watch.LastSyncErr) + "</span></div>"
+	}
 	linkUI := "<a href=\"" + uiLink + "\" " + _nwin + "><button>[" + server + "]</button></a>"
 	linkCurrent := "<a href=\"./files/" + _uniWatch + "/current.unf\"" + _nwin + "><button>[current.unf]</button></a>"
 	linkArchive := "<a href=\"./files/" + _uniWatch + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
@@ -147,5 +163,5 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	if config.Unifi.Tag != "" {
 		tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Tag) + "</span></div>"
 	}
-	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + tagBox
+	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + statsBox + skipBox + lastFileBox + errBox + tagBox
 }

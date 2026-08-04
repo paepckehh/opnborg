@@ -70,6 +70,10 @@ nav a button:hover{border-color:var(--accent);background:var(--card-2)}
 .meta-value{color:var(--fg);font-size:.78rem;font-variant-numeric:tabular-nums;word-break:break-word}
 .meta-last-seen{border-left:3px solid var(--accent)}
 .meta-tag{border-left:3px solid var(--ok)}
+.meta-sync{border-left:3px solid var(--ok)}
+.meta-skip{border-left:3px solid var(--muted)}
+.meta-file{border-left:3px solid var(--accent)}
+.meta-err{border-left:3px solid var(--err)}
 .backup-section{margin:1rem 0;padding:1rem;background:var(--card);border:1px solid var(--border);border-radius:8px}
 .backup-section b{color:var(--accent)}
 .btn-force{display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600}

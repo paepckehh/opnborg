@@ -2,9 +2,11 @@ package opnborg
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,8 +34,8 @@ func srvUnifiWatch(config *OPNCall) {
 	// initial sync so the store reflects the current source state immediately
 	syncUnifiWatch(config, time.Now())
 
-	// set status once from the initial pass
-	setUnifiWatchStatus(config, true, true)
+	// set status once from the initial pass (degraded if the sync failed)
+	setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 
 	// setup fsnotify watcher
 	watcher, err := fsnotify.NewWatcher()
@@ -73,7 +75,7 @@ func srvUnifiWatch(config *OPNCall) {
 			ts := time.Now()
 			timer = time.AfterFunc(debounce, func() {
 				syncUnifiWatch(config, ts)
-				setUnifiWatchStatus(config, true, true)
+				setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 				// allow the main loop to poke the next sync cycle on /force
 				select {
 				case updateUnifiWatch <- true:
@@ -90,16 +92,18 @@ func srvUnifiWatch(config *OPNCall) {
 			// manual trigger (/force) or daily rollover
 			ts := time.Now()
 			syncUnifiWatch(config, ts)
-			setUnifiWatchStatus(config, true, true)
+			setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 		}
 	}
 }
 
-// syncUnifiWatch copies the newest .unf file from the source autoBackup
-// folder into the local store, deduplicated against the previous
-// CONFIG-CURRENT by SHA-256 via checkIntoStore. The marker file mtime is
-// refreshed into config.Unifi.Watch.LastTS so the WebUI can render the last
-// sync date.
+// syncUnifiWatch copies every .unf file from the source autoBackup folder
+// into the local store, deduplicated against the previous current.unf by
+// SHA-256 via checkIntoStore (each new file gets its own archive entry; the
+// newest file wins the current.unf pointer). It records per-pass stats
+// (files seen / synced / skipped, last synced file name, last sync timestamp
+// and any error reason) on config.Unifi.Watch under unifiWatchMutex so the
+// main WebUI tile and the config-dashboard Unifi panel can surface them.
 func syncUnifiWatch(config *OPNCall, ts time.Time) {
 
 	// refresh marker mtime
@@ -111,10 +115,12 @@ func syncUnifiWatch(config *OPNCall, ts time.Time) {
 		displayChan <- []byte("[UNIFI][WATCH][WARN][META-FILE-MISSING] " + config.Unifi.Watch.Meta)
 	}
 
-	// find newest .unf file in the source folder
+	// find all .unf files in the source folder
 	entries, err := os.ReadDir(config.Unifi.Watch.Path)
 	if err != nil {
-		displayChan <- []byte("[UNIFI][WATCH][ERROR][READ-SOURCE-DIR] " + err.Error())
+		reason := "READ-SOURCE-DIR: " + err.Error()
+		setUnifiWatchSyncResult(config, reason, 0, 0, 0, "")
+		displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
 		return
 	}
 	type candidate struct {
@@ -137,33 +143,123 @@ func syncUnifiWatch(config *OPNCall, ts time.Time) {
 	}
 	if len(files) == 0 {
 		displayChan <- []byte("[UNIFI][WATCH][INFO][NO-BACKUP-FILES] " + config.Unifi.Watch.Path)
+		setUnifiWatchSyncResult(config, "", 0, 0, 0, "")
 		return
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].mtime.After(files[j].mtime) })
-	newest := files[0]
+	// oldest -> newest so the newest file wins the current.unf pointer
+	sort.Slice(files, func(i, j int) bool { return files[i].mtime.Before(files[j].mtime) })
 
-	// read newest backup file
-	src := filepath.Join(config.Unifi.Watch.Path, newest.name)
-	data, err := os.ReadFile(src)
+	// baseline: the sha256 of the existing current.unf (if any) so we only
+	// checkin files that actually differ from what is already stored.
+	currentSum := lastSum(config, _uniWatch)
+	// build a dedup set of every checksum already recorded in the per-server
+	// sha256.db (plus current.unf) so re-sync passes skip files already
+	// archived rather than creating duplicate archive entries.
+	archived := archivedSums(config, _uniWatch)
+	archived[currentSum] = true
+
+	synced, skipped := 0, 0
+	lastFile := ""
+	var firstErr string
+	for _, f := range files {
+		src := filepath.Join(config.Unifi.Watch.Path, f.name)
+		data, err := os.ReadFile(src)
+		if err != nil {
+			reason := "READ-BACKUP-FILE: " + src + " " + err.Error()
+			if firstErr == "" {
+				firstErr = reason
+			}
+			displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
+			continue
+		}
+		if len(data) < 1024 {
+			reason := "BACKUP-FILE-TOO-SMALL: " + src + " (" + strconv.Itoa(len(data)) + " bytes)"
+			if firstErr == "" {
+				firstErr = reason
+			}
+			displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
+			continue
+		}
+		sum := sha256.Sum256(data)
+		if archived[sum] {
+			skipped++
+			lastFile = f.name
+			continue
+		}
+		// use the file's own mtime for the archive entry so multiple files
+		// checked in during the same pass get distinct archive names.
+		if err := checkIntoStore(config, _uniWatch, "unf", data, f.mtime, sum); err != nil {
+			reason := "STORE-CHECKIN: " + f.name + " " + err.Error()
+			if firstErr == "" {
+				firstErr = reason
+			}
+			displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
+			continue
+		}
+		archived[sum] = true
+		currentSum = sum
+		synced++
+		lastFile = f.name
+	}
+
+	// flag git worktree dirty so the main loop commits the mirrored backup(s)
+	if synced > 0 {
+		config.dirty.Store(true)
+	}
+	setUnifiWatchSyncResult(config, firstErr, len(files), synced, skipped, lastFile)
+	if firstErr != "" {
+		displayChan <- []byte("[UNIFI][WATCH][SYNC][PARTIAL] synced=" + strconv.Itoa(synced) + " skipped=" + strconv.Itoa(skipped) + " err=" + firstErr)
+	} else if synced > 0 {
+		displayChan <- []byte("[UNIFI][WATCH][SYNC][SUCCESS] synced=" + strconv.Itoa(synced) + " skipped=" + strconv.Itoa(skipped) + " last=" + lastFile)
+	}
+}
+
+// setUnifiWatchSyncResult records the outcome of a sync pass on the config
+// struct under unifiWatchMutex so the WebUI and config-dashboard render paths
+// see a consistent snapshot.
+func setUnifiWatchSyncResult(config *OPNCall, errReason string, source, synced, skipped int, lastFile string) {
+	unifiWatchMutex.Lock()
+	defer unifiWatchMutex.Unlock()
+	config.Unifi.Watch.LastSyncTS = time.Now()
+	config.Unifi.Watch.LastSyncErr = errReason
+	config.Unifi.Watch.SourceFiles = source
+	config.Unifi.Watch.SyncedFiles = synced
+	config.Unifi.Watch.SkippedFiles = skipped
+	config.Unifi.Watch.LastFile = lastFile
+}
+
+// lastUnifiWatchSyncOK reports whether the most recent sync pass recorded no
+// error. It reads the shared field under unifiWatchMutex so it is safe to call
+// from the watcher goroutine right after a sync pass.
+func lastUnifiWatchSyncOK(config *OPNCall) bool {
+	unifiWatchMutex.Lock()
+	defer unifiWatchMutex.Unlock()
+	return config.Unifi.Watch.LastSyncErr == ""
+}
+
+// archivedSums returns the set of base64 SHA-256 digests recorded in the
+// per-server sha256.db log. It lets syncUnifiWatch dedup every source file
+// against the full archive history (not only current.<ext>) so re-sync passes
+// skip files that are already stored instead of creating duplicate archive
+// entries. The map is empty when no archive exists yet.
+func archivedSums(config *OPNCall, server string) map[[32]byte]bool {
+	out := make(map[[32]byte]bool)
+	data, err := os.ReadFile(filepath.Join(config.Path, server, _hashFile))
 	if err != nil {
-		displayChan <- []byte("[UNIFI][WATCH][ERROR][READ-BACKUP-FILE] " + src + " " + err.Error())
-		return
+		return out
 	}
-	if len(data) < 1024 {
-		displayChan <- []byte("[UNIFI][WATCH][ERROR][BACKUP-FILE-TOO-SMALL] " + src)
-		return
+	for _, line := range strings.Split(string(data), _linefeed) {
+		_, digest, found := strings.Cut(line, _tab)
+		if !found || digest == "" {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(digest)
+		if err != nil || len(raw) != 32 {
+			continue
+		}
+		var sum [32]byte
+		copy(sum[:], raw)
+		out[sum] = true
 	}
-
-	// dedup against the previous current.unf via checkIntoStore (which writes
-	// current.unf, the archive entry, the sha256.db line, and rotates the
-	// CONFIG-CURRENT / CONFIG-LAST symlinks).
-	sum := sha256.Sum256(data)
-	if err := checkIntoStore(config, _uniWatch, "unf", data, ts, sum); err != nil {
-		displayChan <- []byte("[UNIFI][WATCH][ERROR][STORE-CHECKIN] " + err.Error())
-		return
-	}
-
-	// flag git worktree dirty so the main loop commits the mirrored backup
-	config.dirty.Store(true)
-	displayChan <- []byte("[UNIFI][WATCH][SYNC][SUCCESS] " + newest.name)
+	return out
 }

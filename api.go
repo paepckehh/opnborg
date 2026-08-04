@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.112"
+const SemVer = "v0.1.113"
 
 // global var
 var (
@@ -80,6 +80,14 @@ type OPNCall struct {
 			Path   string    // absolute path to the Unifi autoBackup source folder
 			Meta   string    // absolute path to the autobackup_meta.json marker file
 			LastTS time.Time // mtime of the marker file at the last successful sync
+			// runtime sync stats (guarded by unifiWatchMutex, see status.go)
+			SetupErr     string    // setup-time error reason when the watcher could not be armed (empty when armed OK)
+			LastSyncErr  string    // last runtime sync failure reason (cleared on the next successful sync)
+			LastSyncTS   time.Time // wall-clock of the last sync pass
+			LastFile     string    // newest .unf file synced on the last pass
+			SyncedFiles  int       // number of new .unf files checked into the store on the last pass
+			SkippedFiles int       // number of .unf files that were unchanged (sha256 matched current.unf)
+			SourceFiles  int       // total number of .unf files observed in the source folder on the last pass
 		}
 	}
 	Wazuh struct {

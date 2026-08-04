@@ -469,7 +469,7 @@ func TestCheckIntoStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read hashfile: %v", err)
 	}
-	archiveName := ts.UTC().Format("20060102T150405Z") + "-" + server + ".xml"
+	archiveName := ts.UTC().Format("20060102T150405.000Z") + "-" + server + ".xml"
 	if !strings.Contains(string(hashData), archiveName) {
 		t.Errorf("hashfile does not reference archive %q: %s", archiveName, hashData)
 	}
@@ -1458,18 +1458,26 @@ func setupUnifiWatchEnv(t *testing.T, markerContent string) (*OPNCall, string) {
 	config := &OPNCall{}
 	unifiWatchEnable.Store(false)
 	config.Unifi.Watch.Enable = false
+	config.Unifi.Watch.SetupErr = ""
 	if isEnv("OPN_UNIFI_WATCH_PATH") {
 		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
 		info, err := os.Stat(watchPath)
-		if err != nil || !info.IsDir() {
+		if err != nil {
+			config.Unifi.Watch.SetupErr = "SOURCE-FOLDER-NOT-FOUND: " + err.Error()
+			return config, src
+		}
+		if !info.IsDir() {
+			config.Unifi.Watch.SetupErr = "SOURCE-FOLDER-NOT-A-DIRECTORY: " + watchPath
 			return config, src
 		}
 		metaPath := filepath.Join(watchPath, "autobackup_meta.json")
 		metaData, err := os.ReadFile(metaPath)
 		if err != nil {
+			config.Unifi.Watch.SetupErr = "META-FILE-NOT-FOUND: " + err.Error()
 			return config, src
 		}
 		if !isValidXML(string(metaData)) {
+			config.Unifi.Watch.SetupErr = "META-FILE-INVALID-XML: " + metaPath
 			return config, src
 		}
 		config.Unifi.Watch.Enable = true
@@ -1725,6 +1733,194 @@ func TestSyncUnifiWatchSkipsTooSmall(t *testing.T) {
 	syncUnifiWatch(config, time.Now())
 	if _, err := os.Stat(filepath.Join(store, _uniWatch, "current.unf")); !os.IsNotExist(err) {
 		t.Errorf("too-small backup should not be checked into store")
+	}
+	// the failed pass should record the error reason + zero synced on the config
+	if config.Unifi.Watch.LastSyncErr == "" {
+		t.Errorf("LastSyncErr should be set after a too-small-only sync pass")
+	}
+	if config.Unifi.Watch.SyncedFiles != 0 {
+		t.Errorf("SyncedFiles should be 0 after a too-small-only sync pass, got %d", config.Unifi.Watch.SyncedFiles)
+	}
+}
+
+// TestSyncUnifiWatchCopiesAllFiles verifies that a sync pass checks in EVERY
+// .unf file in the source folder (not only the newest), each as its own
+// archive entry, with the newest file winning the current.unf pointer. The
+// per-pass stats (source / synced / skipped / last file) must be recorded.
+func TestSyncUnifiWatchCopiesAllFiles(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	src := t.TempDir()
+	store := t.TempDir()
+	config := &OPNCall{Path: store}
+	config.Unifi.Watch.Path = src
+	config.Unifi.Watch.Meta = filepath.Join(src, "autobackup_meta.json")
+	if err := os.WriteFile(config.Unifi.Watch.Meta, []byte("<autobackup/>"), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	a := []byte(strings.Repeat("a", 2048))
+	b := []byte(strings.Repeat("b", 2048))
+	if err := os.WriteFile(filepath.Join(src, "old.unf"), a, 0644); err != nil {
+		t.Fatalf("write old: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(src, "new.unf"), b, 0644); err != nil {
+		t.Fatalf("write new: %v", err)
+	}
+
+	syncUnifiWatch(config, time.Now())
+
+	// newest wins current.unf
+	got, err := os.ReadFile(filepath.Join(store, _uniWatch, "current.unf"))
+	if err != nil {
+		t.Fatalf("read current.unf: %v", err)
+	}
+	if string(got) != string(b) {
+		t.Errorf("current.unf should contain newest payload")
+	}
+	// both files should be present as distinct archive entries
+	entries, err := os.ReadDir(filepath.Join(store, _uniWatch, _archive))
+	if err != nil {
+		t.Fatalf("read archive tree: %v", err)
+	}
+	count := 0
+	for _, e := range entries {
+		_ = e
+		count++
+	}
+	var archives []os.DirEntry
+	_ = filepath.WalkDir(filepath.Join(store, _uniWatch, _archive), func(_ string, d os.DirEntry, _ error) error {
+		if d != nil && !d.IsDir() {
+			archives = append(archives, d)
+		}
+		return nil
+	})
+	if len(archives) != 2 {
+		t.Errorf("expected 2 archive entries (one per .unf), got %d", len(archives))
+	}
+	// stats recorded
+	if config.Unifi.Watch.SourceFiles != 2 {
+		t.Errorf("SourceFiles = %d, want 2", config.Unifi.Watch.SourceFiles)
+	}
+	if config.Unifi.Watch.SyncedFiles != 2 {
+		t.Errorf("SyncedFiles = %d, want 2", config.Unifi.Watch.SyncedFiles)
+	}
+	if config.Unifi.Watch.SkippedFiles != 0 {
+		t.Errorf("SkippedFiles = %d, want 0", config.Unifi.Watch.SkippedFiles)
+	}
+	if config.Unifi.Watch.LastFile != "new.unf" {
+		t.Errorf("LastFile = %q, want new.unf", config.Unifi.Watch.LastFile)
+	}
+	if config.Unifi.Watch.LastSyncErr != "" {
+		t.Errorf("LastSyncErr should be empty on success, got %q", config.Unifi.Watch.LastSyncErr)
+	}
+	// a second pass should skip both (now deduped against current.unf)
+	syncUnifiWatch(config, time.Now())
+	if config.Unifi.Watch.SyncedFiles != 0 {
+		t.Errorf("second pass SyncedFiles = %d, want 0 (deduped)", config.Unifi.Watch.SyncedFiles)
+	}
+	if config.Unifi.Watch.SkippedFiles != 2 {
+		t.Errorf("second pass SkippedFiles = %d, want 2", config.Unifi.Watch.SkippedFiles)
+	}
+}
+
+// TestSyncUnifiWatchRecordsReadDirError verifies that a sync pass against an
+// unreadable source folder records the error reason on the config struct
+// (surfaced on the config dashboard) instead of silently returning.
+func TestSyncUnifiWatchRecordsReadDirError(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store}
+	config.Unifi.Watch.Path = "/nonexistent/opnborg/watch/source"
+	config.Unifi.Watch.Meta = "/nonexistent/opnborg/watch/source/autobackup_meta.json"
+	syncUnifiWatch(config, time.Now())
+	if config.Unifi.Watch.LastSyncErr == "" {
+		t.Errorf("LastSyncErr should be set when the source folder is unreadable")
+	}
+	if !strings.Contains(config.Unifi.Watch.LastSyncErr, "READ-SOURCE-DIR") {
+		t.Errorf("LastSyncErr should name the failing step, got %q", config.Unifi.Watch.LastSyncErr)
+	}
+}
+
+// TestSetUnifiWatchStatusSurfacesErrorAndStats verifies the WebUI tile renders
+// the per-pass sync stats (synced / source / skipped / last file) and the
+// error reason box when the last sync failed.
+func TestSetUnifiWatchStatusSurfacesErrorAndStats(t *testing.T) {
+	savedStatus := unifiWatchStatus
+	t.Cleanup(func() { unifiWatchStatus = savedStatus })
+	unifiWatchStatus = ""
+	config := &OPNCall{}
+	ts := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	config.Unifi.Watch.LastTS = ts
+	config.Unifi.Watch.SourceFiles = 3
+	config.Unifi.Watch.SyncedFiles = 2
+	config.Unifi.Watch.SkippedFiles = 1
+	config.Unifi.Watch.LastFile = "backup-2024-06-01.unf"
+	config.Unifi.Watch.LastSyncErr = "STORE-CHECKIN: disk full"
+	setUnifiWatchStatus(config, true, false)
+	out := unifiWatchStatus
+	for _, want := range []string{
+		"Synced", "2 / 3", "Skipped", "1", "Last File", "backup-2024-06-01.unf", "Error", "STORE-CHECKIN: disk full", _degraded,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q: %s", want, out)
+		}
+	}
+}
+
+// TestRenderUnifiPanelSetupError verifies the config dashboard surfaces the
+// setup-time error reason (configuration + reason + error detail) in the
+// Unifi panel when the watcher could not be armed at startup.
+func TestRenderUnifiPanelSetupError(t *testing.T) {
+	config := &OPNCall{}
+	config.Unifi.Watch.Enable = false
+	config.Unifi.Watch.SetupErr = "SOURCE-FOLDER-NOT-FOUND: stat /var/lib/unifi/backup: no such file or directory"
+	out := renderUnifiPanel(config)
+	if !strings.Contains(out, "AutoBackup Watch") {
+		t.Errorf("panel missing AutoBackup Watch row")
+	}
+	if !strings.Contains(out, "Setup Error") {
+		t.Errorf("panel should surface a Setup Error row")
+	}
+	if !strings.Contains(out, "SOURCE-FOLDER-NOT-FOUND") {
+		t.Errorf("panel should include the error reason, got %s", out)
+	}
+}
+
+// TestRenderUnifiPanelSyncStats verifies the config dashboard surfaces the
+// runtime sync stats + error in the Unifi panel when the watcher is armed.
+func TestRenderUnifiPanelSyncStats(t *testing.T) {
+	config := &OPNCall{}
+	config.Unifi.Watch.Enable = true
+	config.Unifi.Watch.Path = "/var/lib/unifi/data/backup/autobackup"
+	config.Unifi.Watch.Meta = "/var/lib/unifi/data/backup/autobackup/autobackup_meta.json"
+	unifiWatchMutex.Lock()
+	config.Unifi.Watch.SourceFiles = 5
+	config.Unifi.Watch.SyncedFiles = 4
+	config.Unifi.Watch.SkippedFiles = 1
+	config.Unifi.Watch.LastFile = "backup-2024-06-01.unf"
+	config.Unifi.Watch.LastSyncErr = "READ-BACKUP-FILE: corrupted.unf i/o error"
+	config.Unifi.Watch.LastSyncTS = time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	unifiWatchMutex.Unlock()
+	out := renderUnifiPanel(config)
+	for _, want := range []string{
+		"Source Files", "5", "Last Synced", "4", "Skipped (dup)", "1",
+		"Last File", "backup-2024-06-01.unf", "Sync Error", "READ-BACKUP-FILE: corrupted.unf i/o error",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q: %s", want, out)
+		}
 	}
 }
 

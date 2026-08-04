@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // getConfigDashboardHandler renders a static read-only view of the OPNCall
@@ -209,9 +210,39 @@ func renderUnifiPanel(c *OPNCall) string {
 		}
 	}
 	writeDashRow(&s, "AutoBackup Watch", boolPill(c.Unifi.Watch.Enable))
+	if c.Unifi.Watch.SetupErr != "" {
+		writeDashRow(&s, "Setup Error", "<span class=\"dash-err\">"+html.EscapeString(c.Unifi.Watch.SetupErr)+"</span>")
+	}
 	if c.Unifi.Watch.Enable {
 		writeDashRow(&s, "Watch Folder", html.EscapeString(c.Unifi.Watch.Path))
 		writeDashRow(&s, "Meta Marker", html.EscapeString(c.Unifi.Watch.Meta))
+	}
+	// runtime sync stats (guarded by unifiWatchMutex in srvUnifiWatch.go)
+	unifiWatchMutex.Lock()
+	lastSyncTS := c.Unifi.Watch.LastSyncTS
+	lastSyncErr := c.Unifi.Watch.LastSyncErr
+	sourceFiles := c.Unifi.Watch.SourceFiles
+	syncedFiles := c.Unifi.Watch.SyncedFiles
+	skippedFiles := c.Unifi.Watch.SkippedFiles
+	lastFile := c.Unifi.Watch.LastFile
+	unifiWatchMutex.Unlock()
+	if c.Unifi.Watch.Enable {
+		writeDashRow(&s, "Source Files", strconv.Itoa(sourceFiles))
+		writeDashRow(&s, "Last Synced", strconv.Itoa(syncedFiles))
+		writeDashRow(&s, "Skipped (dup)", strconv.Itoa(skippedFiles))
+		if lastFile != "" {
+			writeDashRow(&s, "Last File", html.EscapeString(lastFile))
+		}
+		lastSync := "n/a"
+		if !lastSyncTS.IsZero() {
+			lastSync = lastSyncTS.UTC().Format(time.RFC3339)
+		}
+		writeDashRow(&s, "Last Sync Pass", lastSync)
+		if lastSyncErr != "" {
+			writeDashRow(&s, "Sync Error", "<span class=\"dash-err\">"+html.EscapeString(lastSyncErr)+"</span>")
+		} else if c.Unifi.Watch.Enable && !lastSyncTS.IsZero() {
+			writeDashRow(&s, "Sync State", "<span class=\"dash-ok\">ok</span>")
+		}
 	}
 	s.WriteString("</div>")
 	return s.String()

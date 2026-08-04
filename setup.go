@@ -74,18 +74,25 @@ func Setup() (*OPNCall, error) {
 	// configuration: the file watcher is the sole source of backups.
 	unifiWatchEnable.Store(false)
 	config.Unifi.Watch.Enable = false
+	config.Unifi.Watch.SetupErr = ""
 	if isEnv("OPN_UNIFI_WATCH_PATH") {
 		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
 		info, err := os.Stat(watchPath)
-		if err != nil || !info.IsDir() {
-			displayChan <- []byte("[UNIFI][WATCH][DISABLED][SOURCE-FOLDER-NOT-FOUND] " + watchPath)
+		if err != nil {
+			config.Unifi.Watch.SetupErr = "SOURCE-FOLDER-NOT-FOUND: " + err.Error()
+			displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "] " + watchPath)
+		} else if !info.IsDir() {
+			config.Unifi.Watch.SetupErr = "SOURCE-FOLDER-NOT-A-DIRECTORY: " + watchPath
+			displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "]")
 		} else {
 			metaPath := filepath.Join(watchPath, "autobackup_meta.json")
 			metaData, err := os.ReadFile(metaPath)
 			if err != nil {
-				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-NOT-FOUND] " + metaPath)
+				config.Unifi.Watch.SetupErr = "META-FILE-NOT-FOUND: " + err.Error()
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "] " + metaPath)
 			} else if !isValidXML(string(metaData)) {
-				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-INVALID-XML] " + metaPath)
+				config.Unifi.Watch.SetupErr = "META-FILE-INVALID-XML: " + metaPath
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][" + config.Unifi.Watch.SetupErr + "]")
 			} else {
 				config.Unifi.Watch.Enable = true
 				config.Unifi.Watch.Path = watchPath
