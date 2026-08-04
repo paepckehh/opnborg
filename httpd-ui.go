@@ -149,7 +149,7 @@ const (
   const FORCE=%FORCE%;
   const POLL_MS=800;
   const MAX_WAIT_MS=180000;
-  const HOLD_MS=4000;
+  const HOLD_MS=6000;
   const CLICK_EXTEND_MS=4000;
   const el={
     root:document.getElementById('force-dash'),
@@ -228,6 +228,7 @@ const (
     holdDeadline=Date.now()+HOLD_MS;
     fakePct=100;
     el.pct.textContent='100%';
+    el.bar.style.inset='0 0 0 0';
     renderSummary();
     el.overlay.classList.add('fd-show');
     countdownTimer=setInterval(updateCountdown,200);
