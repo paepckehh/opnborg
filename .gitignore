@@ -1,2 +1,4 @@
 cmd/opnborg/opnborg
 /opnborg
+.*.swp
+.*.swo

@@ -148,8 +148,9 @@ func getHive() string {
 	hiveMutex.Unlock()
 	s.WriteString("<div class=\"backup-section\"><b>BorgBACKUP</b><br>Module:Monitor:Backup:Active<br>[ Automatic check every ")
 	s.WriteString(sleep)
-	s.WriteString(" seconds ]</div>")
+	s.WriteString(" seconds ]<br>")
 	s.WriteString(_forceButton)
+	s.WriteString("</div>")
 	return s.String()
 }
 
