@@ -31,11 +31,11 @@ const (
 	// The %FG% / %BG% tokens are substituted at Setup() time from the
 	// OPN_HTTPD_COLOR_FG / OPN_HTTPD_COLOR_BG theme colors so the dashboard
 	// inherits the operator's configured palette.
-	_forceDashboard = `<section class="force-dash">
+	_forceDashboard = `<section class="force-dash" id="force-dash">
+<div class="fd-orbit"><div class="fd-radar"></div><div class="fd-ring"><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span></div><div class="fd-core"></div></div>
 <div class="force-dash-inner">
 <div class="fd-status"><span class="fd-tag" id="fd-status-tag">[ performing backup ]</span><span class="fd-elapsed" id="fd-elapsed">00:00</span></div>
-<div class="fd-spinner"><span class="fd-spin-dot"></span><span class="fd-spin-dot"></span><span class="fd-spin-dot"></span></div>
-<div class="fd-progress"><div class="fd-progress-bar" id="fd-progress-bar"></div></div>
+<div class="fd-progress"><div class="fd-progress-bar" id="fd-progress-bar"></div><div class="fd-progress-pct" id="fd-progress-pct">0%</div></div>
 <div class="fd-stats">
 <div class="fd-stat"><span class="fd-stat-n" id="fd-lines">0</span><span class="fd-stat-l">log lines</span></div>
 <div class="fd-stat"><span class="fd-stat-n" id="fd-servers">0</span><span class="fd-stat-l">servers</span></div>
@@ -46,33 +46,54 @@ const (
 <div class="fd-console-head">live backup stream</div>
 <div class="fd-console" id="fd-console"><div class="fd-line fd-muted">waiting for backup pass to start...</div></div>
 </div>
-<div class="fd-hint">redirecting back to the hive view when the pass completes</div>
+<div class="fd-hint" id="fd-hint">redirecting back to the hive view when the pass completes</div>
+<div class="fd-done-overlay" id="fd-done-overlay">
+<div class="fd-done-confetti"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+<div class="fd-done-ring"></div>
+<div class="fd-done-title" id="fd-done-title">backup complete</div>
+<div class="fd-done-summary" id="fd-done-summary"></div>
+<div class="fd-done-hint" id="fd-done-hint">returning to the hive view in <span id="fd-countdown">4</span>s &#8212; click anywhere to extend</div>
+</div>
 </div>
 </section>
 <style>
-.force-dash{max-width:920px;margin:1.5rem auto;padding:1.25rem;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 0 0 1px rgba(74,158,255,.05),0 8px 32px rgba(0,0,0,.35)}
-.force-dash-inner{display:flex;flex-direction:column;gap:1rem}
+.force-dash{position:relative;max-width:920px;margin:1.5rem auto;padding:1.25rem;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 0 0 1px rgba(74,158,255,.05),0 8px 32px rgba(0,0,0,.35);overflow:hidden}
+.force-dash::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% -10%,rgba(74,158,255,.16),transparent 55%);pointer-events:none;animation:fd-glow 3.6s ease-in-out infinite}
+.force-dash-inner{position:relative;display:flex;flex-direction:column;gap:1rem;z-index:1}
+.fd-orbit{position:relative;width:96px;height:96px;margin:0 auto .25rem;display:flex;align-items:center;justify-content:center}
+.fd-core{width:16px;height:16px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent),0 0 26px rgba(74,158,255,.55);animation:fd-corepulse 1.5s ease-in-out infinite}
+.fd-ring{position:absolute;inset:0;animation:fd-rotate 3.4s linear infinite}
+.fd-orb{position:absolute;top:50%;left:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:fd-orbpulse 1.4s ease-in-out infinite}
+.fd-orb:nth-child(1){transform:rotate(0deg) translateX(38px)}
+.fd-orb:nth-child(2){transform:rotate(72deg) translateX(38px);animation-delay:.15s}
+.fd-orb:nth-child(3){transform:rotate(144deg) translateX(38px);animation-delay:.3s}
+.fd-orb:nth-child(4){transform:rotate(216deg) translateX(38px);animation-delay:.45s}
+.fd-orb:nth-child(5){transform:rotate(288deg) translateX(38px);animation-delay:.6s}
+.fd-radar{position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0deg,rgba(74,158,255,.28) 38deg,transparent 78deg);animation:fd-rotate 2.6s linear infinite;opacity:.65;pointer-events:none}
+.fd-done .fd-core{background:var(--ok);box-shadow:0 0 12px var(--ok),0 0 26px rgba(63,185,80,.55);animation:fd-pop .6s ease-out}
+.fd-done .fd-orb{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:none}
+.fd-done .fd-ring{animation:fd-rotate 7s linear infinite}
+.fd-done .fd-radar{opacity:.3;animation-duration:6s}
 .fd-status{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .fd-tag{font-size:1.1rem;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;animation:fd-pulse 1.4s ease-in-out infinite}
 .fd-done .fd-tag{color:var(--ok);animation:none}
 .fd-elapsed{color:var(--muted);font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.fd-spinner{display:flex;gap:.4rem;justify-content:center;padding:.25rem 0}
-.fd-spin-dot{width:11px;height:11px;border-radius:50%;background:var(--accent);animation:fd-bounce 1.2s ease-in-out infinite}
-.fd-spin-dot:nth-child(2){animation-delay:.18s}
-.fd-spin-dot:nth-child(3){animation-delay:.36s}
-.fd-done .fd-spin-dot{background:var(--ok);animation:none}
-.fd-progress{height:8px;background:var(--bg);border:1px solid var(--border);border-radius:99px;overflow:hidden;position:relative}
-.fd-progress-bar{position:absolute;inset:0 100% 0 0;background:linear-gradient(90deg,transparent,var(--accent),var(--accent),transparent);background-size:200% 100%;animation:fd-shimmer 1.6s linear infinite;border-radius:99px}
-.fd-done .fd-progress-bar{inset:0;background:var(--ok);animation:none}
+.fd-progress{position:relative;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:99px;overflow:hidden}
+.fd-progress-bar{position:absolute;inset:0 100% 0 0;background:linear-gradient(90deg,transparent,var(--accent),var(--accent),transparent);background-size:200% 100%;animation:fd-shimmer 1.6s linear infinite;border-radius:99px;transition:inset .25s ease-out}
+.fd-done .fd-progress-bar{inset:0;background:var(--ok);animation:fd-shimmer 2.4s linear infinite}
+.fd-progress-pct{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.6rem;color:var(--muted);font-variant-numeric:tabular-nums;pointer-events:none}
 .fd-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem}
-.fd-stat{display:flex;flex-direction:column;align-items:center;padding:.5rem;background:var(--card-2);border:1px solid var(--border);border-radius:8px}
+.fd-stat{display:flex;flex-direction:column;align-items:center;padding:.5rem;background:var(--card-2);border:1px solid var(--border);border-radius:8px;transition:border-color .25s,box-shadow .25s}
 .fd-stat-n{font-size:1.5rem;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums;line-height:1}
 .fd-stat-l{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-top:.2rem}
-.fd-console-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0f14}
+.fd-bump{animation:fd-bump .55s ease-out}
+.fd-console-wrap{position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0f14}
 .fd-console-head{padding:.35rem .7rem;background:#141a22;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.4rem}
 .fd-console-head::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:fd-blink 1.2s ease-in-out infinite}
 .fd-done .fd-console-head::before{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:none}
-.fd-console{height:300px;overflow-y:auto;padding:.5rem .7rem;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.45}
+.fd-console{height:300px;overflow-y:auto;padding:.5rem .7rem;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.45;position:relative}
+.fd-console::after{content:"";position:absolute;left:0;right:0;height:14px;background:linear-gradient(transparent,rgba(74,158,255,.07),transparent);animation:fd-scan 3.4s linear infinite;pointer-events:none}
+.fd-done .fd-console::after{background:linear-gradient(transparent,rgba(63,185,80,.07),transparent)}
 .fd-line{white-space:pre-wrap;word-break:break-all;padding:.1rem 0;border-bottom:1px solid rgba(255,255,255,.02);animation:fd-in .25s ease-out}
 .fd-muted{color:var(--muted);font-style:italic}
 .fd-ok{color:var(--ok)}
@@ -83,11 +104,44 @@ const (
 .fd-line .fd-br{color:var(--muted);margin-right:.3rem}
 .fd-hint{color:var(--muted);font-size:.78rem;text-align:center}
 .fd-done .fd-hint{color:var(--ok)}
+.fd-done-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;text-align:center;background:rgba(11,15,20,.78);backdrop-filter:blur(4px);opacity:0;visibility:hidden;transform:scale(1.04);transition:opacity .35s ease-out,transform .35s ease-out,visibility .35s;z-index:2}
+.fd-done-overlay.fd-show{opacity:1;visibility:visible;transform:scale(1)}
+.fd-done-ring{width:54px;height:54px;border-radius:50%;border:3px solid var(--ok);box-shadow:0 0 18px rgba(63,185,80,.55),inset 0 0 12px rgba(63,185,80,.4);animation:fd-pop .6s ease-out,fd-ringrot 4s linear infinite}
+.fd-done-title{font-size:1.4rem;font-weight:700;color:var(--ok);letter-spacing:.06em;text-transform:uppercase;animation:fd-pop .6s ease-out}
+.fd-done-summary{color:var(--fg);font-size:.85rem;font-variant-numeric:tabular-nums;line-height:1.6}
+.fd-done-summary b{color:var(--accent);font-weight:700}
+.fd-done-hint{color:var(--muted);font-size:.8rem}
+.fd-done-hint #fd-countdown{color:var(--ok);font-weight:700;font-size:1rem}
+.fd-extend-flash{animation:fd-extend .4s ease-out}
+.fd-done-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.fd-done-confetti span{position:absolute;top:-12px;width:7px;height:12px;border-radius:2px;opacity:0;animation:fd-confetti 2.2s ease-in forwards}
+.fd-done-confetti span:nth-child(1){left:8%;background:var(--accent);animation-delay:.05s}
+.fd-done-confetti span:nth-child(2){left:18%;background:var(--ok);animation-delay:.15s}
+.fd-done-confetti span:nth-child(3){left:28%;background:var(--warn);animation-delay:.25s}
+.fd-done-confetti span:nth-child(4){left:38%;background:var(--accent);animation-delay:.1s}
+.fd-done-confetti span:nth-child(5){left:48%;background:var(--ok);animation-delay:.3s}
+.fd-done-confetti span:nth-child(6){left:58%;background:var(--accent);animation-delay:.2s}
+.fd-done-confetti span:nth-child(7){left:68%;background:var(--warn);animation-delay:.05s}
+.fd-done-confetti span:nth-child(8){left:78%;background:var(--ok);animation-delay:.25s}
+.fd-done-confetti span:nth-child(9){left:88%;background:var(--accent);animation-delay:.15s}
+.fd-done-confetti span:nth-child(10){left:24%;background:var(--ok);animation-delay:.35s}
+.fd-done-confetti span:nth-child(11){left:54%;background:var(--warn);animation-delay:.4s}
+.fd-done-confetti span:nth-child(12){left:74%;background:var(--accent);animation-delay:.3s}
 @keyframes fd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes fd-glow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes fd-bounce{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-8px);opacity:1}}
 @keyframes fd-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 @keyframes fd-blink{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes fd-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fd-rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fd-corepulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.7}}
+@keyframes fd-orbpulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fd-scan{0%{top:0}100%{top:100%}}
+@keyframes fd-bump{0%{transform:scale(1)}35%{transform:scale(1.45);color:var(--accent);text-shadow:0 0 12px rgba(74,158,255,.6)}100%{transform:scale(1)}}
+@keyframes fd-pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.2);opacity:1}100%{transform:scale(1)}}
+@keyframes fd-ringrot{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fd-extend{0%{transform:scale(1)}40%{transform:scale(1.12);color:var(--accent)}100%{transform:scale(1)}}
+@keyframes fd-confetti{0%{opacity:0;transform:translateY(0) rotate(0deg)}10%{opacity:1}100%{opacity:0;transform:translateY(320px) rotate(540deg)}}
 @media(max-width:640px){.fd-stats{grid-template-columns:repeat(2,1fr)}.fd-console{height:240px}}
 </style>
 <script>
@@ -95,18 +149,28 @@ const (
   const FORCE=%FORCE%;
   const POLL_MS=800;
   const MAX_WAIT_MS=180000;
+  const HOLD_MS=4000;
+  const CLICK_EXTEND_MS=4000;
   const el={
-    root:document.querySelector('.force-dash'),
+    root:document.getElementById('force-dash'),
     status:document.getElementById('fd-status-tag'),
     elapsed:document.getElementById('fd-elapsed'),
     bar:document.getElementById('fd-progress-bar'),
+    pct:document.getElementById('fd-progress-pct'),
     console:document.getElementById('fd-console'),
     lines:document.getElementById('fd-lines'),
     servers:document.getElementById('fd-servers'),
     changes:document.getElementById('fd-changes'),
-    errors:document.getElementById('fd-errors')
+    errors:document.getElementById('fd-errors'),
+    hint:document.getElementById('fd-hint'),
+    overlay:document.getElementById('fd-done-overlay'),
+    doneTitle:document.getElementById('fd-done-title'),
+    doneSummary:document.getElementById('fd-done-summary'),
+    doneHint:document.getElementById('fd-done-hint'),
+    countdown:document.getElementById('fd-countdown')
   };
-  let since=0, lineCount=0, seen=new Set(), sawBusy=false, redirected=false;
+  let since=0, lineCount=0, srvCount=0, chCount=0, erCount=0, seen=new Set(), sawBusy=false, done=false, redirected=false;
+  let holdDeadline=0, countdownTimer=null, fakePct=0;
   const esc=(s)=>s.replace(/[&<>]/g,(c)=>({'&':'&','<':'<','>':'>'}[c]));
   function classify(msg){
     if(/ERROR|FAIL|UNABLE/.test(msg))return'fd-err';
@@ -118,6 +182,13 @@ const (
   function fmtMs(ms){
     const s=Math.max(0,Math.floor(ms/1000));
     return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  }
+  function bump(node,val){
+    if(String(node.textContent)===String(val))return;
+    node.textContent=val;
+    node.classList.remove('fd-bump');
+    void node.offsetWidth;
+    node.classList.add('fd-bump');
   }
   function addLine(l){
     if(seen.has(l.seq))return;
@@ -132,18 +203,58 @@ const (
     el.console.scrollTop=el.console.scrollHeight;
   }
   function setStats(lines){
-    el.lines.textContent=lineCount;
-    let srv=0,ch=0,er=0;
     for(const m of lines){
       if(/\[BACKUP\]\[START\]\[SERVER\]|\[BACKUP\]\[SERVER\]\[NO-CHANGE\]|\[BACKUP\]\[OK\]|\[BACKUP\]\[ERROR\]/.test(m.msg)){
-        const mm=/SERVER\] ([^ ]+)/.exec(m.msg);if(mm&&!seen.has(mm[1]+'$')){seen.add(mm[1]+'$');srv++;}
+        const mm=/SERVER\] ([^ ]+)/.exec(m.msg);if(mm&&!seen.has(mm[1]+'$')){seen.add(mm[1]+'$');srvCount++;}
       }
-      if(/OK|SUCCESS|STORE-CHECKIN/.test(m.msg))ch++;
-      if(/ERROR|FAIL/.test(m.msg))er++;
+      if(/OK|SUCCESS|STORE-CHECKIN/.test(m.msg))chCount++;
+      if(/ERROR|FAIL/.test(m.msg))erCount++;
     }
-    el.servers.textContent=srv;el.changes.textContent=ch;el.errors.textContent=er;
+    bump(el.lines,lineCount);
+    bump(el.servers,srvCount);
+    bump(el.changes,chCount);
+    bump(el.errors,erCount);
   }
-  function redirect(){if(redirected)return;redirected=true;el.root.classList.add('fd-done');el.status.textContent='[ backup complete ]';setTimeout(()=>window.location.href='../',1200);}
+  function renderSummary(){
+    el.doneSummary.innerHTML=
+      '<b>'+lineCount+'</b> log lines &middot; <b>'+srvCount+'</b> servers &middot; <b>'+chCount+'</b> changes &middot; <b>'+erCount+'</b> errors<br>'+
+      'elapsed <b>'+el.elapsed.textContent+'</b>';
+  }
+  function finish(){
+    if(done)return;
+    done=true;
+    el.root.classList.add('fd-done');
+    el.status.textContent='[ backup complete ]';
+    holdDeadline=Date.now()+HOLD_MS;
+    fakePct=100;
+    el.pct.textContent='100%';
+    renderSummary();
+    el.overlay.classList.add('fd-show');
+    countdownTimer=setInterval(updateCountdown,200);
+    updateCountdown();
+  }
+  function updateCountdown(){
+    const remain=Math.max(0,Math.ceil((holdDeadline-Date.now())/1000));
+    el.countdown.textContent=remain;
+    if(Date.now()>=holdDeadline){
+      clearInterval(countdownTimer);
+      redirected=true;
+      window.location.href='../';
+    }
+  }
+  window.addEventListener('click',function(){
+    if(!done)return;
+    holdDeadline=Math.max(holdDeadline,Date.now())+CLICK_EXTEND_MS;
+    el.doneHint.classList.remove('fd-extend-flash');
+    void el.doneHint.offsetWidth;
+    el.doneHint.classList.add('fd-extend-flash');
+  });
+  setInterval(function(){
+    if(done){return;}
+    if(fakePct<92){fakePct+=(92-fakePct)*0.05+0.15;}
+    el.pct.textContent=Math.round(fakePct)+'%';
+    el.bar.style.inset='0 '+(100-Math.min(100,fakePct))+'% 0 0';
+  },140);
   async function poll(){
     if(redirected)return;
     try{
@@ -154,12 +265,12 @@ const (
       setStats(fresh);
       el.elapsed.textContent=fmtMs(d.elapsed_ms||0);
       if(d.busy)sawBusy=true;
-      if(sawBusy&&!d.busy){redirect();return;}
-      if(FORCE>0&&d.pass>=FORCE&&!d.busy){redirect();return;}
+      if(sawBusy&&!d.busy){finish();return;}
+      if(FORCE>0&&d.pass>=FORCE&&!d.busy){finish();return;}
     }catch(e){/* transient */}
     setTimeout(poll,POLL_MS);
   }
-  setTimeout(()=>{if(!redirected){document.querySelector('.fd-hint').textContent='timeout: redirecting back to the hive view';redirect();}},MAX_WAIT_MS);
+  setTimeout(()=>{if(!done){el.status.textContent='[ backup timed out ]';el.hint.textContent='timeout: redirecting back to the hive view';finish();}},MAX_WAIT_MS);
   poll();
 })();
 </script>`
