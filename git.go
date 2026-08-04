@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
+	gitcfg "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
@@ -97,14 +97,25 @@ func gitSSHAuth(upstream, keyPath string) (*ssh.PublicKeys, error) {
 	return auth, nil
 }
 
+// _refspec is the default fetch/push refspec written into the origin remote so
+// every local branch tracks its upstream counterpart. The leading "+" makes the
+// push a forced update, which keeps the upstream in lockstep with the local
+// auto-commit history even when histories diverge (e.g. after a manual upstream
+// rewrite).
+const _refspec = "+refs/heads/*:refs/heads/*"
+
 // gitEnsureOrigin makes sure an "origin" remote pointing at upstream exists in
-// the repository, recreating it when the recorded URL drifted so the push
-// targets the currently configured upstream.
+// the repository, recreating it when the recorded URL or refspecs drifted so
+// the push targets the currently configured upstream and the right refs. A
+// fresh remote is always created with the default head refspec so pushes have
+// a valid mapping even when callers omit an explicit RefSpecs list.
 func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 	rem, err := repo.Remote(_origin)
 	if err == nil {
 		cfg := rem.Config()
-		if len(cfg.URLs) == 0 || cfg.URLs[0] != upstream {
+		urlDrift := len(cfg.URLs) == 0 || cfg.URLs[0] != upstream
+		refspecDrift := len(cfg.Fetch) == 0 || cfg.Fetch[0] != gitcfg.RefSpec(_refspec)
+		if urlDrift || refspecDrift {
 			if err := repo.DeleteRemote(_origin); err != nil {
 				return err
 			}
@@ -114,9 +125,10 @@ func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 	} else if !errors.Is(err, git.ErrRemoteNotFound) {
 		return err
 	}
-	if _, err := repo.CreateRemote(&config.RemoteConfig{
-		Name: _origin,
-		URLs: []string{upstream},
+	if _, err := repo.CreateRemote(&gitcfg.RemoteConfig{
+		Name:  _origin,
+		URLs:  []string{upstream},
+		Fetch: []gitcfg.RefSpec{gitcfg.RefSpec(_refspec)},
 	}); err != nil {
 		return err
 	}
@@ -162,12 +174,19 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 
 // gitPush pushes the current branch to the configured upstream SSH repository,
 // authenticating with the private key at config.Git.SSHKey. It is a no-op when
-// no upstream is configured. The outcome (timestamp, success flag, message) is
-// recorded for the WebUI dashboard upstream-sync panel.
+// no upstream is configured. Before pushing it re-syncs the origin remote URL
+// and refspecs with the current configuration so a drifted upstream URL or a
+// remote created without refspecs never silently keeps commits local. The
+// outcome (timestamp, success flag, message) is recorded for the WebUI
+// dashboard upstream-sync panel.
 func gitPush(config *OPNCall, repo *git.Repository) error {
 	upstream := config.Git.Upstream
 	if upstream == "" {
 		return nil
+	}
+	if config.Git.SSHKey == "" {
+		recordPush(false, "missing OPN_GIT_SSH_KEY")
+		return errors.New("git push: upstream configured but OPN_GIT_SSH_KEY is empty")
 	}
 	auth, err := gitSSHAuth(upstream, config.Git.SSHKey)
 	if err != nil {
@@ -178,10 +197,33 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 		recordPush(false, "origin: "+err.Error())
 		return err
 	}
+	// Resolve the current branch (HEAD) so the push carries an explicit refspec
+	// mapping the local branch onto its upstream twin, regardless of any
+	// configured default fetch refspec. A detached HEAD falls back to pushing
+	// HEAD to "refs/heads/master" so an auto-init'd repo with no commits yet on
+	// a named branch still syncs.
+	head, err := repo.Head()
+	if err != nil {
+		recordPush(false, "head: "+err.Error())
+		return err
+	}
+	var refspec gitcfg.RefSpec
+	if head.Name().IsBranch() {
+		branch := head.Name().Short()
+		refspec = gitcfg.RefSpec("+refs/heads/" + branch + ":refs/heads/" + branch)
+	} else {
+		refspec = gitcfg.RefSpec("+HEAD:refs/heads/master")
+	}
 	if err := repo.Push(&git.PushOptions{
 		RemoteName: _origin,
 		Auth:       auth,
+		RefSpecs:   []gitcfg.RefSpec{refspec},
 	}); err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			displayChan <- []byte("[GIT][REPO][PUSH][UPTODATE] " + upstream)
+			recordPush(true, "already up-to-date")
+			return nil
+		}
 		displayChan <- []byte("[GIT][REPO][PUSH][FAIL] " + err.Error())
 		recordPush(false, err.Error())
 		return err

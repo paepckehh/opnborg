@@ -24,6 +24,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	gitcfg "github.com/go-git/go-git/v5/config"
 )
 
 // withEnv sets an env var for the duration of the test and restores the
@@ -1895,7 +1897,96 @@ func TestGitCheckInCommitsAndIdempotent(t *testing.T) {
 	}
 }
 
-// --- setup.go: httpd enable gating ---------------------------------------
+// TestGitEnsureOriginRecreatesOnURLDrift verifies that gitEnsureOrigin
+// recreates the origin remote when the recorded URL no longer matches the
+// configured upstream, so a drifted upstream target never keeps commits local.
+func TestGitEnsureOriginRecreatesOnURLDrift(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	old := "git@github.com:foo/old.git"
+	new := "git@github.com:foo/new.git"
+	if err := gitEnsureOrigin(repo, old); err != nil {
+		t.Fatalf("ensure origin (old): %v", err)
+	}
+	rem, err := repo.Remote(_origin)
+	if err != nil {
+		t.Fatalf("remote old: %v", err)
+	}
+	if got := rem.Config().URLs[0]; got != old {
+		t.Fatalf("url = %s, want %s", got, old)
+	}
+	if got := rem.Config().Fetch[0]; string(got) != _refspec {
+		t.Fatalf("fetch refspec = %q, want %q", got, _refspec)
+	}
+	if err := gitEnsureOrigin(repo, new); err != nil {
+		t.Fatalf("ensure origin (new): %v", err)
+	}
+	rem, err = repo.Remote(_origin)
+	if err != nil {
+		t.Fatalf("remote new: %v", err)
+	}
+	if got := rem.Config().URLs[0]; got != new {
+		t.Fatalf("url after drift = %s, want %s", got, new)
+	}
+	if got := rem.Config().Fetch[0]; string(got) != _refspec {
+		t.Fatalf("fetch refspec after drift = %q, want %q", got, _refspec)
+	}
+}
+
+// TestGitEnsureOriginRecreatesOnMissingRefspec verifies that an origin remote
+// created without refspecs (the bug shape: go-git's CreateRemote with no
+// RefSpecs yields a remote that pushes nothing) is recreated so pushes have a
+// valid ref mapping.
+func TestGitEnsureOriginRecreatesOnMissingRefspec(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	upstream := "git@github.com:foo/repo.git"
+	// Plant a remote with no refspecs, simulating the pre-fix state.
+	if _, err := repo.CreateRemote(&gitcfg.RemoteConfig{
+		Name: _origin,
+		URLs: []string{upstream},
+	}); err != nil {
+		t.Fatalf("create bare origin: %v", err)
+	}
+	if err := gitEnsureOrigin(repo, upstream); err != nil {
+		t.Fatalf("ensure origin: %v", err)
+	}
+	rem, err := repo.Remote(_origin)
+	if err != nil {
+		t.Fatalf("remote: %v", err)
+	}
+	if len(rem.Config().Fetch) == 0 || string(rem.Config().Fetch[0]) != _refspec {
+		t.Fatalf("refspec not repaired after drift: %+v", rem.Config().Fetch)
+	}
+}
 
 // TestDashboardGatherBackupFolderAndGitRepo verifies the dashboard stats
 // gatherer counts server archive trees, archive entries, total bytes, newest
