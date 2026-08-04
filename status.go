@@ -95,3 +95,54 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 	unifiStatus = strings.Replace(unifiStatus, "<div class=\"member-status\"></div>", "", 1)
 	unifiStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiStatus
 }
+
+// setUnifiWatchStatus renders the Unifi autoBackup folder-watch sync tile.
+// It mirrors the Unifi backup tile (green when the watcher is responsive and
+// the last sync succeeded, degraded otherwise) and surfaces the last sync
+// date from the mtime of the autobackup_meta.json marker file plus archive
+// and current backup buttons, all under the Unifi branding/logo.
+func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
+	unifiWatchMutex.Lock()
+	defer unifiWatchMutex.Unlock()
+
+	year, month, _ := config.Unifi.Watch.LastTS.Date()
+	archive := filepath.Join(_archive, strconv.Itoa(year), padMonth(strconv.Itoa(int(month))))
+	lastSeen := "n/a"
+	if !config.Unifi.Watch.LastTS.IsZero() {
+		lastSeen = config.Unifi.Watch.LastTS.Format(time.RFC3339)
+	}
+	server := "unifi-autobackup"
+	uiLink := ""
+	if config.Unifi.WebUI != nil {
+		server = config.Unifi.WebUI.Hostname()
+		if server == "" {
+			server = "unifi-autobackup"
+		}
+		uiLink = config.Unifi.WebUI.String()
+	}
+
+	if !responsive {
+		unifiWatchStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiWatchStatus, _unifi, ""), _ok, ""), _na, ""), _fail, "")
+		unifiWatchStatus = strings.Replace(unifiWatchStatus, "<div class=\"member-status\"></div>", "", 1)
+		unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiWatchStatus
+		if unifiWatchStatus == "<div class=\"member-status\">"+_fail+"</div>" {
+			unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: unreachable Last Sync: " + lastSeen + "</span></div>"
+		}
+		return
+	}
+
+	state := _ok
+	if !syncOK {
+		state = _degraded
+	}
+	seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Sync</span><span class=\"meta-value\">" + lastSeen + "</span></div>"
+	linkUI := "<a href=\"" + uiLink + "\" " + _nwin + "><button>[" + server + "]</button></a>"
+	linkCurrent := "<a href=\"./files/" + _uniWatch + "/current.unf\"" + _nwin + "><button>[current.unf]</button></a>"
+	linkArchive := "<a href=\"./files/" + _uniWatch + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
+	links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
+	tagBox := ""
+	if config.Unifi.Tag != "" {
+		tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Tag) + "</span></div>"
+	}
+	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + tagBox
+}

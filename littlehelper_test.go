@@ -1345,3 +1345,294 @@ func TestCheckInstallPKGEmptyPlugins(t *testing.T) {
 		t.Errorf("checkInstallPKG on fully-synced host returned err: %v", err)
 	}
 }
+
+// --- Unifi autoBackup folder watch: setup gating ---------------------------
+
+// setupUnifiWatchEnv prepares a temp source folder with the given marker file
+// content and sets OPN_UNIFI_WATCH_PATH to point at it. It returns the config
+// populated by the watch parsing block (mirroring Setup()'s logic) and the
+// source path. The caller is responsible for restoring unifiWatchEnable /
+// unifiWatchPath globals.
+func setupUnifiWatchEnv(t *testing.T, markerContent string) (*OPNCall, string) {
+	t.Helper()
+	ensureDisplayDrained(t)
+	src := t.TempDir()
+	if markerContent != "" {
+		if err := os.WriteFile(filepath.Join(src, "autobackup_meta.json"), []byte(markerContent), 0644); err != nil {
+			t.Fatalf("write marker: %v", err)
+		}
+	}
+	withEnv(t, "OPN_UNIFI_WATCH_PATH", src, true)
+	// mirror the Setup() watch block (kept in sync by hand).
+	config := &OPNCall{}
+	unifiWatchEnable.Store(false)
+	config.Unifi.Watch.Enable = false
+	if isEnv("OPN_UNIFI_WATCH_PATH") {
+		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
+		info, err := os.Stat(watchPath)
+		if err != nil || !info.IsDir() {
+			return config, src
+		}
+		metaPath := filepath.Join(watchPath, "autobackup_meta.json")
+		metaData, err := os.ReadFile(metaPath)
+		if err != nil {
+			return config, src
+		}
+		if !isValidXML(string(metaData)) {
+			return config, src
+		}
+		config.Unifi.Watch.Enable = true
+		config.Unifi.Watch.Path = watchPath
+		config.Unifi.Watch.Meta = metaPath
+		if fi, err := os.Stat(metaPath); err == nil {
+			config.Unifi.Watch.LastTS = fi.ModTime()
+		}
+		unifiWatchEnable.Store(true)
+		unifiWatchPath = watchPath
+	}
+	return config, src
+}
+
+func TestUnifiWatchSetupDisabledWhenFolderMissing(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+	})
+	withEnv(t, "OPN_UNIFI_WATCH_PATH", "/nonexistent/path/does/not/exist", true)
+	ensureDisplayDrained(t)
+	config := &OPNCall{}
+	unifiWatchEnable.Store(false)
+	if isEnv("OPN_UNIFI_WATCH_PATH") {
+		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
+		if info, err := os.Stat(watchPath); err == nil && info.IsDir() {
+			t.Fatalf("unexpected existing dir")
+		}
+	}
+	if config.Unifi.Watch.Enable {
+		t.Errorf("watch should be disabled when source folder is missing")
+	}
+	if unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable should be false when source folder is missing")
+	}
+}
+
+func TestUnifiWatchSetupDisabledWhenMarkerMissing(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+	})
+	config, _ := setupUnifiWatchEnv(t, "")
+	if config.Unifi.Watch.Enable {
+		t.Errorf("watch should be disabled when autobackup_meta.json is missing")
+	}
+	if unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable should be false when marker is missing")
+	}
+}
+
+func TestUnifiWatchSetupDisabledWhenMarkerInvalidXML(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+	})
+	config, _ := setupUnifiWatchEnv(t, "{this is not valid xml")
+	if config.Unifi.Watch.Enable {
+		t.Errorf("watch should be disabled when marker fails XML validation")
+	}
+	if unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable should be false when marker is invalid XML")
+	}
+}
+
+func TestUnifiWatchSetupEnabledWhenMarkerValidXML(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+	})
+	config, src := setupUnifiWatchEnv(t, `<autobackup><version>8.5.6</version></autobackup>`)
+	if !config.Unifi.Watch.Enable {
+		t.Errorf("watch should be enabled when folder + valid-XML marker exist")
+	}
+	if !unifiWatchEnable.Load() {
+		t.Errorf("unifiWatchEnable should be true")
+	}
+	if config.Unifi.Watch.Path != src {
+		t.Errorf("watch path = %q want %q", config.Unifi.Watch.Path, src)
+	}
+	if config.Unifi.Watch.Meta != filepath.Join(src, "autobackup_meta.json") {
+		t.Errorf("meta path mismatch: %q", config.Unifi.Watch.Meta)
+	}
+	if config.Unifi.Watch.LastTS.IsZero() {
+		t.Errorf("LastTS should be populated from marker mtime")
+	}
+}
+
+// --- Unifi autoBackup folder watch: status rendering ----------------------
+
+func TestSetUnifiWatchStatusOK(t *testing.T) {
+	savedStatus := unifiWatchStatus
+	t.Cleanup(func() { unifiWatchStatus = savedStatus })
+	unifiWatchStatus = ""
+	config := &OPNCall{}
+	u, _ := url.Parse("https://ctrl.lan:8443#RACK-1")
+	config.Unifi.WebUI = u
+	config.Unifi.Tag = "RACK-1"
+	ts := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	config.Unifi.Watch.LastTS = ts
+	setUnifiWatchStatus(config, true, true)
+	out := unifiWatchStatus
+	for _, want := range []string{
+		"member-status",
+		"current.unf",
+		"archive",
+		"Last Sync",
+		"2024-06-01T10:00:00Z",
+		"RACK-1",
+		"ctrl.lan",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("setUnifiWatchStatus ok output missing %q: %s", want, out)
+		}
+	}
+	if !strings.Contains(out, _ok) {
+		t.Errorf("ok status should contain _ok SVG")
+	}
+	if strings.Contains(out, _fail) {
+		t.Errorf("ok status should not contain _fail SVG")
+	}
+}
+
+func TestSetUnifiWatchStatusDegraded(t *testing.T) {
+	savedStatus := unifiWatchStatus
+	t.Cleanup(func() { unifiWatchStatus = savedStatus })
+	unifiWatchStatus = ""
+	config := &OPNCall{}
+	u, _ := url.Parse("https://ctrl.lan:8443")
+	config.Unifi.WebUI = u
+	setUnifiWatchStatus(config, true, false)
+	if !strings.Contains(unifiWatchStatus, _degraded) {
+		t.Errorf("degraded status should contain _degraded SVG: %s", unifiWatchStatus)
+	}
+}
+
+func TestSetUnifiWatchStatusUnreachable(t *testing.T) {
+	savedStatus := unifiWatchStatus
+	t.Cleanup(func() { unifiWatchStatus = savedStatus })
+	unifiWatchStatus = "<div class=\"member-status\">" + _ok + "</div><div class=\"member-main\"><span class=\"member-meta\">ctrl</span></div>"
+	config := &OPNCall{}
+	setUnifiWatchStatus(config, false, false)
+	if !strings.Contains(unifiWatchStatus, _fail) {
+		t.Errorf("unreachable status should contain _fail SVG: %s", unifiWatchStatus)
+	}
+	if strings.Contains(unifiWatchStatus, _ok) {
+		t.Errorf("unreachable status should not contain _ok SVG")
+	}
+}
+
+func TestGetUnifiWatchDisabledWhenFlagFalse(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	t.Cleanup(func() { unifiWatchEnable.Store(savedEnable) })
+	unifiWatchEnable.Store(false)
+	if got := getUnifiWatch(); got != _empty {
+		t.Errorf("getUnifiWatch should return _empty when disabled, got %q", got)
+	}
+}
+
+func TestGetUnifiWatchRendersWhenEnabled(t *testing.T) {
+	savedEnable := unifiWatchEnable.Load()
+	savedPath := unifiWatchPath
+	savedStatus := unifiWatchStatus
+	t.Cleanup(func() {
+		unifiWatchEnable.Store(savedEnable)
+		unifiWatchPath = savedPath
+		unifiWatchStatus = savedStatus
+	})
+	unifiWatchEnable.Store(true)
+	unifiWatchPath = "/var/lib/unifi/data/backup/autobackup"
+	unifiWatchStatus = "<div class=\"member-status\">" + _ok + "</div><div class=\"member-main\">sync ok</div>"
+	got := getUnifiWatch()
+	for _, want := range []string{
+		"UNIFI AUTOBACKUP WATCH",
+		"/var/lib/unifi/data/backup/autobackup",
+		"sync ok",
+		"group",
+		"member-row",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getUnifiWatch missing %q: %s", want, got)
+		}
+	}
+}
+
+// --- Unifi autoBackup folder watch: sync logic ---------------------------
+
+func TestSyncUnifiWatchCopiesNewestUnf(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	src := t.TempDir()
+	store := t.TempDir()
+	config := &OPNCall{Path: store}
+	config.Unifi.Watch.Path = src
+	config.Unifi.Watch.Meta = filepath.Join(src, "autobackup_meta.json")
+	if err := os.WriteFile(config.Unifi.Watch.Meta, []byte("<autobackup/>"), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	// two .unf files; the newer one must win
+	older := []byte(strings.Repeat("a", 2048))
+	newer := []byte(strings.Repeat("b", 2048))
+	if err := os.WriteFile(filepath.Join(src, "old.unf"), older, 0644); err != nil {
+		t.Fatalf("write old: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(src, "new.unf"), newer, 0644); err != nil {
+		t.Fatalf("write new: %v", err)
+	}
+
+	syncUnifiWatch(config, time.Now())
+
+	got, err := os.ReadFile(filepath.Join(store, _uniWatch, "current.unf"))
+	if err != nil {
+		t.Fatalf("read current.unf: %v", err)
+	}
+	if string(got) != string(newer) {
+		t.Errorf("current.unf should contain newest payload")
+	}
+}
+
+func TestSyncUnifiWatchSkipsTooSmall(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	src := t.TempDir()
+	store := t.TempDir()
+	config := &OPNCall{Path: store}
+	config.Unifi.Watch.Path = src
+	config.Unifi.Watch.Meta = filepath.Join(src, "autobackup_meta.json")
+	if err := os.WriteFile(config.Unifi.Watch.Meta, []byte("<autobackup/>"), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "tiny.unf"), []byte("x"), 0644); err != nil {
+		t.Fatalf("write tiny: %v", err)
+	}
+	syncUnifiWatch(config, time.Now())
+	if _, err := os.Stat(filepath.Join(store, _uniWatch, "current.unf")); !os.IsNotExist(err) {
+		t.Errorf("too-small backup should not be checked into store")
+	}
+}

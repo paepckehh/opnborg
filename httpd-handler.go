@@ -28,6 +28,13 @@ func getForceHandler() http.Handler {
 			unifiExportNow.Store(true)
 			updateUnifiExport <- true
 		}
+		if unifiWatchEnable.Load() {
+			unifiWatchNow.Store(true)
+			select {
+			case updateUnifiWatch <- true:
+			default:
+			}
+		}
 		r = headHTML(r)
 		_, _ = r.Write([]byte(_forceRedirect))
 	}
@@ -68,6 +75,7 @@ func getStartHTML() string {
 	s.WriteString(_bodyHead)
 	s.WriteString(getNavi())
 	s.WriteString(getHive())
+	s.WriteString(getUnifiWatch())
 	s.WriteString(getPKG())
 	s.WriteString(_bodySemVer)
 	s.WriteString(_bodyFooter)
@@ -129,6 +137,41 @@ func getHive() string {
 	s.WriteString(sleep)
 	s.WriteString(" seconds ]</div>")
 	s.WriteString(_forceButton)
+	return s.String()
+}
+
+// getUnifiWatch renders the dedicated Unifi autoBackup folder-watch sync
+// section. It is only emitted when the watcher was armed at Setup() time
+// (config.Unifi.Watch.Enable / unifiWatchEnable). The section carries its own
+// Unifi branding/logo category heading, the live sync status (green when the
+// last sync succeeded), the last sync date (from the autobackup_meta.json
+// marker mtime), and archive + current backup buttons, mirroring the Unifi
+// backup tile.
+func getUnifiWatch() string {
+	if !unifiWatchEnable.Load() {
+		return _empty
+	}
+	var s strings.Builder
+	s.WriteString("<div class=\"group\">")
+	s.WriteString("<div class=\"group-header\">")
+	s.WriteString(_unifi)
+	s.WriteString("<b>UNIFI AUTOBACKUP WATCH</b>")
+	if unifiWatchPath != "" {
+		s.WriteString("<span class=\"group-desc\">")
+		s.WriteString(unifiWatchPath)
+		s.WriteString("</span>")
+	}
+	s.WriteString("</div>")
+	s.WriteString("<div class=\"member-row\">")
+	unifiWatchMutex.Lock()
+	status := unifiWatchStatus
+	unifiWatchMutex.Unlock()
+	if status == "" {
+		status = "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: pending Last Sync: n/a</span></div>"
+	}
+	s.WriteString(status)
+	s.WriteString("</div>")
+	s.WriteString("</div>")
 	return s.String()
 }
 

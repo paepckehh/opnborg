@@ -3,19 +3,21 @@ package opnborg
 import (
 	"net/url"
 	"sync/atomic"
+	"time"
 )
 
 // global exported consts
-const SemVer = "v0.1.96"
+const SemVer = "v0.1.97"
 
 // global var
 var (
 	tg                                                         []OPNGroup
-	unifiBackupEnable, unifiExportEnable                       atomic.Bool
-	unifiBackupNow, unifiExportNow                             atomic.Bool
+	unifiBackupEnable, unifiExportEnable, unifiWatchEnable     atomic.Bool
+	unifiBackupNow, unifiExportNow, unifiWatchNow              atomic.Bool
 	sleep, pkgmaster, pkghost                                  string
 	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL
 	grafanaWebUI, grafanaFreeBSD, grafanaUnifi, grafanaHAProxy *url.URL
+	unifiWatchPath                                             string
 )
 
 // OPNGroup Type
@@ -72,6 +74,12 @@ type OPNCall struct {
 			Enable bool
 			Format string
 			URI    *url.URL
+		}
+		Watch struct {
+			Enable bool      // enable Unifi autoBackup folder watch & sync
+			Path   string    // absolute path to the Unifi autoBackup source folder
+			Meta   string    // absolute path to the autobackup_meta.json marker file
+			LastTS time.Time // mtime of the marker file at the last successful sync
 		}
 	}
 	Wazuh struct {

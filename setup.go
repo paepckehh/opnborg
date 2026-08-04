@@ -24,12 +24,14 @@ const (
 
 // global
 var (
-	hive                  []string
-	hiveMutex, unifiMutex sync.Mutex
-	updateOPN             = make(chan bool, 1)
-	updateUnifiBackup     = make(chan bool, 1)
-	updateUnifiExport     = make(chan bool, 1)
-	unifiStatus           string
+	hive                                   []string
+	hiveMutex, unifiMutex, unifiWatchMutex sync.Mutex
+	updateOPN                              = make(chan bool, 1)
+	updateUnifiBackup                      = make(chan bool, 1)
+	updateUnifiExport                      = make(chan bool, 1)
+	updateUnifiWatch                       = make(chan bool, 1)
+	unifiStatus                            string
+	unifiWatchStatus                       string
 )
 
 // Setup reads OPNBorgs configuration via env, sanitizes, sets sane defaults
@@ -186,6 +188,44 @@ func Setup() (*OPNCall, error) {
 				if d := os.Getenv("OPN_UNIFI_FORMAT"); d == "json" {
 					config.Unifi.Export.Format = "json"
 				}
+			}
+		}
+	}
+
+	// unifi autoBackup folder watch & sync
+	//
+	// When OPN_UNIFI_WATCH_PATH points at the Unifi controller autoBackup
+	// directory (e.g. /var/lib/unifi/data/backup/autobackup) the daemon arms a
+	// goroutine that watches for filesystem change events (add/delete/rename)
+	// and mirrors the newest .unf backup into the local store. The watcher is
+	// only enabled when the directory exists AND contains an
+	// autobackup_meta.json marker file that parses as valid XML; otherwise the
+	// feature is silently disabled so opnborg keeps running on hosts that do
+	// not host a co-located controller.
+	unifiWatchEnable.Store(false)
+	config.Unifi.Watch.Enable = false
+	if isEnv("OPN_UNIFI_WATCH_PATH") {
+		watchPath := os.Getenv("OPN_UNIFI_WATCH_PATH")
+		info, err := os.Stat(watchPath)
+		if err != nil || !info.IsDir() {
+			displayChan <- []byte("[UNIFI][WATCH][DISABLED][SOURCE-FOLDER-NOT-FOUND] " + watchPath)
+		} else {
+			metaPath := filepath.Join(watchPath, "autobackup_meta.json")
+			metaData, err := os.ReadFile(metaPath)
+			if err != nil {
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-NOT-FOUND] " + metaPath)
+			} else if !isValidXML(string(metaData)) {
+				displayChan <- []byte("[UNIFI][WATCH][DISABLED][META-FILE-INVALID-XML] " + metaPath)
+			} else {
+				config.Unifi.Watch.Enable = true
+				config.Unifi.Watch.Path = watchPath
+				config.Unifi.Watch.Meta = metaPath
+				if fi, err := os.Stat(metaPath); err == nil {
+					config.Unifi.Watch.LastTS = fi.ModTime()
+				}
+				unifiWatchEnable.Store(true)
+				unifiWatchPath = watchPath
+				displayChan <- []byte("[UNIFI][WATCH][ENABLED][SOURCE] " + watchPath)
 			}
 		}
 	}

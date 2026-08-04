@@ -79,6 +79,15 @@ func srv(config *OPNCall) error {
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-EXPORT-ASSET-INVENTORY]" + state)
 
+	// spin up unifi autoBackup folder watch & sync server
+	state = "[DISABLED]"
+	if config.Unifi.Watch.Enable {
+		state = "[ENABLED]"
+		unifiWatchStatus = "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: " + config.Unifi.Watch.Path + " Last Sync: n/a</span></div>"
+		go srvUnifiWatch(config)
+	}
+	displayChan <- []byte("[SERVICE][UNIFI-WATCH-FOLDER-SYNC]" + state)
+
 	// is opnsense hive is enabled?
 	state = "[DISABLED]"
 	if config.Enable {
