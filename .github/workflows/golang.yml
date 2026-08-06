@@ -4,20 +4,27 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: golang-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        go-version: [1.23]
         os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
           check-latest: true
-      - uses: actions/checkout@v3
       - run: go build ./...
       - run: go vet ./...
+      - run: go test -count=1 ./...
