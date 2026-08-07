@@ -319,41 +319,6 @@ required or invoked).
 | `OLLAMA_DESC_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages (with a `tag: <severity>[, needs-review]` security-impact line) when set together with `OLLAMA_DESC_MODEL` |
 | `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message that classifies the security impact of the change; enables the feature when set together with `OLLAMA_DESC_URL` |
 
-When Ollama-assisted commit messages are enabled, before each commit the
-HEAD-vs-worktree diff is POSTed to `<OLLAMA_DESC_URL>/api/generate`
-(`stream=false`) with a prompt that casts the model as an infrastructure / Unix
-firewall expert and asks for a short headline plus an extensive explanation
-grounded in OPNsense XML firewall configuration semantics. The returned text
-becomes the commit message. The model is prompted to end its message with a
-single **`tag: <severity>[, needs-review]`** line that classifies the security
-impact of the change so every backup commit can be triaged by risk. `<severity>`
-is one of `low` (routine, no security impact), `medium` (bounded
-hardening/exposure change), `high` (broadens attack surface or weakens
-hardening), or `critical` (removes a key control or broadly exposes a sensitive
-service); `, needs-review` is appended when a human should inspect the change
-before it ships. opnborg does not parse or act on the tag — it is written
-verbatim into the commit message and surfaced on the **BorgAUDIT** history page
-(see below) for an operator to review. The affected server name(s) are injected
-into the prompt as explicit input (deduplicated, sorted first path segment of
-every changed file) so the model anchors its description to the changed
-appliance. The diff payload is **enriched**, not raw hunks:
-opnborg emits a commit-level summary (files changed, total +insertions/−deletions,
-per-file change kind and +/- counts), then per-file blocks carrying before/after
-byte and line sizes, detected OPNsense `<opnsense>` top-level XML sections
-(e.g. `filter`, `aliases`, `interfaces`, `gateways`, `nat`, `ipsec`, `vpn`,
-`cert`), unified hunks with widened context (8 lines), and for small files the
-full resulting content so the model can describe the complete new state. The
-payload is capped at 256 KB (truncated with a marker when exceeded). Commits
-whose changed files are all Unifi `.unf` backups keep the default message
-without consulting the model (the `.unf` format is an opaque binary archive).
-Any model error, empty response, or timeout falls back to the default message
-(`opnborg auto update`) so a model outage never blocks a backup from being
-committed. The **Config Dashboard** page surfaces the parsed `OLLAMA_DESC_URL` /
-`OLLAMA_DESC_MODEL` values plus a live probe of the daemon that GETs
-`<OLLAMA_DESC_URL>/api/tags` (3 s timeout) on each page render and reports three
-layered signals: whether the server is reachable, whether the REST API answers,
-and whether the configured model is loaded and ready to run.
-
 ### BorgAUDIT — git commit history review
 
 When `OPN_GIT_ENABLE` is set, the index page carries a **BorgAUDIT** tile that
