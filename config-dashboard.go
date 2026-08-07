@@ -34,7 +34,7 @@ func getConfigDashboardHandler() http.Handler {
 func getConfigDashboardHTML() string {
 	var s strings.Builder
 	s.WriteString(_htmlStart)
-	s.WriteString(_head)
+	s.WriteString(_headStatic)
 	s.WriteString(_bodyStart)
 	s.WriteString(_bodyHead)
 	s.WriteString(getConfigNavi())

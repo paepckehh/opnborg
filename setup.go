@@ -201,7 +201,10 @@ func Setup() (*OPNCall, error) {
 		s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
 		css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
 		s.WriteString(css)
-		_head = s.String() + "<meta http-equiv=\"refresh\" content=\"15\">" + _lf + "</head>" + _lf
+		_head = s.String() + "<meta http-equiv=\"refresh\" content=\"60\">" + _lf + "</head>" + _lf
+		// Audit and config dashboard pages are static per-request renders (no
+		// live polling), so they use a refresh-free head and never auto-reload.
+		_headStatic = s.String() + "</head>" + _lf
 		// The forced-backup dashboard polls /progress for live log lines and
 		// redirects via JS once the pass ends. The meta refresh is only a
 		// long fallback safety net in case JS is disabled or the pass hangs.

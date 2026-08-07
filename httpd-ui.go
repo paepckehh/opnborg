@@ -6,7 +6,7 @@ import _ "embed"
 var _favicon []byte
 
 // see api.go
-var _head, _forceRedirect string
+var _head, _headStatic, _forceRedirect string
 
 const (
 	_lf = "\n"
