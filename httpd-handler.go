@@ -95,6 +95,7 @@ func getStartHTML() string {
 	s.WriteString(_bodyHead)
 	s.WriteString(getNavi())
 	s.WriteString(getAuditTile())
+	s.WriteString(getBackupTile())
 	s.WriteString(getHive())
 	s.WriteString(getUnifiWatch())
 	s.WriteString(getPKG())
@@ -139,6 +140,21 @@ func getPKG() string {
 	return s.String()
 }
 
+// getBackupTile renders the "BorgBACKUP" tile for the index page: a short
+// heading and the live backup interval, with the "Backup NOW" trigger button
+// floated to the right of the info text to save vertical space. The layout
+// mirrors the BorgAUDIT tile (flex row, single line when width allows).
+func getBackupTile() string {
+	var s strings.Builder
+	s.WriteString("<div class=\"backup-section backup-tile\"><b>BorgBACKUP</b> ")
+	s.WriteString("<span class=\"member-meta\">Module:Monitor:Backup:Active [ Automatic check every ")
+	s.WriteString(sleep)
+	s.WriteString(" seconds ]</span>")
+	s.WriteString(_forceButton)
+	s.WriteString("</div>")
+	return s.String()
+}
+
 // getHive
 func getHive() string {
 	var s strings.Builder
@@ -154,11 +170,6 @@ func getHive() string {
 		s.WriteString("</div>")
 	}
 	hiveMutex.Unlock()
-	s.WriteString("<div class=\"backup-section\"><b>BorgBACKUP</b><br>Module:Monitor:Backup:Active<br>[ Automatic check every ")
-	s.WriteString(sleep)
-	s.WriteString(" seconds ]<br>")
-	s.WriteString(_forceButton)
-	s.WriteString("</div>")
 	return s.String()
 }
 

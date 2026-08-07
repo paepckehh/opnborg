@@ -367,6 +367,8 @@ footer{margin-top:2rem;padding:1rem 0;border-top:2px solid var(--border);display
 .raw-env-unknown .raw-env-name{color:var(--err)}
 .audit-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
 .audit-tile .btn-force{margin:0}
+.backup-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.backup-tile .btn-force{margin:0;margin-left:auto}
 .audit-page{margin:1.5rem 0;padding:1rem;background:var(--card);border:1px solid var(--border);border-radius:8px}
 .audit-page h2{margin-bottom:.5rem}
 nav .audit-active button{border-color:var(--accent);background:var(--card-2);color:var(--accent)}

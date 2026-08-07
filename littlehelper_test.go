@@ -984,14 +984,26 @@ func TestGetHiveEmpty(t *testing.T) {
 	hive = nil
 	sleep = "60"
 	got := getHive()
-	if !strings.Contains(got, "BorgBACKUP") {
-		t.Errorf("missing BorgBACKUP header: %q", got)
+	if got != "" {
+		t.Errorf("expected empty hive when no groups configured, got %q", got)
 	}
-	if !strings.Contains(got, "60 seconds") {
-		t.Errorf("missing sleep interval: %q", got)
-	}
-	if !strings.Contains(got, _forceButton) {
-		t.Errorf("missing force button: %q", got)
+}
+
+func TestGetBackupTile(t *testing.T) {
+	savedSleep := sleep
+	t.Cleanup(func() { sleep = savedSleep })
+	sleep = "60"
+	got := getBackupTile()
+	for _, want := range []string{
+		"backup-section",
+		"backup-tile",
+		"BorgBACKUP",
+		"60 seconds",
+		"Backup NOW",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getBackupTile missing %q: %q", want, got)
+		}
 	}
 }
 
@@ -1186,9 +1198,6 @@ func TestGetHiveModernHTML(t *testing.T) {
 		"group-desc",
 		"Edge firewalls",
 		"CORE",
-		"backup-section",
-		"30 seconds",
-		"Backup NOW",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("getHive missing %q", want)
