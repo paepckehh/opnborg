@@ -351,9 +351,41 @@ func safeAuthorName(s object.Signature) string {
 	return "(unknown)"
 }
 
+// _auditDetailedAnalysisMarker is the header line that separates the TLDR
+// headline from the full analysis body in an Ollama-assisted commit message
+// (see assembleAnnotatedCommitMessage in ollama.go).
+const _auditDetailedAnalysisMarker = "Detailed Analysis:"
+
+// splitAuditMessage splits an Ollama-assisted commit message into the TLDR
+// headline and the detailed analysis body. Messages that carry no TLDR
+// headline (the default "opnborg auto update" message, the .unf bypass, or a
+// plain manual commit) return an empty tldr and the full message as the body,
+// so the audit page renders them unchanged.
+func splitAuditMessage(msg string) (tldr, detailed string) {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return "", ""
+	}
+	if !strings.HasPrefix(msg, _authorNameTldrPrefix) {
+		return "", msg
+	}
+	head, body, ok := strings.Cut(msg, _auditDetailedAnalysisMarker)
+	if !ok {
+		return "", msg
+	}
+	tldr = strings.TrimSpace(head)
+	detailed = strings.TrimSpace(body)
+	return tldr, detailed
+}
+
 // renderAuditCommits emits the per-commit list HTML. Each commit is a
 // collapsible <details> card carrying the header (hash, author, date, file
-// stats), the full commit message, and the syntax-highlighted unified diff.
+// stats), the commit message, and the syntax-highlighted unified diff.
+//
+// When the commit message carries an Ollama TLDR headline the summary is
+// rendered as a highlighted banner and the detailed analysis is hidden behind
+// a collapsible toggle (collapsed by default) so an operator can scan the
+// headlines and expand the body only for commits that warrant a closer look.
 func renderAuditCommits(commits []auditCommit) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"audit-list\">")
@@ -377,9 +409,21 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString(strconv.Itoa(c.deletions))
 		s.WriteString("</span></span>")
 		s.WriteString("</summary>")
-		s.WriteString("<pre class=\"audit-message\">")
-		s.WriteString(html.EscapeString(c.message))
-		s.WriteString("</pre>")
+		tldr, detailed := splitAuditMessage(c.message)
+		if tldr == "" {
+			s.WriteString("<pre class=\"audit-message\">")
+			s.WriteString(html.EscapeString(c.message))
+			s.WriteString("</pre>")
+		} else {
+			s.WriteString("<div class=\"audit-tldr\">")
+			s.WriteString(html.EscapeString(tldr))
+			s.WriteString("</div>")
+			if detailed != "" {
+				s.WriteString("<details class=\"audit-analysis\"><summary class=\"audit-analysis-head\">Detailed Analysis</summary><pre class=\"audit-message audit-analysis-body\">")
+				s.WriteString(html.EscapeString(detailed))
+				s.WriteString("</pre></details>")
+			}
+		}
 		if c.diff == "" {
 			s.WriteString("<div class=\"audit-diff-empty\"><span class=\"dash-muted\">no diff (root commit or binary-only changes)</span></div>")
 		} else {

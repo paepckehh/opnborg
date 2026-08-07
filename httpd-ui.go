@@ -385,6 +385,12 @@ nav .audit-active button{border-color:var(--accent);background:var(--card-2);col
 .audit-date{color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
 .audit-stats{margin-left:auto;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
 .audit-message{margin:0;padding:.5rem .75rem;background:var(--bg);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--fg)}
+.audit-tldr{margin:0;padding:.55rem .75rem;background:var(--card);border-top:2px solid var(--accent);border-bottom:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.84rem;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--accent);font-weight:600}
+.audit-analysis{margin:0;border-bottom:1px solid var(--border)}
+.audit-analysis>summary.audit-analysis-head{padding:.35rem .75rem;cursor:pointer;list-style:none;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;background:#141a22}
+.audit-analysis>summary.audit-analysis-head::-webkit-details-marker{display:none}
+.audit-analysis[open]>summary.audit-analysis-head{color:var(--accent);border-bottom:1px solid var(--border)}
+.audit-analysis-body{border-top:none;border-bottom:none}
 .audit-diff-wrap{margin:0}
 .audit-diff-head{padding:.3rem .75rem;background:#141a22;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border)}
 .audit-diff-empty{padding:.5rem .75rem}

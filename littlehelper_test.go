@@ -4059,6 +4059,79 @@ func TestGatherAuditCommits(t *testing.T) {
 	}
 }
 
+// TestSplitAuditMessage verifies the TLDR / detailed-analysis splitter that the
+// audit page uses to render Ollama-assisted commit messages: it extracts the
+// TLDR headline and the detailed body when the marker is present, and falls
+// back to the full message otherwise.
+func TestSplitAuditMessage(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantTl  string
+		wantDet string
+	}{
+		{"empty", "", "", ""},
+		{"default message", "opnborg auto update", "", "opnborg auto update"},
+		{"manual commit", "first", "", "first"},
+		{"tldr only no marker", "TLDR: tighten WAN filter", "", "TLDR: tighten WAN filter"},
+		{"full annotated", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "TLDR: tighten WAN filter", "body with tag: low"},
+		{"annotated trailing whitespace", "TLDR: headline  \n\nDetailed Analysis:\n\n  body  \n", "TLDR: headline", "body"},
+		{"leading newline before tldr", "\n\nTLDR: headline\n\nDetailed Analysis:\n\nbody", "TLDR: headline", "body"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tl, det := splitAuditMessage(c.in)
+			if tl != c.wantTl {
+				t.Errorf("tldr = %q, want %q", tl, c.wantTl)
+			}
+			if det != c.wantDet {
+				t.Errorf("detailed = %q, want %q", det, c.wantDet)
+			}
+		})
+	}
+}
+
+// TestRenderAuditCommitsTldrToggle verifies that renderAuditCommits renders the
+// TLDR headline as a highlighted banner and hides the detailed analysis behind
+// a collapsed <details> toggle when the commit message is Ollama-annotated, and
+// that plain messages render unchanged.
+func TestRenderAuditCommitsTldrToggle(t *testing.T) {
+	annotated := auditCommit{
+		hash:    "abcdef0",
+		author:  "OPNBORG-AUTO-COMMIT",
+		when:    time.Now(),
+		message: "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n",
+		diff:    "",
+	}
+	plain := auditCommit{
+		hash:    "1234567",
+		author:  "test",
+		when:    time.Now(),
+		message: "opnborg auto update",
+		diff:    "",
+	}
+	out := renderAuditCommits([]auditCommit{annotated, plain})
+	for _, want := range []string{
+		`<div class="audit-tldr">TLDR: tighten WAN inbound filter</div>`,
+		`<details class="audit-analysis">`,
+		`<summary class="audit-analysis-head">Detailed Analysis</summary>`,
+		`tag: medium, needs-review`,
+		`<pre class="audit-message audit-analysis-body">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("annotated commit missing %q in output:\n%s", want, out)
+		}
+	}
+	// the annotated commit's detailed analysis must NOT also be rendered as a
+	// plain (top-level) audit-message block (it should be inside the toggle)
+	if strings.Count(out, `<pre class="audit-message">`) != 1 {
+		t.Errorf("plain message should render exactly one top-level audit-message block, got %d", strings.Count(out, `<pre class="audit-message">`))
+	}
+	if !strings.Contains(out, "opnborg auto update") {
+		t.Errorf("plain commit message should be rendered verbatim")
+	}
+}
+
 // TestHighlightDiff verifies the syntax highlighter colorises the diff
 // structure and escapes HTML so the output is safe to embed.
 func TestHighlightDiff(t *testing.T) {
