@@ -292,13 +292,21 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 		recordPush(false, "head: "+err.Error())
 		return err
 	}
+	// remoteBranch is the upstream branch name the push targets, and also the
+	// name of the local remote-tracking ref (refs/remotes/origin/<branch>) we
+	// keep in sync after a push so the WebUI dashboard can derive the upstream
+	// state without a network round-trip. go-git's Push does not update the
+	// local tracking ref itself (unlike canonical git), so we do it here.
 	var refspec gitcfg.RefSpec
+	var remoteBranch string
 	if head.Name().IsBranch() {
-		branch := head.Name().Short()
-		refspec = gitcfg.RefSpec("+refs/heads/" + branch + ":refs/heads/" + branch)
+		remoteBranch = head.Name().Short()
+		refspec = gitcfg.RefSpec("+refs/heads/" + remoteBranch + ":refs/heads/" + remoteBranch)
 	} else {
+		remoteBranch = "master"
 		refspec = gitcfg.RefSpec("+HEAD:refs/heads/master")
 	}
+	pushedHash := head.Hash()
 	if err := repo.Push(&git.PushOptions{
 		RemoteName: _origin,
 		Auth:       auth,
@@ -306,6 +314,7 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 	}); err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
 			displayChan <- []byte("[GIT][REPO][PUSH][UPTODATE] " + upstream)
+			recordPushTrackingRef(repo, remoteBranch, pushedHash)
 			recordPush(true, "already up-to-date")
 			return nil
 		}
@@ -313,9 +322,26 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 		recordPush(false, err.Error())
 		return err
 	}
+	recordPushTrackingRef(repo, remoteBranch, pushedHash)
 	displayChan <- []byte("[GIT][REPO][PUSH][FINISH] " + upstream)
 	recordPush(true, "pushed to "+upstream)
 	return nil
+}
+
+// recordPushTrackingRef writes (or refreshes) the local remote-tracking ref
+// refs/remotes/origin/<branch> so it points at the commit hash just pushed
+// upstream. go-git's Push does not maintain this ref, so without it the
+// dashboard upstream-sync panel would always report "never pushed" even after a
+// successful push. A stale tracking ref is force-updated so it reflects the
+// last known upstream tip.
+func recordPushTrackingRef(repo *git.Repository, branch string, hash plumbing.Hash) {
+	if branch == "" || hash.IsZero() {
+		return
+	}
+	refName := plumbing.NewRemoteReferenceName(_origin, branch)
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(refName, hash)); err != nil {
+		displayChan <- []byte("[GIT][REPO][PUSH][TRACK] " + err.Error())
+	}
 }
 
 // recordPush stores the outcome of an upstream push attempt under gitLastPushMu
