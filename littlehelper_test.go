@@ -3295,9 +3295,13 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Stand up a fake Ollama /api/generate that returns a fixed commit message.
-	const wantMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
+	// Stand up a fake Ollama /api/generate that returns the detailed analysis
+	// on the first call and a TLDR summary on the second call, mirroring the
+	// two-pass flow in generateCommitMessage.
+	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
+	const tldrMsg = "TLDR: tightened WAN inbound filter set"
 	mux := http.NewServeMux()
+	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -3312,7 +3316,13 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 		if req.Model != "test-model" {
 			t.Errorf("model = %q, want test-model", req.Model)
 		}
-		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: wantMsg})
+		callCount++
+		switch callCount {
+		case 1:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
+		default:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: tldrMsg})
+		}
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -3349,6 +3359,7 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 		t.Fatalf("worktree: %v", err)
 	}
 	got := generateCommitMessage(config, repo, wtree)
+	wantMsg := tldrMsg + "\n\nDetailed Analysis:\n\n" + detailedMsg + "\n"
 	if got != wantMsg {
 		t.Errorf("generateCommitMessage = %q, want %q", got, wantMsg)
 	}

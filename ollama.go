@@ -597,13 +597,41 @@ func headFileContent(tree *object.Tree, pth string) (string, error) {
 	return f.Contents()
 }
 
+// _ollamaTldrPrompt is the prompt sent to the model in the second REST call,
+// after the detailed analysis has been generated. It asks the model to distil
+// its own detailed analysis into a single TLDR sentence so the commit message
+// can lead with a one-line summary and keep the exhaustive review as the
+// "Detailed Analysis:" body. The model is told to return only the TLDR line
+// (no preamble, no markdown fences, no "tag:" line, no quotation) so the
+// result can be embedded verbatim as the first line of the commit message.
+const _ollamaTldrPrompt = `You are a senior infrastructure and Unix firewall engineer. Below is the detailed security and impact analysis you just authored for an automated opnborg backup commit of an OPNsense firewall configuration.
+
+Summarise that analysis into a single, concise TLDR sentence that captures the essence of the change and its security impact. The sentence must be self-contained (it will be the headline of the git commit message) and written in plain prose, no bullet points, no markdown.
+
+Output contract (obey exactly, no preamble, no markdown fences):
+- Return exactly one line.
+- Start with "TLDR: " followed by the summary sentence.
+- No trailing newline, no extra prose, no "tag:" line, no quotation marks.
+- Keep it under 160 characters.
+
+If the analysis is empty or unintelligible, return exactly: TLDR: opnborg auto update
+
+--- BEGIN DETAILED ANALYSIS ---
+%s
+--- END DETAILED ANALYSIS ---`
+
 // generateCommitMessage produces the commit message for an upcoming backup
 // commit. When Ollama-assisted generation is disabled (or the change set is
 // entirely Unifi .unf files) the default message _commitMsg is returned so the
-// commit proceeds without any network round-trip. When enabled, the HEAD vs
-// worktree diff is sent to the model; on any error or empty response the
-// default message is used as a fallback so a model outage never blocks the
-// backup from being committed.
+// commit proceeds without any network round-trip. When enabled, two REST
+// calls are made to the model: the first produces the exhaustive detailed
+// analysis (headline + in-depth security/impact review + trailing "tag:"
+// severity line), and the second distils that analysis into a single TLDR
+// sentence. The final commit message is assembled as the TLDR line on top,
+// a blank line, a "Detailed Analysis:" marker, and the full detailed analysis
+// underneath. On any error or empty response at either stage the default
+// message is used as a fallback so a model outage never blocks the backup
+// from being committed.
 func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Worktree) string {
 	if !config.Ollama.Enable {
 		return _commitMsg
@@ -634,6 +662,43 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	if msg == "" {
 		return _commitMsg
 	}
-	displayChan <- []byte("[OLLAMA][OK] commit message generated")
-	return msg
+	// Second pass: ask the model to resume its detailed analysis as a single
+	// TLDR sentence, then assemble the final commit message with the TLDR
+	// on top and the full detailed analysis under a "Detailed Analysis:"
+	// marker. A failure here degrades gracefully to the detailed analysis
+	// alone (no TLDR header) so the commit still ships with the rich body.
+	tldr, terr := ollamaGenerate(config, fmt.Sprintf(_ollamaTldrPrompt, msg))
+	tldr = strings.TrimSpace(tldr)
+	if terr != nil || tldr == "" {
+		displayChan <- []byte("[OLLAMA][TLDR][FAIL] " + fallbackTldrErr(terr))
+		displayChan <- []byte("[OLLAMA][OK] commit message generated (detailed analysis only)")
+		return msg
+	}
+	displayChan <- []byte("[OLLAMA][OK] commit message generated (TLDR + detailed analysis)")
+	return assembleAnnotatedCommitMessage(tldr, msg)
+}
+
+// fallbackTldrErr renders a non-nil TLDR-stage error for the log line, or a
+// generic "empty response" note when the model returned nothing usable.
+func fallbackTldrErr(err error) string {
+	if err == nil {
+		return "empty response"
+	}
+	return err.Error()
+}
+
+// assembleAnnotatedCommitMessage builds the final commit message from the
+// TLDR summary line and the full detailed analysis. The layout is:
+//
+//	TLDR: <summary line>
+//
+//	Detailed Analysis:
+//	<detailed analysis, including the trailing tag: severity line>
+//
+// Exactly one blank line separates the TLDR from the "Detailed Analysis:"
+// header, and exactly one blank line separates the header from the body.
+func assembleAnnotatedCommitMessage(tldr, detailed string) string {
+	tldr = strings.TrimSpace(tldr)
+	detailed = strings.TrimSpace(detailed)
+	return tldr + "\n\nDetailed Analysis:\n\n" + detailed + "\n"
 }
