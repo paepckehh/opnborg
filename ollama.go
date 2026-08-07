@@ -690,7 +690,7 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	// marker. A failure here degrades gracefully to the detailed analysis
 	// alone (no TLDR header) so the commit still ships with the rich body.
 	tldr, terr := ollamaGenerate(config, fmt.Sprintf(_ollamaTldrPrompt, msg))
-	tldr = strings.TrimSpace(tldr)
+	tldr = normalizeTldrHeadline(tldr)
 	if terr != nil || tldr == "" {
 		displayChan <- []byte("[OLLAMA][TLDR][FAIL] " + fallbackTldrErr(terr))
 		displayChan <- []byte("[OLLAMA][OK] commit message generated (detailed analysis only)")
@@ -698,6 +698,67 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	}
 	displayChan <- []byte("[OLLAMA][OK] commit message generated (TLDR + detailed analysis)")
 	return assembleAnnotatedCommitMessage(tldr, msg)
+}
+
+// normalizeTldrHeadline coerces the model's TLDR response into the canonical
+// "TLDR: <sentence>" form so the downstream author-name extraction and the
+// audit-page message splitter both reliably recognise it. Models do not
+// always obey the one-line / "TLDR: " contract: they may wrap the marker in
+// markdown emphasis ("**TLDR:**"), drop the space after the colon, prepend a
+// preamble line, or omit the marker entirely. This function takes the first
+// non-empty line, strips leading markdown / quote characters, recognises a
+// case-insensitive "TLDR" marker optionally followed by markdown and a colon
+// (stripping it so the canonical prefix is re-added uniformly), and prepends
+// "TLDR: " when no marker is present. An empty input yields an empty result
+// so the caller can fall back to the detailed-analysis-only message.
+// normalizeTldrHeadline coerces the model's TLDR response into the canonical
+// "TLDR: <sentence>" form so the downstream author-name extraction and the
+// audit-page message splitter both reliably recognise it. Models do not
+// always obey the one-line / "TLDR: " contract: they may wrap the marker in
+// markdown emphasis ("**TLDR:**"), drop the space after the colon, prepend a
+// preamble line, or omit the marker entirely. This function scans the lines
+// for the first one carrying a TLDR marker (falling back to the first
+// non-empty line), strips the marker plus any surrounding markdown so the
+// canonical prefix is re-added uniformly, and prepends "TLDR: " when no
+// marker is present. An empty input yields an empty result so the caller can
+// fall back to the detailed-analysis-only message.
+func normalizeTldrHeadline(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var headline string
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		stripped := strings.TrimLeft(line, "*_`#>\"' ")
+		if strings.HasPrefix(strings.ToLower(stripped), "tldr") {
+			headline = stripped
+			break
+		}
+		if headline == "" {
+			headline = line
+		}
+	}
+	if headline == "" {
+		return ""
+	}
+	lower := strings.ToLower(headline)
+	if strings.HasPrefix(lower, "tldr") {
+		rest := headline[len("tldr"):]
+		rest = strings.TrimLeft(rest, "*_`#")
+		if len(rest) > 0 && rest[0] == ':' {
+			rest = rest[1:]
+			rest = strings.TrimLeft(rest, "*_`# ")
+			headline = strings.TrimSpace(rest)
+		}
+	}
+	if headline == "" {
+		return ""
+	}
+	return _authorNameTldrPrefix + headline
 }
 
 // fallbackTldrErr renders a non-nil TLDR-stage error for the log line, or a

@@ -3365,6 +3365,77 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 	}
 }
 
+// TestGenerateCommitMessageNormalisesMarkdownTldr verifies that when the
+// model wraps the TLDR marker in markdown emphasis or omits the canonical
+// "TLDR: " prefix, generateCommitMessage still produces a commit message
+// whose first line carries the canonical prefix so the author-name
+// extraction and the audit-page splitter both recognise it.
+func TestGenerateCommitMessageNormalisesMarkdownTldr(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
+	const markdownTldr = "**TLDR:** tightened WAN inbound filter set"
+	const canonicalTldr = "TLDR: tightened WAN inbound filter set"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		switch callCount {
+		case 1:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
+		default:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: markdownTldr})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	wantMsg := canonicalTldr + "\n\nDetailed Analysis:\n\n" + detailedMsg + "\n"
+	if got != wantMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, wantMsg)
+	}
+	// The author-name extraction must succeed on the normalised message.
+	if name := authorFromCommitMessage(got); name != "tightened WAN inbound filter set" {
+		t.Errorf("authorFromCommitMessage = %q, want %q", name, "tightened WAN inbound filter set")
+	}
+}
+
 // TestGenerateCommitMessageFallsBackOnOllamaError verifies that when the
 // Ollama endpoint is unreachable the default commit message is used so the
 // backup is never left uncommitted.
@@ -3479,6 +3550,67 @@ func TestAuthorFromCommitMessage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := authorFromCommitMessage(tt.in); got != tt.want {
 				t.Errorf("authorFromCommitMessage(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeTldrHeadline verifies the model TLDR response is coerced into
+// the canonical "TLDR: <sentence>" form so the downstream author-name
+// extraction and the audit-page message splitter both reliably recognise it,
+// even when the model wraps the marker in markdown, drops the space, adds a
+// preamble line, or omits the marker entirely.
+func TestNormalizeTldrHeadline(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"already canonical", "TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"trailing whitespace", "TLDR: tighten WAN filter  \n", "TLDR: tighten WAN filter"},
+		{"markdown bold marker", "**TLDR:** tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"markdown italic marker", "_TLDR:_ tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"no space after colon", "TLDR:tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"lowercase marker", "tldr: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"uppercase marker", "TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"preamble line then marker", "Here is the summary:\nTLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"no marker at all", "tighten WAN inbound filter set", "TLDR: tighten WAN inbound filter set"},
+		{"leading quote", "\"TLDR: tighten WAN filter\"", "TLDR: tighten WAN filter\""},
+		{"leading markdown fence", "```TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"only whitespace and marker", "  TLDR:  ", ""},
+		{"marker empty after colon", "TLDR:", ""},
+		{"multi line keeps first", "TLDR: first line\nsecond line", "TLDR: first line"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeTldrHeadline(tt.in); got != tt.want {
+				t.Errorf("normalizeTldrHeadline(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAuditDisplayAuthor verifies the audit page shows the shortened TLDR
+// headline as the commit author when the recorded git author is still the
+// static OPNBORG-AUTO-COMMIT handle but the message carries a TLDR line.
+func TestAuditDisplayAuthor(t *testing.T) {
+	tests := []struct {
+		name    string
+		author  string
+		message string
+		want    string
+	}{
+		{"static author with tldr", _authorName, "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"static author no tldr", _authorName, "opnborg auto update", _authorName},
+		{"tldr author kept", "tighten WAN filter", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"manual author kept", "PAEPCKE, Michael", "manual commit message", "PAEPCKE, Michael"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := auditCommit{author: tt.author, message: tt.message}
+			if got := auditDisplayAuthor(c); got != tt.want {
+				t.Errorf("auditDisplayAuthor(author=%q) = %q, want %q", tt.author, got, tt.want)
 			}
 		})
 	}

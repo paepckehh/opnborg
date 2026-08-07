@@ -351,6 +351,22 @@ func safeAuthorName(s object.Signature) string {
 	return "(unknown)"
 }
 
+// auditDisplayAuthor returns the author name shown in the audit page header.
+// When the commit carries an Ollama TLDR headline but the recorded git author
+// is still the static OPNBORG-AUTO-COMMIT handle (commits made before the
+// TLDR-derived author feature, or a model response the author extraction did
+// not recognise), the shortened TLDR headline is shown instead so the audit
+// log surfaces the change at a glance. Commits without a TLDR line keep the
+// recorded git author name unchanged.
+func auditDisplayAuthor(c auditCommit) string {
+	if c.author == _authorName {
+		if name := authorFromCommitMessage(c.message); name != "" {
+			return name
+		}
+	}
+	return c.author
+}
+
 // _auditDetailedAnalysisMarker is the header line that separates the TLDR
 // headline from the full analysis body in an Ollama-assisted commit message
 // (see assembleAnnotatedCommitMessage in ollama.go).
@@ -396,7 +412,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString(html.EscapeString(c.hash))
 		s.WriteString("</span>")
 		s.WriteString("<span class=\"audit-author\">")
-		s.WriteString(html.EscapeString(c.author))
+		s.WriteString(html.EscapeString(auditDisplayAuthor(c)))
 		s.WriteString("</span>")
 		s.WriteString("<span class=\"audit-date\">")
 		s.WriteString(html.EscapeString(c.when.UTC().Format("2006-01-02 15:04:05 Z07:00")))
