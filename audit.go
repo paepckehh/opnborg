@@ -64,7 +64,8 @@ func getAuditTile() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<div class=\"backup-section audit-tile\"><b>BorgAUDIT</b><br>Module:Git:CommitHistory<br>[ Review recent backup changes ]<br>")
+	s.WriteString("<div class=\"backup-section audit-tile\"><b>BorgAUDIT</b> <span class=\"member-meta\">Module:Git:CommitHistory [ Review recent backup changes ]</span>")
+	s.WriteString("<div class=\"tile-actions\">")
 	for _, r := range _auditRangeLabels {
 		s.WriteString("<a href=\"audit?range=")
 		s.WriteString(r.slug)
@@ -72,6 +73,7 @@ func getAuditTile() string {
 		s.WriteString(r.label)
 		s.WriteString(" ]</a>")
 	}
+	s.WriteString("</div>")
 	s.WriteString("</div>")
 	return s.String()
 }

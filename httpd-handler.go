@@ -129,13 +129,14 @@ func getPKG() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<div class=\"backup-section\"><b>BorgSYNC</b> [ Module:Package-Sync:Active ]<br>")
-	s.WriteString("<span class=\"member-meta\">")
+	s.WriteString("<div class=\"backup-section sync-tile\"><b>BorgSYNC</b> <span class=\"member-meta\">[ Module:Package-Sync:Active ]</span> <span class=\"member-meta\">")
 	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
-	s.WriteString("</span><br>")
+	s.WriteString("</span>")
+	s.WriteString("<div class=\"tile-actions\">")
 	s.WriteString("<a href=\"")
 	s.WriteString(pkgmaster)
 	s.WriteString("\" class=\"btn btn-force\">[ Manage Plugins ]</a>")
+	s.WriteString("</div>")
 	s.WriteString("</div>")
 	return s.String()
 }
@@ -150,7 +151,9 @@ func getBackupTile() string {
 	s.WriteString("<span class=\"member-meta\">Module:Monitor:Backup:Active [ Automatic check every ")
 	s.WriteString(sleep)
 	s.WriteString(" seconds ]</span>")
+	s.WriteString("<div class=\"tile-actions\">")
 	s.WriteString(_forceButton)
+	s.WriteString("</div>")
 	s.WriteString("</div>")
 	return s.String()
 }
