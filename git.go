@@ -224,12 +224,22 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	// without consulting the model. Any model error falls back to the default
 	// so the backup is never left uncommitted.
 	commitMsg := _commitMsg
+	authorName := _authorName
 	if msg := generateCommitMessage(config, repo, wtree); msg != "" {
 		commitMsg = msg
+		// When Ollama authored the message, replace the static
+		// OPNBORG-AUTO-COMMIT author handle with a short, sanitised
+		// version of the TLDR summary headline so the commit log surfaces
+		// the change at a glance. Falls back to _authorName when the
+		// message carries no TLDR line (default message, .unf bypass, or
+		// a model outage that degraded to the detailed analysis alone).
+		if name := authorFromCommitMessage(msg); name != "" {
+			authorName = name
+		}
 	}
 	commit, err := wtree.Commit(commitMsg, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  _authorName,
+			Name:  authorName,
 			Email: config.Email,
 			When:  time.Now(),
 		},

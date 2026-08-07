@@ -724,3 +724,66 @@ func assembleAnnotatedCommitMessage(tldr, detailed string) string {
 	detailed = strings.TrimSpace(detailed)
 	return tldr + "\n\nDetailed Analysis:\n\n" + detailed + "\n"
 }
+
+// _authorNameMaxRunes caps the git commit author name derived from an
+// Ollama TLDR headline. Git author names have no hard length limit, but the
+// TLDR sentence can run up to the model's 160-character ceiling, which is too
+// long for `git log --format=%an`. We cap at 72 runes (the conventional commit
+// headline width) so the commit log stays readable.
+const _authorNameMaxRunes = 72
+
+// _authorNameTldrPrefix is the leading marker of an Ollama TLDR headline. It is
+// stripped before the headline is reused as the commit author name.
+const _authorNameTldrPrefix = "TLDR: "
+
+// authorFromCommitMessage returns a short, sanitised version of the TLDR
+// headline carried by an Ollama-assisted commit message, suitable for use as
+// the git commit author name in place of the static OPNBORG-AUTO-COMMIT
+// handle. It takes the first line of the message, strips the leading "TLDR: "
+// marker, collapses runs of whitespace into single spaces, drops control
+// characters and the characters git's identity parser treats specially (<, >,
+// ", \) so the resulting name is always a valid git identity, and truncates to
+// _authorNameMaxRunes. An empty input, an input with no first line, or one
+// whose first line carries no TLDR marker returns "" so the caller can fall
+// back to the static _authorName handle.
+func authorFromCommitMessage(msg string) string {
+	firstLine := strings.TrimSpace(msg)
+	if firstLine == "" {
+		return ""
+	}
+	if i := strings.IndexByte(firstLine, '\n'); i >= 0 {
+		firstLine = strings.TrimSpace(firstLine[:i])
+	}
+	if !strings.HasPrefix(firstLine, _authorNameTldrPrefix) {
+		return ""
+	}
+	firstLine = strings.TrimSpace(firstLine[len(_authorNameTldrPrefix):])
+	if firstLine == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(firstLine))
+	lastSpace := false
+	n := 0
+	for _, r := range firstLine {
+		switch {
+		case r == ' ' || r == '\t':
+			if !lastSpace {
+				b.WriteRune(' ')
+				lastSpace = true
+				n++
+			}
+			continue
+		case r < 0x20 || r == '<' || r == '>' || r == '"' || r == '\\':
+			continue
+		default:
+			b.WriteRune(r)
+			lastSpace = false
+			n++
+		}
+		if n >= _authorNameMaxRunes {
+			break
+		}
+	}
+	return strings.TrimSpace(b.String())
+}

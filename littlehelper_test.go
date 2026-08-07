@@ -3449,6 +3449,137 @@ func TestGitDiffTextFirstCommitIsEmpty(t *testing.T) {
 	}
 }
 
+// TestAuthorFromCommitMessage verifies the TLDR headline embedded in an
+// Ollama-assisted commit message is extracted, sanitised, and truncated into
+// a valid git author name, and that messages without a TLDR line fall back to
+// the empty string so the caller keeps the static OPNBORG-AUTO-COMMIT handle.
+func TestAuthorFromCommitMessage(t *testing.T) {
+	long := strings.Repeat("a", _authorNameMaxRunes)
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"default message no tldr", _commitMsg, ""},
+		{"bare tldr", "TLDR: tightened WAN inbound filter set", "tightened WAN inbound filter set"},
+		{"tldr with detailed body", "TLDR: tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
+		{"tldr extra spaces collapsed", "TLDR:   multi   spaces  here", "multi spaces here"},
+		{"tldr trailing whitespace trimmed", "TLDR: trimmed line   ", "trimmed line"},
+		{"tldr drops git special chars", `TLDR: drop <email> and "quote" \back chars`, "drop email and quote back chars"},
+		{"tldr drops control chars", "TLDR: a\tb\nc", "a b"},
+		{"tldr empty after prefix", "TLDR:", ""},
+		{"tldr only prefix and spaces", "TLDR:   ", ""},
+		{"no tldr prefix", "tightened WAN inbound filter set", ""},
+		{"tldr truncated to cap", "TLDR: " + strings.Repeat("a", _authorNameMaxRunes+50), long},
+		{"tldr exactly at cap", "TLDR: " + strings.Repeat("a", _authorNameMaxRunes), long},
+		{"tldr leading newline then marker", "\n\nTLDR: tightened", "tightened"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := authorFromCommitMessage(tt.in); got != tt.want {
+				t.Errorf("authorFromCommitMessage(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGitCommitUsesTldrAuthorName verifies that when Ollama is enabled and
+// produces a TLDR headline, the committed author name is a sanitised version
+// of that TLDR rather than the static OPNBORG-AUTO-COMMIT handle. The fake
+// Ollama server mirrors the two-pass generate flow (detailed analysis then
+// TLDR). It calls gitCommit directly (instead of gitCheckIn) so the gc/repack
+// step does not run, keeping the same repo handle usable for inspection.
+func TestGitCommitUsesTldrAuthorName(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
+	const tldrMsg = "TLDR: tightened WAN inbound filter set"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		switch callCount {
+		case 1:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
+		default:
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: tldrMsg})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	// Seed HEAD with an initial XML commit. No prior HEAD means the diff is
+	// empty, so the commit falls back to the default message and the static
+	// OPNBORG-AUTO-COMMIT author handle.
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if committed, err := gitCommit(config, repo); err != nil || !committed {
+		t.Fatalf("seed gitCommit: committed=%v err=%v", committed, err)
+	}
+	seedHead, err := repo.Head()
+	if err != nil {
+		t.Fatalf("seed head: %v", err)
+	}
+	seedCommit, err := repo.CommitObject(seedHead.Hash())
+	if err != nil {
+		t.Fatalf("seed commit object: %v", err)
+	}
+	if seedCommit.Author.Name != _authorName {
+		t.Errorf("seed commit author name = %q, want %q", seedCommit.Author.Name, _authorName)
+	}
+	// Mutate the XML so the worktree diff is non-empty and not a .unf file,
+	// then commit again. Ollama produces a TLDR, so the author handle must
+	// be replaced with the sanitised TLDR headline.
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	if committed, err := gitCommit(config, repo); err != nil || !committed {
+		t.Fatalf("second gitCommit: committed=%v err=%v", committed, err)
+	}
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		t.Fatalf("commit object: %v", err)
+	}
+	const wantAuthor = "tightened WAN inbound filter set"
+	if commit.Author.Name != wantAuthor {
+		t.Errorf("commit author name = %q, want %q", commit.Author.Name, wantAuthor)
+	}
+	if commit.Author.Email != config.Email {
+		t.Errorf("commit author email = %q, want %q", commit.Author.Email, config.Email)
+	}
+	if !strings.HasPrefix(commit.Message, tldrMsg) {
+		t.Errorf("commit message = %q, want prefix %q", commit.Message, tldrMsg)
+	}
+}
+
 // TestSetupOllamaConfig verifies Setup populates the Ollama config from
 // OLLAMA_DESC_URL / OLLAMA_DESC_MODEL and enables the feature only when both are
 // non-empty.
