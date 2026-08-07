@@ -145,12 +145,12 @@ func Setup() (*OPNCall, error) {
 	// explanation in the context of an OPNsense XML firewall configuration.
 	// Unifi .unf backup check-ins are always committed with the default
 	// message without consulting the model.
-	config.Ollama.URL = strings.TrimSpace(os.Getenv("OPN_OLLAMA_URL"))
-	config.Ollama.Model = strings.TrimSpace(os.Getenv("OPN_OLLAMA_MODEL"))
+	config.Ollama.URL = strings.TrimSpace(os.Getenv("OLLAMA_DESC_URL"))
+	config.Ollama.Model = strings.TrimSpace(os.Getenv("OLLAMA_DESC_MODEL"))
 	config.Ollama.Enable = config.Ollama.URL != "" && config.Ollama.Model != ""
 	if config.Ollama.Enable {
 		if _, err := url.Parse(config.Ollama.URL); err != nil {
-			return nil, fmt.Errorf("env variable 'OPN_OLLAMA_URL' parse error: %w", err)
+			return nil, fmt.Errorf("env variable 'OLLAMA_DESC_URL' parse error: %w", err)
 		}
 	}
 

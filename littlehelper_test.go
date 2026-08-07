@@ -3396,13 +3396,13 @@ func TestGitDiffTextFirstCommitIsEmpty(t *testing.T) {
 }
 
 // TestSetupOllamaConfig verifies Setup populates the Ollama config from
-// OPN_OLLAMA_URL / OPN_OLLAMA_MODEL and enables the feature only when both are
+// OLLAMA_DESC_URL / OLLAMA_DESC_MODEL and enables the feature only when both are
 // non-empty.
 func TestSetupOllamaConfig(t *testing.T) {
 	ensureDisplayDrained(t)
 	for _, k := range []string{
 		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
-		"OPN_NODAEMON", "OPN_OLLAMA_URL", "OPN_OLLAMA_MODEL",
+		"OPN_NODAEMON", "OLLAMA_DESC_URL", "OLLAMA_DESC_MODEL",
 	} {
 		old, had := os.LookupEnv(k)
 		_ = os.Unsetenv(k)
@@ -3430,8 +3430,8 @@ func TestSetupOllamaConfig(t *testing.T) {
 	})
 
 	t.Run("enabled when both set", func(t *testing.T) {
-		withEnv(t, "OPN_OLLAMA_URL", "http://localhost:11434", true)
-		withEnv(t, "OPN_OLLAMA_MODEL", "llama3", true)
+		withEnv(t, "OLLAMA_DESC_URL", "http://localhost:11434", true)
+		withEnv(t, "OLLAMA_DESC_MODEL", "llama3", true)
 		config, err := Setup()
 		if err != nil {
 			t.Fatalf("Setup: %v", err)
@@ -3448,8 +3448,8 @@ func TestSetupOllamaConfig(t *testing.T) {
 	})
 
 	t.Run("disabled when only URL set", func(t *testing.T) {
-		withEnv(t, "OPN_OLLAMA_URL", "http://localhost:11434", true)
-		withEnv(t, "OPN_OLLAMA_MODEL", "", true) // empty value -> presence-based? strings.TrimSpace empty
+		withEnv(t, "OLLAMA_DESC_URL", "http://localhost:11434", true)
+		withEnv(t, "OLLAMA_DESC_MODEL", "", true) // empty value -> presence-based? strings.TrimSpace empty
 		config, err := Setup()
 		if err != nil {
 			t.Fatalf("Setup: %v", err)

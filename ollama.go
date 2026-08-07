@@ -44,7 +44,7 @@ const (
 	// For small config fragments this lets the model reason about the complete
 	// resulting state rather than just the patch, yielding richer descriptions.
 	_ollamaSmallFileBytes = 16 * 1024
-	// _ollamaGeneratePath is the REST endpoint appended to OPN_OLLAMA_URL.
+	// _ollamaGeneratePath is the REST endpoint appended to OLLAMA_DESC_URL.
 	_ollamaGeneratePath = "/api/generate"
 	// _unifiBackupExt is the file extension of Unifi autoBackup archives.
 	// Commits whose changed files are all .unf are committed with the default
