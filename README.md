@@ -328,7 +328,11 @@ whose changed files are all Unifi `.unf` backups keep the default message
 without consulting the model (the `.unf` format is an opaque binary archive).
 Any model error, empty response, or timeout falls back to the default message
 (`opnborg auto update`) so a model outage never blocks a backup from being
-committed.
+committed. The **Config Dashboard** page surfaces the parsed `OLLAMA_DESC_URL` /
+`OLLAMA_DESC_MODEL` values plus a live probe of the daemon that GETs
+`<OLLAMA_DESC_URL>/api/tags` (3 s timeout) on each page render and reports three
+layered signals: whether the server is reachable, whether the REST API answers,
+and whether the configured model is loaded and ready to run.
 
 Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
 the upstream host is present there before enabling push.

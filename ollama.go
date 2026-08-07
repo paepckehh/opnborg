@@ -46,6 +46,16 @@ const (
 	_ollamaSmallFileBytes = 16 * 1024
 	// _ollamaGeneratePath is the REST endpoint appended to OLLAMA_DESC_URL.
 	_ollamaGeneratePath = "/api/generate"
+	// _ollamaTagsPath is the REST endpoint that lists the models currently
+	// available on the Ollama daemon. The config dashboard probes it to report
+	// server reachability, REST API readiness, and whether the configured
+	// model is loaded. /api/tags is the canonical lightweight GET: it does not
+	// load or run a model, so it is safe to call on every dashboard render.
+	_ollamaTagsPath = "/api/tags"
+	// _ollamaHealthTimeout caps a dashboard health probe so a wedged or
+	// unreachable Ollama daemon never stalls the page render. The probe is run
+	// synchronously on each config dashboard GET.
+	_ollamaHealthTimeout = 3 * time.Second
 	// _unifiBackupExt is the file extension of Unifi autoBackup archives.
 	// Commits whose changed files are all .unf are committed with the default
 	// message without consulting the model: the binary Unifi backup format is
@@ -137,6 +147,100 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 		return "", fmt.Errorf("ollama decode: %w", err)
 	}
 	return out.Response, nil
+}
+
+// ollamaTagsModel is one entry in the /api/tags response model list.
+type ollamaTagsModel struct {
+	Name string `json:"name"`
+}
+
+// ollamaTagsResponse is the JSON body returned by Ollama /api/tags. It lists
+// the models currently materialised on the daemon (i.e. already pulled), which
+// is what the config dashboard uses to decide whether the configured model is
+// "ready" without having to run a generation.
+type ollamaTagsResponse struct {
+	Models []ollamaTagsModel `json:"models"`
+}
+
+// ollamaHealth is the result of a config-dashboard probe against the Ollama
+// daemon. The three booleans are layered: ServerReachable means a TCP/HTTP
+// connection succeeded; APIReady means the daemon answered /api/tags with a
+// parseable JSON body (so the REST API is up); ModelReady means the configured
+// model is present in that list (i.e. already pulled and available to run).
+// Err carries the first failure reason, if any, for display.
+type ollamaHealth struct {
+	ServerReachable bool
+	APIReady        bool
+	ModelReady      bool
+	Err             string
+}
+
+// ollamaHealthCheck probes the configured Ollama daemon and reports server
+// reachability, REST API readiness, and whether the configured model is loaded.
+// It is called from the config dashboard on every render, so it uses a short
+// timeout (_ollamaHealthTimeout) and never blocks the page on a wedged daemon.
+// When Ollama is not enabled the returned health is all-false with no probe.
+func ollamaHealthCheck(config *OPNCall) ollamaHealth {
+	var h ollamaHealth
+	if !config.Ollama.Enable {
+		return h
+	}
+	endpoint := strings.TrimRight(config.Ollama.URL, "/") + _ollamaTagsPath
+	ctx, cancel := context.WithTimeout(context.Background(), _ollamaHealthTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		h.Err = fmt.Sprintf("build request: %v", err)
+		return h
+	}
+	req.Header.Set("User-Agent", _app+"/"+SemVer)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.Err = fmt.Sprintf("server unreachable: %v", err)
+		return h
+	}
+	defer resp.Body.Close()
+	h.ServerReachable = true
+	if resp.StatusCode != http.StatusOK {
+		h.Err = fmt.Sprintf("api: HTTP %s", resp.Status)
+		return h
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.Err = fmt.Sprintf("read body: %v", err)
+		return h
+	}
+	var tags ollamaTagsResponse
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		h.Err = fmt.Sprintf("decode /api/tags: %v", err)
+		return h
+	}
+	h.APIReady = true
+	model := strings.TrimSpace(config.Ollama.Model)
+	for _, m := range tags.Models {
+		if ollamaModelMatch(m.Name, model) {
+			h.ModelReady = true
+			break
+		}
+	}
+	if !h.ModelReady {
+		h.Err = fmt.Sprintf("model %q not in /api/tags (have %d models)", model, len(tags.Models))
+	}
+	return h
+}
+
+// ollamaModelMatch reports whether a model name returned by /api/tags
+// corresponds to the configured model. Ollama returns fully-qualified names
+// such as "llama3:latest" while the configured OLLAMA_DESC_MODEL may be the bare
+// "llama3", so an exact match or a "<model>:<tag>" prefix match both count.
+func ollamaModelMatch(have, want string) bool {
+	if have == "" || want == "" {
+		return false
+	}
+	if have == want {
+		return true
+	}
+	return strings.HasPrefix(have, want+":")
 }
 
 // onlyUnifiChanges reports whether every changed file in the worktree status

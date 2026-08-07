@@ -3459,3 +3459,202 @@ func TestSetupOllamaConfig(t *testing.T) {
 		}
 	})
 }
+
+// TestOllamaModelMatch covers the bare-name vs fully-qualified-name matching
+// used by the /api/tags probe: Ollama returns "llama3:latest" while the
+// configured OLLAMA_DESC_MODEL may be the bare "llama3".
+func TestOllamaModelMatch(t *testing.T) {
+	cases := []struct {
+		have, want string
+		wantMatch  bool
+	}{
+		{"llama3:latest", "llama3", true},
+		{"llama3", "llama3", true},
+		{"llama3:8b", "llama3", true},
+		{"llama2:latest", "llama3", false},
+		{"", "llama3", false},
+		{"llama3:latest", "", false},
+		{"llama3:latest", "llama", false}, // prefix alone is not enough
+	}
+	for _, c := range cases {
+		if got := ollamaModelMatch(c.have, c.want); got != c.wantMatch {
+			t.Errorf("ollamaModelMatch(%q, %q) = %v, want %v", c.have, c.want, got, c.wantMatch)
+		}
+	}
+}
+
+// TestOllamaHealthCheckDisabled verifies that when the feature is disabled the
+// probe makes no network call and reports all-false with no error.
+func TestOllamaHealthCheckDisabled(t *testing.T) {
+	config := &OPNCall{}
+	config.Ollama.Enable = false
+	h := ollamaHealthCheck(config)
+	if h.ServerReachable || h.APIReady || h.ModelReady {
+		t.Errorf("disabled probe should be all-false, got %+v", h)
+	}
+	if h.Err != "" {
+		t.Errorf("disabled probe should have no error, got %q", h.Err)
+	}
+}
+
+// TestOllamaHealthCheckUnreachable verifies that a daemon that refuses the
+// connection reports server-unreachable and leaves API/model readiness false.
+func TestOllamaHealthCheckUnreachable(t *testing.T) {
+	config := &OPNCall{}
+	config.Ollama.Enable = true
+	config.Ollama.URL = "http://127.0.0.1:1" // nothing listening
+	config.Ollama.Model = "llama3"
+	h := ollamaHealthCheck(config)
+	if h.ServerReachable {
+		t.Errorf("ServerReachable should be false on connection refused")
+	}
+	if h.APIReady || h.ModelReady {
+		t.Errorf("API/Model ready should be false when server unreachable")
+	}
+	if h.Err == "" {
+		t.Errorf("Err should carry the connection failure reason")
+	}
+	if !strings.Contains(h.Err, "server unreachable") {
+		t.Errorf("Err should mention server unreachable, got %q", h.Err)
+	}
+}
+
+// TestOllamaHealthCheckReady verifies that a daemon answering /api/tags with the
+// configured model in its list reports all three signals true and no error.
+func TestOllamaHealthCheckReady(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		_ = json.NewEncoder(w).Encode(ollamaTagsResponse{
+			Models: []ollamaTagsModel{
+				{Name: "llama2:latest"},
+				{Name: "llama3:latest"},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "llama3"
+	h := ollamaHealthCheck(config)
+	if !h.ServerReachable {
+		t.Errorf("ServerReachable should be true, got %+v", h)
+	}
+	if !h.APIReady {
+		t.Errorf("APIReady should be true, got %+v", h)
+	}
+	if !h.ModelReady {
+		t.Errorf("ModelReady should be true for configured model, got %+v", h)
+	}
+	if h.Err != "" {
+		t.Errorf("Err should be empty when fully ready, got %q", h.Err)
+	}
+}
+
+// TestOllamaHealthCheckModelMissing verifies that a daemon answering /api/tags
+// without the configured model reports server + API ready but model not ready,
+// with an error naming the missing model.
+func TestOllamaHealthCheckModelMissing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ollamaTagsResponse{
+			Models: []ollamaTagsModel{{Name: "llama2:latest"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "llama3"
+	h := ollamaHealthCheck(config)
+	if !h.ServerReachable || !h.APIReady {
+		t.Errorf("server + API should be ready, got %+v", h)
+	}
+	if h.ModelReady {
+		t.Errorf("ModelReady should be false when model not listed")
+	}
+	if h.Err == "" || !strings.Contains(h.Err, "llama3") {
+		t.Errorf("Err should name the missing model, got %q", h.Err)
+	}
+}
+
+// TestOllamaHealthCheckBadJSON verifies that a non-JSON /api/tags body reports
+// server reachable but API not ready, with a decode error.
+func TestOllamaHealthCheckBadJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "llama3"
+	h := ollamaHealthCheck(config)
+	if !h.ServerReachable {
+		t.Errorf("ServerReachable should be true, got %+v", h)
+	}
+	if h.APIReady || h.ModelReady {
+		t.Errorf("API/Model ready should be false on bad JSON")
+	}
+	if h.Err == "" || !strings.Contains(h.Err, "decode") {
+		t.Errorf("Err should mention decode failure, got %q", h.Err)
+	}
+}
+
+// TestRenderOllamaPanelDisabled verifies the panel surfaces the env-var status
+// without performing a probe when the feature is disabled.
+func TestRenderOllamaPanelDisabled(t *testing.T) {
+	config := &OPNCall{}
+	config.Ollama.Enable = false
+	config.Ollama.URL = ""
+	config.Ollama.Model = ""
+	out := renderOllamaPanel(config)
+	for _, want := range []string{"Ollama Commit Messages", "Feature Enabled", "REST API URL", "Model"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "Server Reachable") {
+		t.Errorf("disabled panel should not run the probe (no Server Reachable row): %s", out)
+	}
+}
+
+// TestRenderOllamaPanelEnabled verifies the panel runs the probe and renders
+// the three reachability rows plus an ok probe state when the model is ready.
+func TestRenderOllamaPanelEnabled(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ollamaTagsResponse{
+			Models: []ollamaTagsModel{{Name: "llama3:latest"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "llama3"
+	out := renderOllamaPanel(config)
+	for _, want := range []string{
+		"Feature Enabled", "REST API URL", "Model",
+		"Server Reachable", "REST API Ready", "Model Ready", "Probe State", "ok",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "Probe Error") {
+		t.Errorf("ready panel should not show a probe error: %s", out)
+	}
+}

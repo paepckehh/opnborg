@@ -74,6 +74,7 @@ func renderConfigDashboard(config *OPNCall) string {
 	s.WriteString(renderGroupsPanel(config))
 	s.WriteString(renderSyncPanel(config))
 	s.WriteString(renderGitPanel(config))
+	s.WriteString(renderOllamaPanel(config))
 	s.WriteString(renderHttpdPanel(config))
 	s.WriteString(renderRSysLogPanel(config))
 	s.WriteString(renderUnifiPanel(config))
@@ -157,6 +158,34 @@ func renderGitPanel(c *OPNCall) string {
 	writeDashRow(&s, "Git Management", boolPill(c.Git.Enable))
 	writeDashRow(&s, "Upstream URL", maskIfEmpty(html.EscapeString(c.Git.Upstream)))
 	writeDashRow(&s, "SSH Key Path", maskIfEmpty(html.EscapeString(c.Git.SSHKey)))
+	s.WriteString("</div>")
+	return s.String()
+}
+
+// renderOllamaPanel covers the Ollama-assisted commit message feature: the
+// parsed OLLAMA_DESC_URL / OLLAMA_DESC_MODEL env vars and a live probe of the
+// daemon. The probe (ollamaHealthCheck) reports three layered signals so an
+// operator can tell at a glance whether the feature is wired, the daemon is
+// reachable, the REST API answers, and the configured model is loaded. The
+// probe runs on every dashboard render with a short timeout so a wedged daemon
+// never stalls the page.
+func renderOllamaPanel(c *OPNCall) string {
+	var s strings.Builder
+	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Ollama Commit Messages</div>")
+	writeDashRow(&s, "Feature Enabled", boolPill(c.Ollama.Enable))
+	writeDashRow(&s, "REST API URL", maskIfEmpty(html.EscapeString(c.Ollama.URL)))
+	writeDashRow(&s, "Model", maskIfEmpty(html.EscapeString(c.Ollama.Model)))
+	if c.Ollama.Enable {
+		h := ollamaHealthCheck(c)
+		writeDashRow(&s, "Server Reachable", triStatePill(h.ServerReachable))
+		writeDashRow(&s, "REST API Ready", triStatePill(h.APIReady))
+		writeDashRow(&s, "Model Ready", triStatePill(h.ModelReady))
+		if h.Err != "" {
+			writeDashRow(&s, "Probe Error", "<span class=\"dash-err\">"+html.EscapeString(h.Err)+"</span>")
+		} else if h.ModelReady {
+			writeDashRow(&s, "Probe State", "<span class=\"dash-ok\">ok</span>")
+		}
+	}
 	s.WriteString("</div>")
 	return s.String()
 }
@@ -294,6 +323,17 @@ func boolPill(b bool) string {
 		return "<span class=\"dash-ok\">on</span>"
 	}
 	return "<span class=\"dash-muted\">off</span>"
+}
+
+// triStatePill renders a probe result as a green "yes" or red "no" pill. Unlike
+// boolPill (on/off for config switches), the Ollama probe rows report whether a
+// live check succeeded, so a failure is an actionable error rather than a
+// neutral "off".
+func triStatePill(ok bool) string {
+	if ok {
+		return "<span class=\"dash-ok\">yes</span>"
+	}
+	return "<span class=\"dash-err\">no</span>"
 }
 
 // secretPill renders a "set" / "not set" pill for a secret field, never
