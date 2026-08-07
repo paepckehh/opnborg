@@ -139,6 +139,21 @@ func Setup() (*OPNCall, error) {
 		return nil, err
 	}
 
+	// configure Ollama-assisted commit message generation. When both a REST
+	// API base URL and a model name are set, every non-Unifi backup diff is
+	// routed to the model so it can author a short headline plus an extensive
+	// explanation in the context of an OPNsense XML firewall configuration.
+	// Unifi .unf backup check-ins are always committed with the default
+	// message without consulting the model.
+	config.Ollama.URL = strings.TrimSpace(os.Getenv("OPN_OLLAMA_URL"))
+	config.Ollama.Model = strings.TrimSpace(os.Getenv("OPN_OLLAMA_MODEL"))
+	config.Ollama.Enable = config.Ollama.URL != "" && config.Ollama.Model != ""
+	if config.Ollama.Enable {
+		if _, err := url.Parse(config.Ollama.URL); err != nil {
+			return nil, fmt.Errorf("env variable 'OPN_OLLAMA_URL' parse error: %w", err)
+		}
+	}
+
 	// configure remote syslog server
 	config.RSysLog.Enable = false
 	if config.Daemon {

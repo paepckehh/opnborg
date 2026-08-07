@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.132"
+const SemVer = "v0.1.133"
 
 // global var
 var (
@@ -71,6 +71,11 @@ type OPNCall struct {
 		// "cannot create known hosts callback" fatal exit. Pin a fingerprint
 		// whenever the upstream is reachable over an untrusted network.
 		SSHHostKey string
+	}
+	Ollama struct {
+		Enable bool   // enable Ollama-assisted git commit message generation (requires URL + Model)
+		URL    string // Ollama REST API base URL (e.g. http://localhost:11434); appended with /api/generate
+		Model  string // Ollama model name used to summarise each backup diff (e.g. llama3)
 	}
 	Unifi struct {
 		WebUI   *url.URL

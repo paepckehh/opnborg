@@ -8,6 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/joho/godotenv v1.5.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/sirupsen/logrus v1.9.4
 	golang.org/x/crypto v0.53.0
 	paepcke.de/uniex v0.1.31

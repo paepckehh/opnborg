@@ -203,6 +203,9 @@ export OPN_PATH='/var/opnborg'
 export OPN_GIT_ENABLE='1'
 export OPN_GIT_UPSTREAM='git@github.com:user/opnborg-backups.git'
 export OPN_GIT_SSH_KEY='/home/opnborg/.ssh/id_ed25519'
+# Optional: LLM-authored commit messages via a local Ollama daemon
+# export OPN_OLLAMA_URL='http://localhost:11434'
+# export OPN_OLLAMA_MODEL='llama3'
 
 # Internal RFC5424 syslog collector
 export OPN_RSYSLOG_ENABLE='1'
@@ -304,6 +307,20 @@ required or invoked).
 | `OPN_GIT_ENABLE` | unset | Manage `OPN_PATH` as a git repo with auto commit (opt-in) |
 | `OPN_GIT_UPSTREAM` | _empty_ | Upstream SSH git URL to sync with (e.g. `git@github.com:user/repo.git`); empty disables push |
 | `OPN_GIT_SSH_KEY` | _empty_ | Path to the PEM-encoded SSH private key used for upstream auth (required when `OPN_GIT_UPSTREAM` is set) |
+| `OPN_GIT_SSH_HOSTKEY` | _empty_ | Optional `SHA256:<base64>` fingerprint of the upstream SSH host key; when set, push refuses any host whose key does not match (unset = skip host-key verification) |
+| `OPN_OLLAMA_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages when set together with `OPN_OLLAMA_MODEL` |
+| `OPN_OLLAMA_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message; enables the feature when set together with `OPN_OLLAMA_URL` |
+
+When Ollama-assisted commit messages are enabled, before each commit the
+HEAD-vs-worktree unified diff is POSTed to `<OPN_OLLAMA_URL>/api/generate`
+(`stream=false`) with a prompt that casts the model as an infrastructure / Unix
+firewall expert and asks for a short headline plus an extensive explanation
+grounded in OPNsense XML firewall configuration semantics. The returned text
+becomes the commit message. Commits whose changed files are all Unifi `.unf`
+backups keep the default message without consulting the model (the `.unf`
+format is an opaque binary archive). Any model error, empty response, or
+timeout falls back to the default message (`opnborg auto update`) so a model
+outage never blocks a backup from being committed.
 
 Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
 the upstream host is present there before enabling push.

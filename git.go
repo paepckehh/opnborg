@@ -215,7 +215,19 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	if _, err := wtree.Add(_currentDir); err != nil {
 		return false, err
 	}
-	commit, err := wtree.Commit(_commitMsg, &git.CommitOptions{
+	// Choose the commit message. The default is the static _commitMsg string.
+	// When Ollama-assisted generation is enabled (OPN_OLLAMA_URL +
+	// OPN_OLLAMA_MODEL both set) the diff between HEAD and the worktree is
+	// routed to the model so it can author a short headline plus an extensive
+	// explanation in the context of an OPNsense XML firewall configuration.
+	// Commits whose changes are all Unifi .unf files keep the default message
+	// without consulting the model. Any model error falls back to the default
+	// so the backup is never left uncommitted.
+	commitMsg := _commitMsg
+	if msg := generateCommitMessage(config, repo, wtree); msg != "" {
+		commitMsg = msg
+	}
+	commit, err := wtree.Commit(commitMsg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  _authorName,
 			Email: config.Email,

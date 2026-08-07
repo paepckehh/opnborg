@@ -13,7 +13,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 3. **Test** — `go test -count=1 ./...` must be ok
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
 > 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
->    (the current release series; the latest tag is `v0.1.116`). Never move,
+>    (the current release series; the latest tag is `v0.1.132`). Never move,
 >    delete, or reuse an existing tag. Also bump the `SemVer` constant in
 >    `api.go` to match the new tag.
 >
@@ -34,7 +34,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 - Test every change via build and unit tests
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
-  the **patch** segment, the last segment (e.g. `v0.1.116` → `v0.1.117`).
+  the **patch** segment, the last segment (e.g. `v0.1.132` → `v0.1.133`).
   The other two first segments (major, minor) stay unmodified,
   increment only the last part by +1. Never move, delete, or rewrite an existing tag.
 
@@ -72,7 +72,7 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 
 - Releases are tag-driven (`v*`). Pushing a `v*` tag triggers both `.github/workflows/release.yml` (goreleaser cross-compile via `.goreleaser.yml`) and `.github/workflows/ghcr.yml` (build/push `ghcr.io/paepckehh/opnborg:latest`).
 - goreleaser builds target linux/freebsd/darwin/netbsd/openbsd/windows on amd64 + arm64, `CGO_ENABLED=0`.
-- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.116` → `v0.1.117`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
+- **Before tagging a release**, bump the `SemVer` constant in `api.go` to match the new tag (e.g. `v0.1.132` → `v0.1.133`). `SemVer` is the single source of truth for the version string and is consumed by the CLI startup banner (`cmd/opnborg/main.go`) and the WebUI footer. The top-level `Makefile` injects a build version via `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` (sourced from `git describe --tags`), but no `internal/version` package exists, so that flag is currently a no-op and the displayed version comes from `SemVer`.
 
 ## Architecture & Control Flow
 
@@ -129,6 +129,7 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 - **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`) as long as the value is non-empty. To disable, unset the var. The only exception is the empty string, which `isEnv` treats as false.
 - `OPN_NODAEMON` inverts the default (daemon defaults to `true` when unset): `Daemon = !isEnv("OPN_NODAEMON")`. In one-shot mode the httpd, rsyslog server, and Unifi goroutines are not armed.
 - The backup storage git repo feature is opt-in via `OPN_GIT_ENABLE` (presence-based). `OPN_GIT_UPSTREAM` sets an upstream SSH git URL to push to, and `OPN_GIT_SSH_KEY` points at the PEM-encoded private key used for upstream auth; both are validated together in `validateGitConfig` (`git.go`). Host key verification relies on go-git's default `~/.ssh/known_hosts` callback. (`OPN_NOGIT` is no longer honored — the feature is opt-in, not opt-out.)
+- **Ollama-assisted commit messages** (opt-in via `OPN_OLLAMA_URL` + `OPN_OLLAMA_MODEL`, both must be non-empty). When enabled, before each non-Unifi commit the HEAD-vs-worktree unified diff is POSTed to the Ollama REST API (`<OPN_OLLAMA_URL>/api/generate`, `stream=false`) with a prompt that casts the model as an infrastructure / Unix firewall expert and asks for a short headline plus an extensive explanation grounded in OPNsense XML firewall configuration semantics. The returned text becomes the commit message. Commits whose changed files are all `.unf` Unifi backups keep the static default message (`opnborg auto update`) without consulting the model, since the `.unf` format is an opaque binary archive. Any model error, empty response, or timeout falls back to the default message so a model outage never blocks a backup from being committed. Implemented in `ollama.go`; wired into `gitCommit` (`git.go`). The diff is computed in-process with `go-difflib` against HEAD blobs and worktree files (capped at `_ollamaMaxDiffBytes`).
 - The internal httpd is armed only in daemon mode and only when `OPN_HTTPD_DISABLE` is unset (daemon mode + flag unset → enable; everything else → disable).
 - Either OPN backup (`OPN_APIKEY` + `OPN_APISECRET`) or Unifi backup (`OPN_UNIFI_BACKUP_USER` + `OPN_UNIFI_BACKUP_SECRET` + `OPN_UNIFI_VERSION`) must be configured or `Setup()` returns a fatal error.
 - `OPN_TARGETS` is comma-separated. Each host may append `#<asset-tag>`. Custom groups use `OPN_TARGETS_<GROUPNAME>` with the same syntax; `OPN_TARGETS_DESC_<GROUPNAME>` supplies the group's WebUI text description, and `OPN_TARGETS_IMGURL_<GROUPNAME>` supplies a custom image URL that replaces the text headline (the description then becomes the image's tooltip).
@@ -154,7 +155,7 @@ For a configured `OPN_PATH` (default `.`):
   Logs/current.log                   # rotated by lumberjack (256MB, 256 backups, 180d, gzipped)
 ```
 
-`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` (`git.PlainOpen` / `git.PlainInit` on first run) plus `gitEnsureIgnore` run once at startup; `gitCheckIn` (`os.Chdir(config.Path)`, open repo, `wtree.Status()` fast-path, `wtree.Add(".")`, commit authored as `OPNBORG-AUTO-COMMIT <config.Email>`) runs per tick when `config.dirty` is set. When `OPN_GIT_UPSTREAM` is set, `gitPush` recreates the `origin` remote if its URL drifted and pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`; host key verification uses go-git's default `~/.ssh/known_hosts` callback. All git operations use the native `go-git` library — no external `git` binary is invoked.
+`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` (`git.PlainOpen` / `git.PlainInit` on first run) plus `gitEnsureIgnore` run once at startup; `gitCheckIn` (`os.Chdir(config.Path)`, open repo, `wtree.Status()` fast-path, `wtree.Add(".")`, commit authored as `OPNBORG-AUTO-COMMIT <config.Email>`) runs per tick when `config.dirty` is set. The commit message is the static `opnborg auto update` unless Ollama-assisted generation is enabled (`OPN_OLLAMA_URL` + `OPN_OLLAMA_MODEL`, see `ollama.go`), in which case `gitCommit` calls `generateCommitMessage` to route the diff to the model and use its response; `.unf`-only commits and any model failure keep the default message. When `OPN_GIT_UPSTREAM` is set, `gitPush` recreates the `origin` remote if its URL drifted and pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`; host key verification uses go-git's default `~/.ssh/known_hosts` callback. All git operations use the native `go-git` library — no external `git` binary is invoked.
 
 `checkIntoStore` (`store.go`) resolves every path against `config.Path` and does **not** call `os.Chdir`, so it is safe to invoke from the concurrent per-server worker goroutines. The `CONFIG-CURRENT` / `CONFIG-LAST` symlinks use a relative target (the `.archive/...` path) so the store tree stays portable when copied or moved. The only remaining `os.Chdir` call sites are `gitInit` / `gitCheckIn` (both Chdir to `config.Path`, the same directory) and `startWeb` / `startRSysLog` (startup only, before workers run).
 
@@ -192,6 +193,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - `github.com/cnaude/go-syslog/syslog/v3` -- RFC5424 syslog server.
 - `github.com/natefinch/lumberjack` + `github.com/sirupsen/logrus` -- log rotation/formatting for the syslog sink.
 - `github.com/fsnotify/fsnotify` -- filesystem watcher for the Unifi autoBackup folder sync (`srvUnifiWatch.go`).
+- `github.com/pmezard/go-difflib` -- unified-diff generation for the Ollama-assisted commit message feature (`ollama.go`).
 - `paepcke.de/uniex` -- Unifi inventory export logic (delegated to that module; opnborg only wires the env config).
 
 Dependabot keeps these current via `.github/dependabot.yml`.
