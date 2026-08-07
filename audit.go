@@ -427,15 +427,15 @@ func renderAuditCommits(commits []auditCommit) string {
 		if c.diff == "" {
 			s.WriteString("<div class=\"audit-diff-empty\"><span class=\"dash-muted\">no diff (root commit or binary-only changes)</span></div>")
 		} else {
-			s.WriteString("<div class=\"audit-diff-wrap\"><div class=\"audit-diff-head\">unified diff")
+			s.WriteString("<details class=\"audit-diff\"><summary class=\"audit-diff-head\">unified diff")
 			if c.truncated {
 				s.WriteString(" <span class=\"dash-warn\">[truncated at ")
 				s.WriteString(humanBytes(int64(_auditDiffCap)))
 				s.WriteString("]</span>")
 			}
-			s.WriteString("</div><pre class=\"audit-diff\"><code>")
+			s.WriteString("</summary><pre class=\"audit-diff-body\"><code>")
 			s.WriteString(highlightDiff(c.diff))
-			s.WriteString("</code></pre></div>")
+			s.WriteString("</code></pre></details>")
 		}
 		s.WriteString("</details>")
 	}

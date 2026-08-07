@@ -391,11 +391,14 @@ nav .audit-active button{border-color:var(--accent);background:var(--card-2);col
 .audit-analysis>summary.audit-analysis-head::-webkit-details-marker{display:none}
 .audit-analysis[open]>summary.audit-analysis-head{color:var(--accent);border-bottom:1px solid var(--border)}
 .audit-analysis-body{border-top:none;border-bottom:none}
-.audit-diff-wrap{margin:0}
-.audit-diff-head{padding:.3rem .75rem;background:#141a22;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border)}
+.audit-diff{margin:0;border-bottom:1px solid var(--border)}
+.audit-diff>summary.audit-diff-head{cursor:pointer;list-style:none}
+.audit-diff>summary.audit-diff-head::-webkit-details-marker{display:none}
+.audit-diff[open]>summary.audit-diff-head{color:var(--accent);border-bottom:1px solid var(--border)}
+.audit-diff-head{padding:.3rem .75rem;background:#141a22;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em}
 .audit-diff-empty{padding:.5rem .75rem}
-.audit-diff{margin:0;padding:.5rem .75rem;background:#0b0f14;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;line-height:1.45;white-space:pre;overflow-x:auto;tab-size:2}
-.audit-diff code{font-family:inherit;font-size:inherit;background:transparent}
+.audit-diff-body{margin:0;padding:.5rem .75rem;background:#0b0f14;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;line-height:1.45;white-space:pre;overflow-x:auto;tab-size:2}
+.audit-diff-body code{font-family:inherit;font-size:inherit;background:transparent}
 .diff-file{color:#79c0ff;font-weight:600;display:block}
 .diff-meta{color:var(--muted)}
 .diff-path{color:#79c0ff;font-weight:600}
