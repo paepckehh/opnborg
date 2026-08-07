@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -3142,22 +3143,54 @@ func TestOnlyUnifiChanges(t *testing.T) {
 }
 
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
-// the system persona, the output contract, and the diff payload verbatim.
+// the system persona, the output contract, the affected-server input line, and
+// the diff payload verbatim.
 func TestOllamaPromptContainsDiffAndContract(t *testing.T) {
 	diff := "--- a/fw01.lan/current.xml\n+++ b/fw01.lan/current.xml\n@@ -1 +1 @@\n-<old/>\n+<new/>"
-	p := ollamaPrompt(diff)
+	servers := []string{"fw01.lan"}
+	p := ollamaPrompt(servers, diff)
 	for _, want := range []string{
 		"senior infrastructure",
 		"OPNsense",
 		"Unifi",
+		"Affected server(s): fw01.lan",
 		"--- BEGIN DIFF ---",
 		diff,
 		"--- END DIFF ---",
 		"<= 72 characters",
+		"tag:",
+		"needs-review",
+		"critical",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt missing %q", want)
 		}
+	}
+}
+
+// TestExtractServersFromStatus verifies the first path segment of every changed
+// file is extracted as the server name, deduplicated and sorted, with
+// root-level (slash-less) paths skipped.
+func TestExtractServersFromStatus(t *testing.T) {
+	cases := map[string]struct {
+		status git.Status
+		want   []string
+	}{
+		"empty":             {git.Status{}, []string{}},
+		"single-server":     {git.Status{"fw01.lan/current.xml": &git.FileStatus{}}, []string{"fw01.lan"}},
+		"multi-server":      {git.Status{"fw02.lan/current.xml": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}, "fw01.lan/CONFIG-CURRENT": &git.FileStatus{}}, []string{"fw01.lan", "fw02.lan"}},
+		"root-file-skipped": {git.Status{".gitignore": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}}, []string{"fw01.lan"}},
+		"only-root-files":   {git.Status{".gitignore": &git.FileStatus{}}, []string{}},
+		"unifi-folder":      {git.Status{"unifi-autobackup/current.unf": &git.FileStatus{}}, []string{"unifi-autobackup"}},
+		"nested-archive":    {git.Status{"fw01.lan/.archive/2024/06/x.xml": &git.FileStatus{}}, []string{"fw01.lan"}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := extractServersFromStatus(tc.status)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("extractServersFromStatus = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

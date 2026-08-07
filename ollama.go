@@ -65,17 +65,25 @@ const (
 
 // _ollamaSystemPrompt is the persona and output contract sent to the model. It
 // instructs the model to act as an infrastructure / Unix firewall expert and
-// return a strict two-part commit message: a single short headline line
+// return a strict multi-part commit message: a single short headline line
 // followed by a blank line and an extensive explanation grounded in OPNsense
-// XML firewall configuration semantics. The diff payload is enriched with a
-// commit-level summary, per-file metadata (change kind, byte/line sizes, +/-
-// counts, detected OPNsense XML top-level sections), widened context, and for
-// small files the full resulting content; the prompt tells the model how to
-// read that structure so it can ground its description in concrete change
-// geometry rather than only the raw hunks.
+// XML firewall configuration semantics, and finally a trailing "tag:" line
+// carrying an automated security-impact classification (low / medium / high /
+// critical, plus an optional "needs-review" flag) so commits can be triaged by
+// risk. The diff payload is enriched with a commit-level summary, per-file
+// metadata (change kind, byte/line sizes, +/- counts, detected OPNsense XML
+// top-level sections), widened context, and for small files the full resulting
+// content; the prompt tells the model how to read that structure so it can
+// ground its description in concrete change geometry rather than only the raw
+// hunks. The prompt also carries the server name(s) the changeset applies to
+// (extracted from the first path segment of each changed file) as explicit
+// input, so the model can anchor its description to the affected appliance
+// rather than having to infer it from the diff paths.
 const _ollamaSystemPrompt = `You are a senior infrastructure and Unix firewall engineer with deep expertise in OPNsense and Unifi network appliances. You are reviewing an automated git commit produced by opnborg, a daemon that backs up OPNsense firewall configuration as XML and Unifi controller backups as .unf files.
 
 Your task: read the enriched diff below and author the git commit message for it.
+
+The backup store layout puts each appliance's files under a top-level folder named after the server (e.g. "fw01.lan/current.xml" belongs to server fw01.lan). The "Affected server(s):" line below lists the server name(s) derived from the first path segment of every changed file. Use it as explicit input: name the affected appliance(s) in your explanation and frame the change in terms of that server's configuration.
 
 The diff is structured. Use every section to ground your description:
 - The "=== COMMIT SUMMARY ===" block lists every changed file with its change kind (added/modified/deleted/renamed/copied), per-file +insertions/-deletions counts, and commit-wide totals. Use it to state the scope of the change up front.
@@ -86,7 +94,17 @@ The diff is structured. Use every section to ground your description:
 Output contract (obey exactly, no preamble, no markdown fences):
 - Line 1: a short, concise commit headline (imperative mood, <= 72 characters, no trailing period).
 - Line 2: empty.
-- Lines 3+: an extensive, detailed explanation of what this commit changes in the context of configuring an OPNsense XML firewall. Describe which configuration sections changed (e.g. firewall rules, aliases, interfaces, routing, NAT, VPN, IPSec, certificates, users, groups, services, plugins), what the previous state implied, and what the new state enables or restricts. When the diff is an OPNsense config.xml rotation, reason about the <opnsense>/<filter> rule tree, <aliases>, <interfaces>, <gateways>, <nat>, <ipsec>, <vpn>, <cert> and related subtrees you can infer from the diff and the opnsense-xml-sections metadata. Do not invent facts not supported by the diff. Keep the explanation grounded and technical.
+- Lines 3+: an extensive, detailed explanation of what this commit changes in the context of configuring an OPNsense XML firewall. Name the affected server(s) from the "Affected server(s):" input. Describe which configuration sections changed (e.g. firewall rules, aliases, interfaces, routing, NAT, VPN, IPSec, certificates, users, groups, services, plugins), what the previous state implied, and what the new state enables or restricts. When the diff is an OPNsense config.xml rotation, reason about the <opnsense>/<filter> rule tree, <aliases>, <interfaces>, <gateways>, <nat>, <ipsec>, <vpn>, <cert> and related subtrees you can infer from the diff and the opnsense-xml-sections metadata. Do not invent facts not supported by the diff. Keep the explanation grounded and technical.
+- Final line: a single "tag:" line that classifies the security impact of the change so commits can be triaged by risk. Format it exactly as:
+
+  tag: <severity>[, needs-review]
+
+  where <severity> is one of: low, medium, high, critical.
+  - low: routine or no security impact (e.g. alias description edit, logging tweak, cosmetic rename).
+  - medium: changes hardening or exposure in a bounded way (e.g. tightened a rule, rotated a certificate, adjusted an interface).
+  - high: broadens attack surface or weakens hardening (e.g. new any-to-any allow rule, opened a WAN port, disabled a safeguard).
+  - critical: removes a key control or broadly exposes a sensitive service (e.g. deleted a drop rule, enabled WAN admin, removed IPsec, weakened mTLS).
+  Append ", needs-review" when a human should inspect the change before it ships (e.g. high/critical severity, ambiguous intent, or a change to auth/cert/IPsec/firewall-defaults). Keep the tag line to a single line, no prose after it.
 
 If the diff is empty or unintelligible, return exactly: opnborg auto update`
 
@@ -104,10 +122,45 @@ type ollamaGenerateResponse struct {
 	Response string `json:"response"`
 }
 
-// ollamaPrompt assembles the full prompt sent to the model: the system persona
-// plus the unified diff payload.
-func ollamaPrompt(diff string) string {
-	return _ollamaSystemPrompt + "\n\n--- BEGIN DIFF ---\n" + diff + "\n--- END DIFF ---\n"
+// ollamaPrompt assembles the full prompt sent to the model: the system persona,
+// the affected server name(s) derived from the first path segment of each
+// changed file, and the unified diff payload. The server list is injected as
+// explicit input so the model can anchor its description to the affected
+// appliance(s) rather than having to infer them from the diff paths.
+func ollamaPrompt(servers []string, diff string) string {
+	serverLine := "(none)"
+	if len(servers) > 0 {
+		serverLine = strings.Join(servers, ", ")
+	}
+	return _ollamaSystemPrompt + "\n\nAffected server(s): " + serverLine + "\n\n--- BEGIN DIFF ---\n" + diff + "\n--- END DIFF ---\n"
+}
+
+// extractServersFromStatus returns the deduplicated, sorted list of server
+// names derived from the first path segment of every changed file in the
+// worktree status. The opnborg backup store lays out each appliance's files
+// under a top-level folder named after the server (e.g.
+// "fw01.lan/current.xml" -> "fw01.lan"), so the first segment is the
+// authoritative server identifier. Root-level files with no slash (rare; e.g.
+// a stray ".gitignore") contribute no server and are skipped. An empty or nil
+// status yields an empty (non-nil) slice.
+func extractServersFromStatus(status git.Status) []string {
+	seen := make(map[string]struct{})
+	for pth := range status {
+		idx := strings.IndexByte(pth, '/')
+		if idx <= 0 {
+			continue
+		}
+		srv := pth[:idx]
+		if _, hit := seen[srv]; !hit {
+			seen[srv] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for srv := range seen {
+		out = append(out, srv)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ollamaGenerate POSTs the prompt to the configured Ollama model and returns
@@ -551,7 +604,8 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	if strings.TrimSpace(diff) == "" {
 		return _commitMsg
 	}
-	msg, err := ollamaGenerate(config, ollamaPrompt(diff))
+	servers := extractServersFromStatus(status)
+	msg, err := ollamaGenerate(config, ollamaPrompt(servers, diff))
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][FAIL] " + err.Error())
 		return _commitMsg
