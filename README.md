@@ -312,15 +312,23 @@ required or invoked).
 | `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message; enables the feature when set together with `OLLAMA_DESC_URL` |
 
 When Ollama-assisted commit messages are enabled, before each commit the
-HEAD-vs-worktree unified diff is POSTed to `<OLLAMA_DESC_URL>/api/generate`
+HEAD-vs-worktree diff is POSTed to `<OLLAMA_DESC_URL>/api/generate`
 (`stream=false`) with a prompt that casts the model as an infrastructure / Unix
 firewall expert and asks for a short headline plus an extensive explanation
 grounded in OPNsense XML firewall configuration semantics. The returned text
-becomes the commit message. Commits whose changed files are all Unifi `.unf`
-backups keep the default message without consulting the model (the `.unf`
-format is an opaque binary archive). Any model error, empty response, or
-timeout falls back to the default message (`opnborg auto update`) so a model
-outage never blocks a backup from being committed.
+becomes the commit message. The diff payload is **enriched**, not raw hunks:
+opnborg emits a commit-level summary (files changed, total +insertions/−deletions,
+per-file change kind and +/- counts), then per-file blocks carrying before/after
+byte and line sizes, detected OPNsense `<opnsense>` top-level XML sections
+(e.g. `filter`, `aliases`, `interfaces`, `gateways`, `nat`, `ipsec`, `vpn`,
+`cert`), unified hunks with widened context (8 lines), and for small files the
+full resulting content so the model can describe the complete new state. The
+payload is capped at 256 KB (truncated with a marker when exceeded). Commits
+whose changed files are all Unifi `.unf` backups keep the default message
+without consulting the model (the `.unf` format is an opaque binary archive).
+Any model error, empty response, or timeout falls back to the default message
+(`opnborg auto update`) so a model outage never blocks a backup from being
+committed.
 
 Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
 the upstream host is present there before enabling push.
