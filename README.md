@@ -28,11 +28,19 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 ---
 
+## 🆕 Announcing BorgAUDIT — AI-reviewed firewall change history
+
+Point opnborg at a local [Ollama](https://ollama.com) daemon (`OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`) and every backup commit message is written by the LLM from the enriched diff — and ends with a **`tag: <severity>[, needs-review]`** line that pre-triages the security impact of each change (`low` / `medium` / `high` / `critical`). The new **BorgAUDIT** WebUI tile surfaces the git commit history with the full message and the syntax-highlighted unified diff for the last 24h / 7d / 1m, so the AI's risk classification meets a human reviewer in the same page. Resistance is futile — your firewall changes will be audited.
+
+---
+
 ## ✨ Features
 
 - **Central Monitoring** — version, status, online/offline, last seen, configuration compliance across the whole hive.
 - **Central Package Management** — replicate installed OPNsense plugins from one master host to every target.
 - **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive for auditable change-log trails and rapid restore.
+- **AI Security Audit Review** — when a local [Ollama](https://ollama.com) daemon is configured, every backup commit message is authored by the LLM from the enriched diff and ends with a `tag: <severity>[, needs-review]` line that classifies the security impact of the change (`low` / `medium` / `high` / `critical`), so each change in the commit history is pre-triaged by risk for human review.
+- **BorgAUDIT WebUI** — a dedicated WebUI tile and `/audit` page render the storage repo git commit history (commit metadata, full message including the AI `tag:` line, and the full syntax-highlighted unified diff) for the last 24 hours / 7 days / 1 month, so an operator can review what changed across the hive at a glance.
 - **Central Log Consolidation** — built-in RFC5424 syslog collector with rotation and archiving.
 - **Unifi Controller Backup** — download and archive Unifi controller `.unf` backups, mirror a co-located autoBackup folder, and export the Unifi inventory to CSV/JSON.
 - **Backup Dashboard** — the WebUI renders a bottom-of-page `BorgDASHBOARD` panel showing the on-disk backup store stats (servers, archive count, total size, newest archive), the local git repo state (HEAD, commit count, last commit, dirty worktree), and the upstream sync health (in sync / ahead / behind / diverged / never pushed, last push result) — all gathered from local state with no network round-trip on render.
@@ -308,15 +316,27 @@ required or invoked).
 | `OPN_GIT_UPSTREAM` | _empty_ | Upstream SSH git URL to sync with (e.g. `git@github.com:user/repo.git`); empty disables push |
 | `OPN_GIT_SSH_KEY` | _empty_ | Path to the PEM-encoded SSH private key used for upstream auth (required when `OPN_GIT_UPSTREAM` is set) |
 | `OPN_GIT_SSH_HOSTKEY` | _empty_ | Optional `SHA256:<base64>` fingerprint of the upstream SSH host key; when set, push refuses any host whose key does not match (unset = skip host-key verification) |
-| `OLLAMA_DESC_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages when set together with `OLLAMA_DESC_MODEL` |
-| `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message; enables the feature when set together with `OLLAMA_DESC_URL` |
+| `OLLAMA_DESC_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages (with a `tag: <severity>[, needs-review]` security-impact line) when set together with `OLLAMA_DESC_MODEL` |
+| `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message that classifies the security impact of the change; enables the feature when set together with `OLLAMA_DESC_URL` |
 
 When Ollama-assisted commit messages are enabled, before each commit the
 HEAD-vs-worktree diff is POSTed to `<OLLAMA_DESC_URL>/api/generate`
 (`stream=false`) with a prompt that casts the model as an infrastructure / Unix
 firewall expert and asks for a short headline plus an extensive explanation
 grounded in OPNsense XML firewall configuration semantics. The returned text
-becomes the commit message. The diff payload is **enriched**, not raw hunks:
+becomes the commit message. The model is prompted to end its message with a
+single **`tag: <severity>[, needs-review]`** line that classifies the security
+impact of the change so every backup commit can be triaged by risk. `<severity>`
+is one of `low` (routine, no security impact), `medium` (bounded
+hardening/exposure change), `high` (broadens attack surface or weakens
+hardening), or `critical` (removes a key control or broadly exposes a sensitive
+service); `, needs-review` is appended when a human should inspect the change
+before it ships. opnborg does not parse or act on the tag — it is written
+verbatim into the commit message and surfaced on the **BorgAUDIT** history page
+(see below) for an operator to review. The affected server name(s) are injected
+into the prompt as explicit input (deduplicated, sorted first path segment of
+every changed file) so the model anchors its description to the changed
+appliance. The diff payload is **enriched**, not raw hunks:
 opnborg emits a commit-level summary (files changed, total +insertions/−deletions,
 per-file change kind and +/- counts), then per-file blocks carrying before/after
 byte and line sizes, detected OPNsense `<opnsense>` top-level XML sections
@@ -333,6 +353,21 @@ committed. The **Config Dashboard** page surfaces the parsed `OLLAMA_DESC_URL` /
 `<OLLAMA_DESC_URL>/api/tags` (3 s timeout) on each page render and reports three
 layered signals: whether the server is reachable, whether the REST API answers,
 and whether the configured model is loaded and ready to run.
+
+### BorgAUDIT — git commit history review
+
+When `OPN_GIT_ENABLE` is set, the index page carries a **BorgAUDIT** tile that
+links to a dedicated `/audit?range=` page rendering the storage repo git commit
+history for the last 24 hours / 7 days / 1 month. Each entry is a collapsible
+card carrying the commit hash, author, date, file-change stats, the full commit
+message (including the AI `tag: <severity>[, needs-review]` line when the
+commit was Ollama-authored), and the full syntax-highlighted unified diff
+against the commit's first parent. It is the human-facing half of the AI
+security-audit workflow: the model pre-triages every change by risk, and
+BorgAUDIT puts that classification next to the diff a reviewer needs to confirm
+it. The walk is bounded (250 commits per page, 512 KB diff per commit) and opens
+the repo directly against `OPN_PATH` with no `os.Chdir`, so it is safe to render
+concurrently with the backup workers.
 
 Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
 the upstream host is present there before enabling push.
