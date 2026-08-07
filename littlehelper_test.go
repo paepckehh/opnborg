@@ -33,6 +33,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	gitcfg "github.com/go-git/go-git/v5/config"
+	gitobject "github.com/go-git/go-git/v5/plumbing/object"
 	xssh "golang.org/x/crypto/ssh"
 )
 
@@ -3656,5 +3657,352 @@ func TestRenderOllamaPanelEnabled(t *testing.T) {
 	}
 	if strings.Contains(out, "Probe Error") {
 		t.Errorf("ready panel should not show a probe error: %s", out)
+	}
+}
+
+// --- audit.go ----------------------------------------------------------------
+
+// TestAuditRangeSlug verifies the ?range= validator accepts the three known
+// slugs and falls back to the default for unknown / empty values.
+func TestAuditRangeSlug(t *testing.T) {
+	cases := map[string]string{
+		"24h":   "24h",
+		"7d":    "7d",
+		"1m":    "1m",
+		"":      _auditDefaultRange,
+		"bogus": _auditDefaultRange,
+		"1y":    _auditDefaultRange,
+	}
+	for in, want := range cases {
+		if got := auditRangeSlug(in); got != want {
+			t.Errorf("auditRangeSlug(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestAuditTileOnlyWhenGitEnabled verifies the index tile is only emitted when
+// git management is armed, and carries the three range buttons.
+func TestAuditTileOnlyWhenGitEnabled(t *testing.T) {
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+
+	_cfg = nil
+	if got := getAuditTile(); got != _empty {
+		t.Errorf("nil config should produce empty tile, got %q", got)
+	}
+
+	_cfg = &OPNCall{Path: t.TempDir()}
+	if got := getAuditTile(); got != _empty {
+		t.Errorf("git disabled should produce empty tile, got %q", got)
+	}
+
+	_cfg.Git.Enable = true
+	got := getAuditTile()
+	for _, want := range []string{
+		"BorgAUDIT",
+		"audit?range=24h",
+		"audit?range=7d",
+		"audit?range=1m",
+		"24 Hours",
+		"7 Days",
+		"1 Month",
+		"audit-tile",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tile missing %q: %s", want, got)
+		}
+	}
+}
+
+// TestAuditHandlerGET verifies the audit handler renders a full HTML document
+// for each known range and for an unknown range (falls back to default), and
+// rejects non-GET methods with 405.
+func TestAuditHandlerGET(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	_cfg = config
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<opnsense><filter><rule><id>1</id></rule></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if committed, err := gitCheckIn(config); err != nil || !committed {
+		t.Fatalf("gitCheckIn: committed=%v err=%v", committed, err)
+	}
+
+	h := getAuditHandler()
+	for _, r := range []string{"24h", "7d", "1m", "", "bogus"} {
+		path := "/audit"
+		if r != "" {
+			path += "?range=" + r
+		}
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("range=%q: status = %d, want 200", r, rr.Code)
+		}
+		body := rr.Body.String()
+		for _, want := range []string{"<!doctype html>", "<html>", "BorgAUDIT", "Git Commit History", "audit-commit"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("range=%q: body missing %q", r, want)
+			}
+		}
+	}
+
+	// non-GET must be 405
+	req := httptest.NewRequest(http.MethodPost, "/audit?range=24h", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST status = %d, want 405", rr.Code)
+	}
+}
+
+// TestRenderAuditPageStates verifies the renderAuditPage helper collapses to
+// the right placeholder for nil config and for git-disabled config, and
+// renders a summary header for a valid git repo.
+func TestRenderAuditPageStates(t *testing.T) {
+	if got := renderAuditPage(nil, "24h"); !strings.Contains(got, "awaiting config") {
+		t.Errorf("nil config should render placeholder, got: %q", got)
+	}
+	cfg := &OPNCall{Path: t.TempDir()}
+	cfg.Git.Enable = false
+	got := renderAuditPage(cfg, "24h")
+	if !strings.Contains(got, "git management disabled") {
+		t.Errorf("disabled-git should render disabled message, got: %q", got)
+	}
+	if !strings.Contains(got, "BorgAUDIT") {
+		t.Errorf("disabled-git should still carry BorgAUDIT heading, got: %q", got)
+	}
+}
+
+// TestGatherAuditCommits verifies the commit walker returns the commits in
+// the window, with stats and a non-empty diff for a content change.
+func TestGatherAuditCommits(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// Create two commits directly via go-git (bypassing gitCheckIn's GC
+	// path, which packs objects and can make a subsequent repo re-open
+	// fail to read them on some go-git versions).
+	repo, err := git.PlainOpen(store)
+	if err != nil {
+		t.Fatalf("PlainOpen: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<opnsense><filter><rule><id>1</id></rule></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add 1: %v", err)
+	}
+	if _, err := wtree.Commit("first", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "test", Email: "test@opnborg", When: time.Now().Add(-time.Hour)},
+	}); err != nil {
+		t.Fatalf("commit 1: %v", err)
+	}
+	// second commit (modify)
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<opnsense><filter><rule><id>1</id><descr>allow</descr></rule></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write 2: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add 2: %v", err)
+	}
+	if _, err := wtree.Commit("second", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "test", Email: "test@opnborg", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("commit 2: %v", err)
+	}
+
+	commits, err := gatherAuditCommits(config, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("gatherAuditCommits: %v", err)
+	}
+	if len(commits) < 2 {
+		t.Fatalf("expected at least 2 commits, got %d", len(commits))
+	}
+	// newest first
+	if commits[0].when.Before(commits[1].when) {
+		t.Errorf("commits not newest-first: %v before %v", commits[0].when, commits[1].when)
+	}
+	// the most recent commit should have a non-empty diff (the modify)
+	if commits[0].diff == "" {
+		t.Errorf("newest commit should have a non-empty diff")
+	}
+	if commits[0].files == 0 {
+		t.Errorf("newest commit should report >0 files changed")
+	}
+	if commits[0].additions == 0 {
+		t.Errorf("newest commit should report >0 additions")
+	}
+	if commits[0].hash == "" || len(commits[0].hash) > 7 {
+		t.Errorf("commit hash should be short: %q", commits[0].hash)
+	}
+	if commits[0].message != "second" {
+		t.Errorf("newest commit message = %q, want %q", commits[0].message, "second")
+	}
+}
+
+// TestHighlightDiff verifies the syntax highlighter colorises the diff
+// structure and escapes HTML so the output is safe to embed.
+func TestHighlightDiff(t *testing.T) {
+	in := "diff --git a/x b/x\nindex 1234567..abcdef 100644\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n context\n-old\n+new <opnsense>\n"
+	out := highlightDiff(in)
+	for _, want := range []string{
+		"<span class=\"diff-file\">",
+		"<span class=\"diff-meta\">",
+		"<span class=\"diff-path\">",
+		"<span class=\"diff-hunk\">",
+		"<span class=\"diff-del\">",
+		"<span class=\"diff-add\">",
+		"&lt;",
+		"xml-tag",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("highlightDiff missing %q in output: %s", want, out)
+		}
+	}
+	// raw angle brackets must never leak through (they must be escaped)
+	if strings.Contains(out, "<opnsense>") || strings.Contains(out, "<new") {
+		t.Errorf("highlightDiff leaked unescaped HTML: %s", out)
+	}
+}
+
+// TestHighlightDiffLineClasses verifies diffLineClass returns the right CSS
+// class for each unified-diff line kind.
+func TestHighlightDiffLineClasses(t *testing.T) {
+	cases := map[string]string{
+		"diff --git a/x b/x":           "diff-file",
+		"index 1234567..abcdef 100644": "diff-meta",
+		"--- a/x":                      "diff-path",
+		"+++ b/x":                      "diff-path",
+		"@@ -1,2 +1,2 @@":              "diff-hunk",
+		"+added line":                  "diff-add",
+		"-removed line":                "diff-del",
+		" context line":                "diff-ctx",
+		"\\ No newline at end of file": "diff-meta",
+		"new file mode 100644":         "diff-meta",
+		"deleted file mode 100644":     "diff-meta",
+		"similarity index 90%":         "diff-meta",
+	}
+	for in, want := range cases {
+		if got := diffLineClass(in); got != want {
+			t.Errorf("diffLineClass(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestHighlightXMLTokens verifies the XML highlighter colorises tags,
+// attributes, comments and the XML declaration, and leaves non-XML text
+// untouched.
+func TestHighlightXMLTokens(t *testing.T) {
+	// plain text with no markup is returned as-is (escaped)
+	if got := highlightXMLTokens("hello world"); got != "hello world" {
+		t.Errorf("plain text should pass through, got %q", got)
+	}
+	// tag with attributes
+	got := highlightXMLTokens(`<rule id="1" descr="allow"/>`)
+	for _, want := range []string{"xml-tag", "xml-name", "xml-attr-name", "xml-attr-val"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tag highlight missing %q: %s", want, got)
+		}
+	}
+	// comment
+	got = highlightXMLTokens(`<!-- note -->`)
+	if !strings.Contains(got, "xml-comment") {
+		t.Errorf("comment should be highlighted: %s", got)
+	}
+	// declaration
+	got = highlightXMLTokens(`<?xml version="1.0"?>`)
+	if !strings.Contains(got, "xml-decl") {
+		t.Errorf("declaration should be highlighted: %s", got)
+	}
+	// closing tag
+	got = highlightXMLTokens(`</filter>`)
+	if !strings.Contains(got, "xml-name") {
+		t.Errorf("closing tag should highlight name: %s", got)
+	}
+}
+
+// TestCapDiff verifies diff truncation: a diff under the cap is returned as-is,
+// an over-long diff is clipped with the marker.
+func TestCapDiff(t *testing.T) {
+	small := "short diff"
+	out, trunc, err := capDiff(small)
+	if err != nil || trunc || out != small {
+		t.Errorf("small diff should not be truncated: out=%q trunc=%v err=%v", out, trunc, err)
+	}
+	big := strings.Repeat("x", _auditDiffCap+100)
+	out, trunc, err = capDiff(big)
+	if err != nil {
+		t.Fatalf("capDiff err: %v", err)
+	}
+	if !trunc {
+		t.Errorf("over-cap diff must be flagged truncated")
+	}
+	if !strings.HasSuffix(out, "--- DIFF TRUNCATED ---\n") {
+		t.Errorf("truncated diff must end with marker, got tail: %q", out[len(out)-40:])
+	}
+	if len(out) > _auditDiffCap+100 {
+		t.Errorf("truncated diff longer than expected: %d", len(out))
+	}
+}
+
+// TestGetStartHTMLIncludesAuditTile verifies getStartHTML emits the audit tile
+// when git is enabled.
+func TestGetStartHTMLIncludesAuditTile(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	savedCfg := _cfg
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+		_cfg = savedCfg
+	})
+	tg = []OPNGroup{{Name: "TEST", OPN: true, Member: []string{"fw01"}}}
+	hive = []string{_na + "<span class=\"member-meta\">fw01</span>"}
+	sleep = "60"
+	_cfg = &OPNCall{Path: t.TempDir()}
+	_cfg.Git.Enable = true
+	got := getStartHTML()
+	for _, want := range []string{"BorgAUDIT", "audit?range=24h", "audit-tile"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getStartHTML missing %q", want)
+		}
 	}
 }

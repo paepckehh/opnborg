@@ -13,7 +13,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 3. **Test** — `go test -count=1 ./...` must be ok
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
 > 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
->    (the current release series; the latest tag is `v0.1.132`). Never move,
+>    (the current release series; the latest tag is `v0.1.137`). Never move,
 >    delete, or reuse an existing tag. Also bump the `SemVer` constant in
 >    `api.go` to match the new tag.
 >
