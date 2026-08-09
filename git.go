@@ -22,7 +22,7 @@ const (
 	_currentDir     = "."
 	_dotGit         = ".git"
 	_gitignore      = ".gitignore"
-	_ignore         = ".archive\nCONFIG*\nLogs\n"
+	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db\n"
 	_origin         = "origin"
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"
@@ -254,6 +254,11 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 		return false, err
 	}
 	displayChan <- []byte("[GIT][REPO][COMMIT][" + obj.Hash.String() + "] " + obj.Message)
+	// Record the commit in the security-approval ledger when its Ollama
+	// security-impact tag is above low/none/backup (medium / high /
+	// critical). A ledger problem is a non-fatal no-op so a backup is never
+	// left uncommitted.
+	approvalTrackCommit(config, obj.Hash.String(), obj.Message, obj.Author.When)
 	return true, nil
 }
 
@@ -380,6 +385,12 @@ func gitInit(config *OPNCall) error {
 	repo, err := gitRepo(config.Path)
 	if err != nil {
 		return err
+	}
+	// Open the security-approval ledger so it is ready before the first
+	// worker pass. A failure is logged but non-fatal: the daemon keeps
+	// running and the ledger is lazily re-opened on first use.
+	if _, err := approvalDBOpen(config.Path); err != nil {
+		displayChan <- []byte("[APPROVAL][DB][OPEN][FAIL] " + err.Error())
 	}
 	return gitEnsureAggressiveWindow(repo)
 }

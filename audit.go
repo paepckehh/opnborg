@@ -159,6 +159,7 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 		return "<div class=\"dashboard\"><h2>BorgAUDIT &middot; Git Commit History</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">git management disabled (OPN_GIT_ENABLE unset), no commit history to audit</span></div></div>"
 	}
 	window := _auditRanges[rangeSlug]
+	_auditCurrentRange = rangeSlug
 	label := auditRangeLabel(rangeSlug)
 	since := time.Now().Add(-window)
 	commits, err := gatherAuditCommits(config, since)
@@ -166,9 +167,12 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 		return "<div class=\"dashboard\"><h2>BorgAUDIT &middot; Git Commit History &middot; " + html.EscapeString(label) + "</h2><div class=\"dash-row\"><span class=\"dash-value dash-err\">" + html.EscapeString(err.Error()) + "</span></div></div>"
 	}
 	var s strings.Builder
-	s.WriteString("<div class=\"dashboard audit-page\"><h2>BorgAUDIT &middot; Git Commit History &middot; ")
+	s.WriteString("<div class=\"dashboard audit-page\"><div class=\"audit-page-head\">")
+	s.WriteString("<h2>BorgAUDIT &middot; Git Commit History &middot; ")
 	s.WriteString(html.EscapeString(label))
 	s.WriteString("</h2>")
+	s.WriteString(renderAuditApproveAllButton(rangeSlug))
+	s.WriteString("</div>")
 	s.WriteString("<p class=\"cfg-intro\">Detailed git commit log for the backup storage repository. Each entry lists the commit hash, author, date, message, file-change stats and the full unified diff with syntax highlighting. Window: since ")
 	s.WriteString(html.EscapeString(since.UTC().Format(time.RFC3339)))
 	s.WriteString(" (")
@@ -237,6 +241,7 @@ func auditRangeLabel(slug string) string {
 // auditCommit is the rendered view of a single commit on the audit page.
 type auditCommit struct {
 	hash      string // short hash
+	fullHash  string // full 40-char git commit hash (used for the approval ledger)
 	author    string
 	email     string
 	when      time.Time
@@ -291,12 +296,13 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 			// A single unreadable commit should never blank the whole page;
 			// surface a minimal stub so the operator sees the gap.
 			ac = auditCommit{
-				hash:    shortHash(c.Hash.String()),
-				author:  safeAuthorName(c.Author),
-				email:   c.Author.Email,
-				when:    c.Author.When,
-				message: "[unreadable commit: " + err.Error() + "]",
-				diff:    "",
+				hash:     shortHash(c.Hash.String()),
+				fullHash: c.Hash.String(),
+				author:   safeAuthorName(c.Author),
+				email:    c.Author.Email,
+				when:     c.Author.When,
+				message:  "[unreadable commit: " + err.Error() + "]",
+				diff:     "",
 			}
 		}
 		commits = append(commits, ac)
@@ -312,11 +318,12 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 // deletions derived from the commit tree entry count.
 func buildAuditCommit(c *object.Commit) (auditCommit, error) {
 	ac := auditCommit{
-		hash:    shortHash(c.Hash.String()),
-		author:  safeAuthorName(c.Author),
-		email:   c.Author.Email,
-		when:    c.Author.When,
-		message: strings.TrimSpace(c.Message),
+		hash:     shortHash(c.Hash.String()),
+		fullHash: c.Hash.String(),
+		author:   safeAuthorName(c.Author),
+		email:    c.Author.Email,
+		when:     c.Author.When,
+		message:  strings.TrimSpace(c.Message),
 	}
 	stats, err := c.Stats()
 	if err == nil {
@@ -641,7 +648,85 @@ func auditBadgeHTML(severity string, needsReview, backup bool) string {
 	return s.String()
 }
 
-// highlightAuditTagLine colorises the trailing "tag: <severity>[, <flag>]"
+// renderAuditApprovalControl renders the per-commit approval control for the
+// BorgAUDIT page. For commits whose Ollama security-impact tag is above
+// low/none/backup (medium / high / critical) the control is either:
+//   - an "approve" button (a POST form targeting /approve?hash=<full>) when
+//     the commit is not yet approved, or
+//   - an "approved: <timestamp>" attribute box when the commit has already
+//     been approved, so an operator can see at a glance that the change was
+//     reviewed and signed off.
+//
+// Commits whose tag is low, none, or a plain Unifi backup rotation render no
+// approval control: they are not tracked in the ledger.
+func renderAuditApprovalControl(c auditCommit, severity string) string {
+	if !isSecurityRelevantTag(severity) || c.fullHash == "" {
+		return ""
+	}
+	st := approvalGet(_cfg, c.fullHash)
+	if st.approved {
+		var b strings.Builder
+		b.WriteString("<span class=\"meta-box meta-approved\" title=\"security-impact approval recorded in the approval ledger\">")
+		b.WriteString("<span class=\"meta-label\">approved</span>")
+		b.WriteString("<span class=\"meta-value\">")
+		if !st.trueTimestamp.IsZero() {
+			b.WriteString(html.EscapeString(st.trueTimestamp.UTC().Format("2006-01-02 15:04:05 Z07:00")))
+		} else {
+			b.WriteString("yes")
+		}
+		b.WriteString("</span>")
+		b.WriteString("</span>")
+		return b.String()
+	}
+	var b strings.Builder
+	b.WriteString("<form class=\"approve-form\" method=\"post\" action=\"approve?hash=")
+	b.WriteString(html.EscapeString(c.fullHash))
+	b.WriteString("&range=")
+	b.WriteString(html.EscapeString(_auditCurrentRange))
+	b.WriteString("\">")
+	b.WriteString("<button type=\"submit\" class=\"btn btn-approve\" title=\"mark this security-impacting commit as reviewed and approved\">")
+	b.WriteString("<span class=\"approve-emoji\">\u2705</span> approve")
+	b.WriteString("</button>")
+	b.WriteString("</form>")
+	return b.String()
+}
+
+// _auditCurrentRange is the range slug the audit page is currently rendering.
+// It is set by renderAuditPage so the per-commit approve forms redirect back
+// to the same range after the action.
+var _auditCurrentRange = _auditDefaultRange
+
+// renderAuditApproveAllButton renders the "approve all" button floated to the
+// top-right corner of every audit page. The button is a POST form targeting
+// /approve-all?range=<range>; it marks every pending tracked commit as
+// approved in one shot. The button label carries the current pending count so
+// an operator can see at a glance how many approvals are outstanding. When no
+// approvals are pending the button is still rendered (disabled) so the
+// operator knows the feature exists and the ledger is empty.
+func renderAuditApproveAllButton(rangeSlug string) string {
+	if _cfg == nil || !_cfg.Git.Enable {
+		return ""
+	}
+	pending := approvalPendingCount(_cfg)
+	var b strings.Builder
+	b.WriteString("<form class=\"approve-all-form\" method=\"post\" action=\"approve-all?range=")
+	b.WriteString(html.EscapeString(rangeSlug))
+	b.WriteString("\">")
+	if pending <= 0 {
+		b.WriteString("<button type=\"submit\" class=\"btn btn-approve-all\" disabled title=\"no pending security-impact approvals\">")
+		b.WriteString("approve all (0)")
+		b.WriteString("</button>")
+	} else {
+		b.WriteString("<button type=\"submit\" class=\"btn btn-approve-all\" title=\"mark every pending security-impacting commit as reviewed and approved\">")
+		b.WriteString("approve all (")
+		b.WriteString(strconv.Itoa(pending))
+		b.WriteString(")")
+		b.WriteString("</button>")
+	}
+	b.WriteString("</form>")
+	return b.String()
+}
+
 // line inside a rendered analysis body so the security-impact classification
 // stands out from the surrounding analysis prose. The line is wrapped in a
 // severity-class span; all other lines pass through unchanged (already HTML-
@@ -700,6 +785,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("</span> <span class=\"dash-err\">-")
 		s.WriteString(strconv.Itoa(c.deletions))
 		s.WriteString("</span></span>")
+		s.WriteString(renderAuditApprovalControl(c, severity))
 		s.WriteString("</summary>")
 		tldr, detailed := splitAuditMessage(c.message)
 		if tldr == "" {

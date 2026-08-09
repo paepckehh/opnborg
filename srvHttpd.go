@@ -43,6 +43,8 @@ func startWeb(c *OPNCall) {
 	mux.Handle("/progress", addSecurityHeader(getProgressHandler()))
 	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path)))))
 	mux.Handle("/force", getForceHandler())
+	mux.Handle("/approve", getApproveHandler())
+	mux.Handle("/approve-all", getApproveAllHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())
 
 	// httpsrv

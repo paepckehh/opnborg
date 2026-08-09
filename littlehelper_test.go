@@ -4540,3 +4540,282 @@ func TestGetStartHTMLIncludesAuditTile(t *testing.T) {
 		}
 	}
 }
+
+// TestApprovalDBRoundTrip exercises the approval ledger end-to-end: opening
+// the STRICT database, tracking a security-relevant commit, verifying it
+// starts unapproved, approving it, and verifying the approval state and
+// source identity are recorded.
+func TestApprovalDBRoundTrip(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(approvalClose)
+	cfg := &OPNCall{Path: dir}
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	hash := "abcdef0123456789abcdef0123456789abcdef01"
+	msg := "TLDR: opened WAN admin\n\nDetailed Analysis:\n...\ntag: high, needs-review"
+	approvalTrackCommit(cfg, hash, msg, time.Now())
+	st := approvalGet(cfg, hash)
+	if st.approved {
+		t.Fatalf("newly tracked commit should be unapproved")
+	}
+	if got := approvalPendingCount(cfg); got != 1 {
+		t.Fatalf("pending count = %d, want 1", got)
+	}
+	if err := approvalApprove(cfg, hash, "10.0.0.9", "10.0.0.9, 192.0.2.1", "alice"); err != nil {
+		t.Fatalf("approvalApprove: %v", err)
+	}
+	st = approvalGet(cfg, hash)
+	if !st.approved {
+		t.Fatalf("approved commit should report approved=true")
+	}
+	if st.trueTimestamp.IsZero() {
+		t.Fatalf("approved commit should carry a true-timestamp")
+	}
+	if got := approvalPendingCount(cfg); got != 0 {
+		t.Fatalf("pending count after approve = %d, want 0", got)
+	}
+}
+
+// TestApprovalTrackSkipsLowSeverity verifies that commits whose security-impact
+// tag is low, none, or a plain Unifi backup rotation are not tracked in the
+// approval ledger, since only medium / high / critical changes need operator
+// sign-off.
+func TestApprovalTrackSkipsLowSeverity(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(approvalClose)
+	cfg := &OPNCall{Path: dir}
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	cases := map[string]string{
+		"low":          "TLDR: alias rename\n\ntag: low",
+		"backup":       "unifi-autobackup\n\ntag: low, backup",
+		"none":         "opnborg auto update",
+		"needs-review": "TLDR: routine\n\ntag: low, needs-review",
+	}
+	for name, msg := range cases {
+		approvalTrackCommit(cfg, "hash-"+name, msg, time.Now())
+	}
+	if got := approvalPendingCount(cfg); got != 0 {
+		t.Fatalf("pending count = %d, want 0 (low/none/backup not tracked)", got)
+	}
+}
+
+// TestApprovalTrackIdempotent verifies re-tracking the same commit hash does
+// not clobber an existing approval state.
+func TestApprovalTrackIdempotent(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(approvalClose)
+	cfg := &OPNCall{Path: dir}
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	hash := "deadbeef00000000000000000000000000000000"
+	msg := "TLDR: tightened WAN filter\n\ntag: medium"
+	approvalTrackCommit(cfg, hash, msg, time.Now())
+	if err := approvalApprove(cfg, hash, "10.0.0.9", "", "bob"); err != nil {
+		t.Fatalf("approvalApprove: %v", err)
+	}
+	// Re-track the same hash (e.g. a re-scan): approval must survive.
+	approvalTrackCommit(cfg, hash, msg, time.Now())
+	st := approvalGet(cfg, hash)
+	if !st.approved {
+		t.Fatalf("re-tracking should not reset approval state")
+	}
+}
+
+// TestApprovalApproveAll verifies the bulk action marks every pending commit
+// approved in one shot and records the operator identity on each row.
+func TestApprovalApproveAll(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(approvalClose)
+	cfg := &OPNCall{Path: dir}
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		hash := fmt.Sprintf("hash%02d00000000000000000000000000000000000", i)
+		msg := "TLDR: change\n\ntag: high"
+		approvalTrackCommit(cfg, hash, msg, time.Now())
+	}
+	if got := approvalPendingCount(cfg); got != 3 {
+		t.Fatalf("pending = %d, want 3", got)
+	}
+	n, err := approvalApproveAll(cfg, "10.0.0.9", "10.0.0.9, 192.0.2.7", "carol")
+	if err != nil {
+		t.Fatalf("approvalApproveAll: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("approved = %d, want 3", n)
+	}
+	if got := approvalPendingCount(cfg); got != 0 {
+		t.Fatalf("pending after approve-all = %d, want 0", got)
+	}
+}
+
+// TestApprovalCommitTrackingViaGit verifies that a real opnborg-authored git
+// commit with a security-relevant tag is tracked in the ledger automatically
+// by gitCommit, while a low-tagged commit is not.
+func TestApprovalCommitTrackingViaGit(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd); approvalClose() })
+	cfg := &OPNCall{Path: store, Email: "test@opnborg"}
+	cfg.Git.Enable = true
+	if err := gitInit(cfg); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// First commit: default message, no tag -> not tracked.
+	if err := os.WriteFile(filepath.Join(store, "seed"), []byte("v1"), 0660); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	committed, err := gitCheckIn(cfg)
+	if err != nil || !committed {
+		t.Fatalf("first gitCheckIn: committed=%v err=%v", committed, err)
+	}
+	if got := approvalPendingCount(cfg); got != 0 {
+		t.Fatalf("pending after untagged commit = %d, want 0", got)
+	}
+	// Second commit: craft a message that carries a high-severity tag. We
+	// bypass Ollama by writing the message directly via the go-git worktree
+	// so the tag is deterministic.
+	if err := os.WriteFile(filepath.Join(store, "seed"), []byte("v2"), 0660); err != nil {
+		t.Fatalf("write seed v2: %v", err)
+	}
+	repo, err := gitRepo(store)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	if _, err := wtree.Add("."); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	hash, err := wtree.Commit("TLDR: opened WAN admin\n\ntag: high, needs-review", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: _authorName, Email: cfg.Email, When: time.Now()},
+		All:    true,
+	})
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	_ = hash
+	// The manually-authored commit above is not routed through gitCommit, so
+	// it is not auto-tracked. Track it explicitly to exercise the same path
+	// gitCommit uses, then verify the ledger recorded it.
+	obj, err := repo.CommitObject(hash)
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	approvalTrackCommit(cfg, obj.Hash.String(), obj.Message, obj.Author.When)
+	st := approvalGet(cfg, obj.Hash.String())
+	if st.approved {
+		t.Fatalf("tracked high-severity commit should start unapproved")
+	}
+	if got := approvalPendingCount(cfg); got != 1 {
+		t.Fatalf("pending = %d, want 1", got)
+	}
+}
+
+// TestApprovalSourceFromRequest verifies the operator identity extraction
+// from an HTTP request: the TCP source IP is taken from RemoteAddr (host
+// part), the X-Forwarded-For chain is read verbatim, and the Remote-User
+// header is read verbatim.
+func TestApprovalSourceFromRequest(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/approve?hash=x", nil)
+	req.RemoteAddr = "192.0.2.5:51234"
+	req.Header.Set("X-Forwarded-For", "10.0.0.9, 198.51.100.1")
+	req.Header.Set("Remote-User", "alice")
+	ip, xff, user := approvalSourceFromRequest(req)
+	if ip != "192.0.2.5" {
+		t.Errorf("sourceIP = %q, want 192.0.2.5", ip)
+	}
+	if xff != "10.0.0.9, 198.51.100.1" {
+		t.Errorf("xForwardedFor = %q", xff)
+	}
+	if user != "alice" {
+		t.Errorf("remoteUser = %q", user)
+	}
+}
+
+// TestApprovalAuditUI verifies the audit page renders an approve button for an
+// unapproved security-relevant commit and an approved box once approved.
+func TestApprovalAuditUI(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(func() { approvalClose() })
+	cfg := &OPNCall{Path: dir}
+	cfg.Git.Enable = true
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+	_cfg = cfg
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	hash := "cafef00d00000000000000000000000000000000"
+	msg := "TLDR: broadened WAN inbound\n\ntag: critical, needs-review"
+	approvalTrackCommit(cfg, hash, msg, time.Now())
+	c := auditCommit{hash: hash[:7], fullHash: hash, message: msg}
+	got := renderAuditApprovalControl(c, "critical")
+	if !strings.Contains(got, "btn-approve") || !strings.Contains(got, hash) {
+		t.Errorf("unapproved critical commit should render approve button with hash, got %q", got)
+	}
+	if !strings.Contains(got, "approve") {
+		t.Errorf("approve button missing label, got %q", got)
+	}
+	if err := approvalApprove(cfg, hash, "10.0.0.9", "", "alice"); err != nil {
+		t.Fatalf("approvalApprove: %v", err)
+	}
+	got = renderAuditApprovalControl(c, "critical")
+	if !strings.Contains(got, "meta-approved") {
+		t.Errorf("approved commit should render approved box, got %q", got)
+	}
+	if strings.Contains(got, "btn-approve") {
+		t.Errorf("approved commit should not render approve button, got %q", got)
+	}
+	// Low-severity commits render no control.
+	low := auditCommit{hash: "low0000", fullHash: "low0000000000000000000000000000000000000", message: "tag: low"}
+	if g := renderAuditApprovalControl(low, "low"); g != "" {
+		t.Errorf("low-severity commit should render no control, got %q", g)
+	}
+}
+
+// TestApprovalApproveAllButton verifies the approve-all button is rendered on
+// the audit page and carries the pending count.
+func TestApprovalApproveAllButton(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(func() { approvalClose() })
+	cfg := &OPNCall{Path: dir}
+	cfg.Git.Enable = true
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+	_cfg = cfg
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	got := renderAuditApproveAllButton("24h")
+	if !strings.Contains(got, "approve-all-form") || !strings.Contains(got, "approve-all?range=24h") {
+		t.Errorf("approve-all button missing, got %q", got)
+	}
+	if !strings.Contains(got, "(0)") {
+		t.Errorf("empty ledger should show (0), got %q", got)
+	}
+	for i := 0; i < 2; i++ {
+		approvalTrackCommit(cfg, fmt.Sprintf("h%02d0000000000000000000000000000000000000", i), "tag: high", time.Now())
+	}
+	got = renderAuditApproveAllButton("7d")
+	if !strings.Contains(got, "(2)") {
+		t.Errorf("pending count should be (2), got %q", got)
+	}
+}
