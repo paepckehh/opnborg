@@ -61,6 +61,13 @@ const (
 	// message without consulting the model: the binary Unifi backup format is
 	// not human-readable, so an LLM summary adds no value.
 	_unifiBackupExt = ".unf"
+	// _unifiAutobackupSubject is the commit subject used when a changeset
+	// touches any file under the Unifi autoBackup store (a path containing
+	// the "unifi-autobackup" segment). Such changes are synced from the
+	// Unifi controller's autoBackup folder as opaque archives opnborg cannot
+	// meaningfully describe, so commit-message generation is skipped and the
+	// subject is set to this constant verbatim.
+	_unifiAutobackupSubject = "unifi-autobackup"
 )
 
 // _ollamaSystemPrompt is the persona and output contract sent to the model. It
@@ -355,6 +362,24 @@ func onlyUnifiChanges(status git.Status) bool {
 	return true
 }
 
+// hasUnifiAutobackupChange reports whether any changed file in the worktree
+// status lives under the Unifi autoBackup store, i.e. its path contains the
+// "unifi-autobackup" segment. opnborg syncs Unifi controller autoBackup
+// archives into the store as opaque files it cannot meaningfully describe, so
+// when such a file is part of a changeset the Ollama commit-message generation
+// is skipped entirely and the commit subject is set to
+// _unifiAutobackupSubject verbatim. This catches both pure-Unifi changesets
+// and mixed changesets where a Unifi autoBackup rotation lands in the same
+// commit as an OPNsense XML backup.
+func hasUnifiAutobackupChange(status git.Status) bool {
+	for p := range status {
+		if strings.Contains(p, _unifiAutobackupSubject) {
+			return true
+		}
+	}
+	return false
+}
+
 // fileDiffStat summarises a single changed file for the enriched diff. The
 // model uses it to ground its commit message in concrete change geometry
 // (which file, what kind of change, how big, which OPNsense XML sections are
@@ -645,15 +670,19 @@ If the analysis is empty or unintelligible, return exactly: TLDR: opnborg auto u
 // generateCommitMessage produces the commit message for an upcoming backup
 // commit. When Ollama-assisted generation is disabled (or the change set is
 // entirely Unifi .unf files) the default message _commitMsg is returned so the
-// commit proceeds without any network round-trip. When enabled, two REST
-// calls are made to the model: the first produces the exhaustive detailed
-// analysis (headline + in-depth security/impact review + trailing "tag:"
-// severity line), and the second distils that analysis into a single TLDR
-// sentence. The final commit message is assembled as the TLDR line on top,
-// a blank line, a "Detailed Analysis:" marker, and the full detailed analysis
-// underneath. On any error or empty response at either stage the default
-// message is used as a fallback so a model outage never blocks the backup
-// from being committed.
+// commit proceeds without any network round-trip. When the change set touches
+// any file under the Unifi autoBackup store (a path containing
+// "unifi-autobackup") the model generation is skipped and the commit subject
+// is set to _unifiAutobackupSubject verbatim, since those archives are opaque
+// Unifi controller rotations opnborg cannot meaningfully describe. When
+// enabled and the change set is describable, two REST calls are made to the
+// model: the first produces the exhaustive detailed analysis (headline +
+// in-depth security/impact review + trailing "tag:" severity line), and the
+// second distils that analysis into a single TLDR sentence. The final commit
+// message is assembled as the TLDR line on top, a blank line, a "Detailed
+// Analysis:" marker, and the full detailed analysis underneath. On any error
+// or empty response at either stage the default message is used as a fallback
+// so a model outage never blocks the backup from being committed.
 func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Worktree) string {
 	if !config.Ollama.Enable {
 		return _commitMsg
@@ -662,6 +691,9 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][STATUS][FAIL] " + err.Error())
 		return _commitMsg
+	}
+	if hasUnifiAutobackupChange(status) {
+		return _unifiAutobackupSubject
 	}
 	if onlyUnifiChanges(status) {
 		return _commitMsg

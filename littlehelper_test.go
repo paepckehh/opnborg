@@ -3151,6 +3151,35 @@ func TestOnlyUnifiChanges(t *testing.T) {
 	}
 }
 
+// TestHasUnifiAutobackupChange verifies that any changeset touching a file
+// whose path contains the "unifi-autobackup" segment is detected so the
+// Ollama commit-message generation is skipped and the subject is set to the
+// unifi-autobackup constant verbatim. This covers pure-Unifi changesets,
+// mixed Unifi+OPNsense changesets, and archive rotations alike; a changeset
+// with no Unifi autoBackup file must not match.
+func TestHasUnifiAutobackupChange(t *testing.T) {
+	cases := map[string]struct {
+		status git.Status
+		want   bool
+	}{
+		"empty":              {git.Status{}, false},
+		"unf-current":        {git.Status{"unifi-autobackup/current.unf": &git.FileStatus{}}, true},
+		"unf-archive":        {git.Status{"unifi-autobackup/.archive/2024/06/x.unf": &git.FileStatus{}}, true},
+		"unf-meta":           {git.Status{"unifi-autobackup/autobackup_meta.json": &git.FileStatus{}}, true},
+		"xml-only":           {git.Status{"fw01.lan/current.xml": &git.FileStatus{}}, false},
+		"mixed-unf-and-xml":  {git.Status{"unifi-autobackup/current.unf": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}}, true},
+		"mixed-meta-and-xml": {git.Status{"unifi-autobackup/autobackup_meta.json": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}}, true},
+		"unrelated-folder":   {git.Status{"fw01.lan/notes.xml": &git.FileStatus{}}, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := hasUnifiAutobackupChange(tc.status); got != tc.want {
+				t.Fatalf("hasUnifiAutobackupChange = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
 // the system persona, the output contract, the affected-server input line, and
 // the diff payload verbatim.
@@ -3277,8 +3306,8 @@ func TestGenerateCommitMessageUnifiBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worktree: %v", err)
 	}
-	if got := generateCommitMessage(config, repo, wtree); got != _commitMsg {
-		t.Errorf("unifi-only changeset must bypass Ollama and return default message, got %q", got)
+	if got := generateCommitMessage(config, repo, wtree); got != _unifiAutobackupSubject {
+		t.Errorf("unifi-only changeset must bypass Ollama and return the unifi-autobackup subject, got %q", got)
 	}
 }
 
