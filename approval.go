@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-git/go-git/v5"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,13 +35,14 @@ import (
 
 const (
 	// _approvalDBName is the on-disk filename of the approval ledger, placed
-	// at the root of the backup store. It is NOT gitignored: the ledger is
-	// version-controlled alongside the backups so an operator's approval
-	// history travels with the store. The auto-commit loop commits every
-	// ledger update (and its SQLite WAL sidecars approval.db-wal /
-	// approval.db-shm) with a short subject ("approval-db") via the
-	// hasApprovalDBChange bypass in ollama.go, so a ledger rotation never
-	// triggers a detailed Ollama commit message or self-tracks in the ledger.
+	// at the root of the backup store. It is gitignored (see _ignore in
+	// git.go): the ledger is a local-only runtime database and must never be
+	// added, evaluated, or committed by the opnborg commit cycle. The
+	// .gitignore carries an "approval.db*" glob so the main database and its
+	// SQLite WAL sidecars (approval.db-wal / approval.db-shm) all stay
+	// untracked. gitCommit additionally skips every approval-ledger path at
+	// staging time so a ledger update can never enter a commit even if a
+	// stale or hand-edited .gitignore failed to ignore it.
 	_approvalDBName = "approval.db"
 	// _approvalDriver is the database/sql driver name registered by
 	// modernc.org/sqlite (a pure-Go, CGO-free SQLite implementation, so the
@@ -136,6 +140,67 @@ func approvalDBHandle(storePath string) (*sql.DB, error) {
 		return h, nil
 	}
 	return approvalDBOpen(storePath)
+}
+
+// approvalDBExists reports whether the on-disk approval ledger file already
+// exists at the root of the backup store. It is used by gitInit to detect a
+// first-time ledger creation so the full storage-repo git history can be
+// scanned once to backfill every pre-existing security-relevant commit into
+// the freshly-created ledger. A stat error other than NotExist is treated as
+// "does not exist" so a transient FS problem never blocks the open.
+func approvalDBExists(storePath string) bool {
+	_, err := os.Stat(filepath.Join(storePath, _approvalDBName))
+	return err == nil
+}
+
+// approvalBackfillFromHistory walks the entire storage-repo git log (no time
+// window) and records every security-relevant commit (medium / high / critical
+// Ollama security-impact tag) in the approval ledger. It is invoked once from
+// gitInit when the ledger file is created for the first time, so commits that
+// predate the ledger feature (or whose tag was authored before
+// approvalTrackCommit was wired into gitCommit) are still surfaced for
+// operator triage. Re-tracking a commit already present is a safe no-op
+// (INSERT OR IGNORE) so the recorded approval state is never clobbered. The
+// walk is bounded by _auditCap so a huge history never stalls startup. A
+// missing repo, unborn HEAD, or un-openable ledger is a non-fatal no-op.
+func approvalBackfillFromHistory(config *OPNCall) {
+	if config == nil || config.Path == "" {
+		return
+	}
+	repo, err := git.PlainOpen(config.Path)
+	if err != nil {
+		displayChan <- []byte("[APPROVAL][BACKFILL][SKIP] no repo: " + err.Error())
+		return
+	}
+	head, err := repo.Head()
+	if err != nil {
+		// unborn HEAD: repo exists but has no commits yet; nothing to scan.
+		return
+	}
+	iter, err := repo.Log(&git.LogOptions{From: head.Hash()})
+	if err != nil {
+		displayChan <- []byte("[APPROVAL][BACKFILL][FAIL] " + err.Error())
+		return
+	}
+	defer iter.Close()
+	var n int
+	for {
+		c, err := iter.Next()
+		if err != nil {
+			break
+		}
+		if n >= _auditCap {
+			break
+		}
+		n++
+		msg := strings.TrimSpace(c.Message)
+		severity, _, _ := auditTag(msg)
+		if !isSecurityRelevantTag(severity) {
+			continue
+		}
+		approvalTrackCommit(config, c.Hash.String(), msg, c.Author.When)
+	}
+	displayChan <- []byte("[APPROVAL][BACKFILL][FINISH] scanned " + fmt.Sprintf("%d", n) + " commits")
 }
 
 // approvalClose closes the ledger. Used only by tests to release the file

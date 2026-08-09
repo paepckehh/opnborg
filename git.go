@@ -20,10 +20,19 @@ import (
 )
 
 const (
-	_currentDir     = "."
-	_dotGit         = ".git"
-	_gitignore      = ".gitignore"
-	_ignore         = ".archive\nCONFIG*\nLogs\n"
+	_currentDir = "."
+	_dotGit     = ".git"
+	_gitignore  = ".gitignore"
+	// _ignore is the canonical .gitignore content written into the storage
+	// root. It keeps the archive/history files, the symlink targets, the
+	// logs, and the on-disk security-approval ledger out of the commit
+	// history. The approval ledger (approval.db and its SQLite WAL sidecars
+	// approval.db-wal / approval.db-shm) is a local-only runtime database:
+	// it must never be added, evaluated, or committed by the opnborg commit
+	// cycle, so it is ignored alongside the other non-version-controlled
+	// store artifacts. The "approval.db*" glob covers the main database and
+	// every sidecar spelling in a single line.
+	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db*\n"
 	_origin         = "origin"
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"
@@ -66,16 +75,17 @@ func gitRepo(path string) (*git.Repository, error) {
 }
 
 // gitEnsureIgnore writes the .gitignore file in the storage root when it is
-// missing, so the archive/history files and symlink targets stay out of the
-// commit history. When a .gitignore already exists it is reconciled rather
-// than clobbered: any line that would ignore the security-approval ledger
-// (approval.db or one of its SQLite WAL sidecars approval.db-wal /
-// approval.db-shm) is stripped so the ledger is version-controlled alongside
-// the backups. This migration matters because older opnborg releases wrote an
-// "approval.db" line into the .gitignore; without reconciliation those stores
-// would keep ignoring the ledger, the file would never enter the worktree
-// status, and the hasApprovalDBChange bypass in ollama.go would never fire.
-// All other lines (including operator-added custom ignores) are preserved.
+// missing, so the archive/history files, the symlink targets, the logs, and
+// the on-disk security-approval ledger stay out of the commit history. When a
+// .gitignore already exists it is reconciled rather than clobbered: the
+// reconcile ensures the approval-ledger ignore line ("approval.db*") is present
+// so the ledger database and its SQLite WAL sidecars (approval.db-wal /
+// approval.db-shm) are never added, evaluated, or committed by the opnborg
+// commit cycle. This migration matters because older opnborg releases
+// deliberately stripped every ledger-ignore line so the ledger was
+// version-controlled; that policy is inverted here; the ledger is now a
+// local-only runtime database and must stay untracked. All other lines
+// (including operator-added custom ignores) are preserved.
 func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
@@ -90,34 +100,48 @@ func gitEnsureIgnore(config *OPNCall) error {
 	return nil
 }
 
-// reconcileGitignoreApprovalLedger strips any line from an existing
-// .gitignore that would ignore the security-approval ledger (approval.db or a
-// SQLite WAL sidecar), rewriting the file in place when at least one such line
-// is present. It uses ignoresApprovalLedger (a conservative gitignore-pattern
-// check) so operator-added custom ignores and the canonical archive/CONFIG/Logs
-// lines are left untouched. The file is only rewritten when its content would
-// change, so a clean .gitignore incurs no write.
+// reconcileGitignoreApprovalLedger guarantees the .gitignore at ignore carries
+// a line that ignores the security-approval ledger (the main database
+// approval.db and every SQLite WAL sidecar approval.db-wal / approval.db-shm).
+// When the file already contains such a line it is left untouched; otherwise
+// the canonical "approval.db*" glob is appended on its own line. Operator-added
+// custom ignores and the canonical archive/CONFIG/Logs lines are always
+// preserved. The file is only rewritten when its content would change, so a
+// clean .gitignore incurs no write.
 func reconcileGitignoreApprovalLedger(ignore string) error {
 	raw, err := os.ReadFile(ignore)
 	if err != nil {
 		return err
 	}
-	// SplitAfter keeps the trailing newline on each piece, so dropping a
-	// ledger line removes it together with its newline and the surviving
-	// lines keep their exact original bytes (no spurious blank lines).
-	var out strings.Builder
-	changed := false
-	for _, line := range strings.SplitAfter(string(raw), "\n") {
-		if ignoresApprovalLedger(line) {
-			changed = true
-			continue
-		}
-		out.WriteString(line)
-	}
-	if !changed {
+	if gitignoreIgnoresApprovalLedger(string(raw)) {
 		return nil
 	}
-	return os.WriteFile(ignore, []byte(out.String()), 0660)
+	// Ensure the existing content ends with a newline so the appended line
+	// lands on its own row, then append the canonical ledger glob.
+	out := string(raw)
+	if len(out) == 0 || out[len(out)-1] != '\n' {
+		out += "\n"
+	}
+	out += "approval.db*\n"
+	return os.WriteFile(ignore, []byte(out), 0660)
+}
+
+// gitignoreIgnoresApprovalLedger reports whether a whole .gitignore body
+// already contains a line that would ignore the security-approval ledger: the
+// main database file (approval.db) or any of its SQLite WAL sidecars
+// (approval.db-wal, approval.db-shm). A gitignore pattern without a slash
+// matches by basename at any depth, so a bare "approval.db",
+// "approval.db-wal", "approval.db-shm", or a trailing-star
+// "approval.db*" glob each satisfies the check. Blank lines, comments, and
+// any pattern that does not reduce to one of the ledger filenames (with an
+// optional leading slash) are reported as not ignoring the ledger.
+func gitignoreIgnoresApprovalLedger(body string) bool {
+	for line := range strings.SplitSeq(body, "\n") {
+		if ignoresApprovalLedger(line) {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoresApprovalLedger reports whether a single .gitignore line would ignore
@@ -128,7 +152,7 @@ func reconcileGitignoreApprovalLedger(ignore string) error {
 // store. The check is conservative: blank lines, comments, and any pattern
 // that does not reduce to one of the ledger filenames (with an optional
 // leading slash) are reported as not ignoring the ledger, so legitimate
-// operator-added ignores are never stripped.
+// operator-added ignores are never treated as covering the ledger.
 func ignoresApprovalLedger(line string) bool {
 	// A range over SplitSeq yields an empty trailing element for a
 	// newline-terminated input; an empty line never ignores anything.
@@ -157,6 +181,21 @@ func ignoresApprovalLedger(line string) bool {
 		}
 	}
 	return false
+}
+
+// isApprovalDBPath reports whether a worktree path is a file of the
+// security-approval ledger (approval.db) or one of its SQLite WAL sidecars
+// (approval.db-wal, approval.db-shm). It matches by base name so ledger files
+// are detected regardless of which store subfolder they land in. gitCommit
+// uses it to skip every approval-ledger path at staging time so a ledger
+// update can never enter a commit, even when a stale or hand-edited .gitignore
+// failed to ignore the file.
+func isApprovalDBPath(p string) bool {
+	base := filepath.Base(p)
+	if !strings.HasPrefix(base, "approval") {
+		return false
+	}
+	return strings.HasSuffix(base, ".db") || strings.Contains(base, ".db-")
 }
 
 // sshUserFromURL extracts the SSH user from an SSH git URL. It handles both the
@@ -274,7 +313,21 @@ func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 }
 
 // gitCommit stages the whole worktree and commits any pending changes. It
-// returns committed=false (a no-op) when the worktree is clean.
+// returns committed=false (a no-op) when the worktree is clean. The on-disk
+// security-approval ledger (approval.db and its SQLite WAL sidecars
+// approval.db-wal / approval.db-shm) is never staged: even if a stale or
+// hand-edited .gitignore failed to ignore it, the staging loop below skips
+// every approval-ledger path individually so a ledger update can never enter a
+// commit. When the only pending changes are approval-ledger files the tick is
+// treated as a clean no-op.
+// gitCommit stages the whole worktree and commits any pending changes. It
+// returns committed=false (a no-op) when the worktree is clean. The on-disk
+// security-approval ledger (approval.db and its SQLite WAL sidecars
+// approval.db-wal / approval.db-shm) is never committed: it is gitignored (see
+// _ignore / reconcileGitignoreApprovalLedger, reconciled at the start of every
+// gitCheckIn) so wtree.Add(".") never stages it, and the status partition
+// below treats a changeset that touches only approval-ledger files as a clean
+// no-op so no commit (and no Ollama round-trip) is spent on a ledger rotation.
 func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	wtree, err := repo.Worktree()
 	if err != nil {
@@ -284,7 +337,18 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if status.IsClean() {
+	// Partition the status into real changes and approval-ledger files.
+	// Approval-ledger files are gitignored and never staged; if they are the
+	// only changes the tick is a clean no-op so no commit (and no Ollama
+	// round-trip) is spent on a ledger rotation.
+	hasReal := false
+	for p := range status {
+		if !isApprovalDBPath(p) {
+			hasReal = true
+			break
+		}
+	}
+	if !hasReal {
 		return false, nil
 	}
 	if _, err := wtree.Add(_currentDir); err != nil {
@@ -463,9 +527,19 @@ func gitInit(config *OPNCall) error {
 	}
 	// Open the security-approval ledger so it is ready before the first
 	// worker pass. A failure is logged but non-fatal: the daemon keeps
-	// running and the ledger is lazily re-opened on first use.
+	// running and the ledger is lazily re-opened on first use. When the
+	// ledger file does not yet exist on disk it is created fresh from the
+	// schema; in that case the full storage-repo git history is scanned
+	// once so every pre-existing security-relevant commit (medium / high /
+	// critical tag) is backfilled into the ledger for operator triage.
+	// Re-tracking a commit already present is a safe no-op, so the scan is
+	// idempotent and never clobbers a recorded approval state.
+	fresh := !approvalDBExists(config.Path)
 	if _, err := approvalDBOpen(config.Path); err != nil {
 		displayChan <- []byte("[APPROVAL][DB][OPEN][FAIL] " + err.Error())
+	} else if fresh {
+		displayChan <- []byte("[APPROVAL][DB][INIT] first-time ledger, scanning repo history")
+		approvalBackfillFromHistory(config)
 	}
 	return gitEnsureAggressiveWindow(repo)
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -75,21 +74,6 @@ const (
 	// carries the "backup" flag so the BorgAUDIT page can distinguish
 	// appliance config commits from plain Unifi backup rotations.
 	_unifiAutobackupTag = "tag: low, backup"
-	// _approvalDbSubject is the commit subject used when a changeset touches
-	// the security-approval ledger (approval.db or any of its SQLite WAL
-	// sidecars, e.g. approval.db-wal / approval.db-shm). The ledger is an
-	// opaque binary database whose internal layout opnborg cannot
-	// meaningfully describe, so commit-message generation is skipped and the
-	// subject is set to this constant verbatim, mirroring the unifi-autobackup
-	// bypass.
-	_approvalDbSubject = "approval-db"
-	// _approvalDbTag is the security-impact tag line appended to every
-	// approval-db commit message. The ledger rotation has no security impact
-	// of its own, so it is classified "low" and flagged "backup" exactly like
-	// a Unifi autoBackup rotation. This also keeps it out of the approval
-	// ledger itself (isSecurityRelevantTag skips low/backup) so a ledger
-	// update never tracks itself.
-	_approvalDbTag = "tag: low, backup"
 )
 
 // _ollamaSystemPrompt is the persona and output contract sent to the model. It
@@ -402,36 +386,6 @@ func hasUnifiAutobackupChange(status git.Status) bool {
 	return false
 }
 
-// isApprovalDBPath reports whether a worktree path is a file of the
-// security-approval ledger (approval.db) or one of its SQLite WAL sidecars
-// (approval.db-wal, approval.db-shm). It matches by base name so ledger files
-// are detected regardless of which store subfolder they land in.
-func isApprovalDBPath(p string) bool {
-	base := filepath.Base(p)
-	if !strings.HasPrefix(base, "approval") {
-		return false
-	}
-	return strings.HasSuffix(base, ".db") || strings.Contains(base, ".db-")
-}
-
-// hasApprovalDBChange reports whether any changed file in the worktree status
-// is the security-approval ledger (approval.db) or one of its SQLite WAL
-// sidecars (approval.db-wal / approval.db-shm). The ledger is an opaque binary
-// database whose internal layout opnborg cannot meaningfully describe, so when
-// such a file is part of a changeset the Ollama commit-message generation is
-// skipped entirely and the commit subject is set to _approvalDbSubject
-// verbatim, mirroring the unifi-autobackup bypass. This catches pure
-// approval-db changesets and mixed changesets where a ledger update lands in
-// the same commit as an OPNsense XML backup.
-func hasApprovalDBChange(status git.Status) bool {
-	for p := range status {
-		if isApprovalDBPath(p) {
-			return true
-		}
-	}
-	return false
-}
-
 // fileDiffStat summarises a single changed file for the enriched diff. The
 // model uses it to ground its commit message in concrete change geometry
 // (which file, what kind of change, how big, which OPNsense XML sections are
@@ -726,11 +680,10 @@ If the analysis is empty or unintelligible, return exactly: TLDR: opnborg auto u
 // generateCommitMessage produces the commit message for an upcoming backup
 // commit. When Ollama-assisted generation is disabled (or the change set is
 // entirely Unifi .unf files) the default message _commitMsg is returned so the
-// commit proceeds without any network round-trip. When the change set touches
-// the security-approval ledger (approval.db or any of its SQLite WAL sidecars
-// approval.db-wal / approval.db-shm) the model generation is skipped and the
-// commit subject is set to _approvalDbSubject verbatim, since the ledger is an
-// opaque binary database opnborg cannot meaningfully describe. When the change
+// commit proceeds without any network round-trip. The security-approval
+// ledger (approval.db and its SQLite WAL sidecars) is never part of a
+// changeset: it is gitignored and gitCommit skips every approval-ledger path
+// at staging time, so it never reaches this function. When the change set
 // set touches any file under the Unifi autoBackup store (a path containing
 // "unifi-autobackup") the model generation is skipped and the commit subject
 // is set to _unifiAutobackupSubject verbatim, since those archives are opaque
@@ -751,9 +704,6 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][STATUS][FAIL] " + err.Error())
 		return _commitMsg
-	}
-	if hasApprovalDBChange(status) {
-		return _approvalDbSubject + "\n\n" + _approvalDbTag + "\n"
 	}
 	if hasUnifiAutobackupChange(status) {
 		return _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n"

@@ -2298,14 +2298,14 @@ func TestGitInitCreatesRepoAndIgnore(t *testing.T) {
 	}
 }
 
-// TestGitEnsureIgnoreStripsStaleApprovalLedger verifies that gitEnsureIgnore
-// reconciles a pre-existing .gitignore left over from an older opnborg
-// release (which wrote an "approval.db" line) by stripping the ledger-ignore
-// line, so the security-approval ledger and its SQLite WAL sidecars enter the
-// worktree status and the hasApprovalDBChange bypass can fire. Operator-added
-// custom ignore lines and the canonical archive/CONFIG/Logs lines must survive
-// the reconcile untouched.
-func TestGitEnsureIgnoreStripsStaleApprovalLedger(t *testing.T) {
+// TestGitEnsureIgnoreEnsuresApprovalLedger verifies that gitEnsureIgnore
+// reconciles a pre-existing .gitignore so it ignores the security-approval
+// ledger (approval.db and its SQLite WAL sidecars). The canonical
+// "approval.db*" glob is appended when missing so the ledger database stays
+// out of the commit history; operator-added custom ignore lines and comments
+// survive the reconcile untouched. An already-ignoring .gitignore is left
+// unchanged (idempotent).
+func TestGitEnsureIgnoreEnsuresApprovalLedger(t *testing.T) {
 	ensureDisplayDrained(t)
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -2315,11 +2315,9 @@ func TestGitEnsureIgnoreStripsStaleApprovalLedger(t *testing.T) {
 
 	store := t.TempDir()
 	ignorePath := filepath.Join(store, _gitignore)
-	// Seed a stale .gitignore exactly as written by opnborg releases before
-	// the approval-ledger bypass: the canonical lines plus the legacy
-	// "approval.db" ignore, plus an operator-added custom ignore and a
-	// comment, to prove the reconcile is surgical.
-	stale := ".archive\nCONFIG*\nLogs\napproval.db\n# keep my logs\nmy-stuff/\n"
+	// Seed a .gitignore without any approval-ledger ignore line: the
+	// canonical lines plus an operator-added custom ignore and a comment.
+	stale := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n"
 	if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
 		t.Fatalf("write stale .gitignore: %v", err)
 	}
@@ -2331,7 +2329,7 @@ func TestGitEnsureIgnoreStripsStaleApprovalLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n"
+	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\napproval.db*\n"
 	if string(got) != want {
 		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
 	}
@@ -2345,29 +2343,35 @@ func TestGitEnsureIgnoreStripsStaleApprovalLedger(t *testing.T) {
 	}
 }
 
-// TestGitEnsureIgnoreStripsApprovalLedgerSidecars verifies the reconcile also
-// removes .gitignore lines targeting the SQLite WAL sidecars
-// (approval.db-wal / approval.db-shm) and a trailing-star "approval.db*"
-// glob, while preserving everything else.
-func TestGitEnsureIgnoreStripsApprovalLedgerSidecars(t *testing.T) {
+// TestGitEnsureIgnoreKeepsExistingApprovalLedgerGlobs verifies the reconcile
+// leaves a .gitignore untouched when it already ignores the ledger via any of
+// the recognised spellings (bare filename, sidecars, or a trailing-star glob),
+// so an operator-configured ignore is never duplicated or rewritten.
+func TestGitEnsureIgnoreKeepsExistingApprovalLedgerGlobs(t *testing.T) {
 	ensureDisplayDrained(t)
 	cwd, _ := os.Getwd()
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	store := t.TempDir()
-	ignorePath := filepath.Join(store, _gitignore)
-	stale := ".archive\napproval.db-wal\napproval.db-shm\napproval.db*\nCONFIG*\nLogs\n"
-	if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	config := &OPNCall{Path: store, Email: "test@opnborg"}
-	if err := gitEnsureIgnore(config); err != nil {
-		t.Fatalf("gitEnsureIgnore: %v", err)
-	}
-	got, _ := os.ReadFile(ignorePath)
-	want := ".archive\nCONFIG*\nLogs\n"
-	if string(got) != want {
-		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
+	for name, body := range map[string]string{
+		"bare":    ".archive\napproval.db\nCONFIG*\nLogs\n",
+		"sidecar": ".archive\napproval.db-wal\napproval.db-shm\nCONFIG*\nLogs\n",
+		"glob":    ".archive\napproval.db*\nCONFIG*\nLogs\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := t.TempDir()
+			ignorePath := filepath.Join(store, _gitignore)
+			if err := os.WriteFile(ignorePath, []byte(body), 0660); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			config := &OPNCall{Path: store, Email: "test@opnborg"}
+			if err := gitEnsureIgnore(config); err != nil {
+				t.Fatalf("gitEnsureIgnore: %v", err)
+			}
+			got, _ := os.ReadFile(ignorePath)
+			if string(got) != body {
+				t.Errorf("reconciled .gitignore = %q, want unchanged %q", got, body)
+			}
+		})
 	}
 }
 
@@ -3320,34 +3324,105 @@ func TestIsApprovalDBPath(t *testing.T) {
 	}
 }
 
-// TestHasApprovalDBChange verifies that any changeset touching the
-// security-approval ledger (approval.db or one of its SQLite WAL sidecars)
-// is detected so the Ollama commit-message generation is skipped and the
-// subject is set to the approval-db constant verbatim. This covers pure
-// ledger changesets, mixed ledger+OPNsense changesets, and every sidecar
-// naming variant; a changeset with no ledger file must not match.
-func TestHasApprovalDBChange(t *testing.T) {
-	cases := map[string]struct {
-		status git.Status
-		want   bool
-	}{
-		"empty":            {git.Status{}, false},
-		"approval-db":      {git.Status{"approval.db": &git.FileStatus{}}, true},
-		"approval-db-wal":  {git.Status{"approval.db-wal": &git.FileStatus{}}, true},
-		"approval-db-shm":  {git.Status{"approval.db-shm": &git.FileStatus{}}, true},
-		"approval-shm-db":  {git.Status{"approval-shm.db": &git.FileStatus{}}, true},
-		"xml-only":         {git.Status{"fw01.lan/current.xml": &git.FileStatus{}}, false},
-		"mixed-db-and-xml": {git.Status{"approval.db": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}}, true},
-		"unf-only":         {git.Status{"unifi-autobackup/current.unf": &git.FileStatus{}}, false},
-		"unrelated-folder": {git.Status{"fw01.lan/notes.xml": &git.FileStatus{}}, false},
+// TestGitCommitSkipsApprovalLedger verifies that gitCommit never stages or
+// commits the security-approval ledger (approval.db or any SQLite WAL sidecar).
+// A pure ledger changeset is a clean no-op (no commit), and a mixed
+// ledger+XML changeset commits only the XML file, leaving the ledger file
+// unstaged in the worktree. This is the belt-and-suspenders guard that
+// enforces the gitignore policy even when a .gitignore is missing or stale.
+func TestGitCommitSkipsApprovalLedger(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
 	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			if got := hasApprovalDBChange(tc.status); got != tc.want {
-				t.Fatalf("hasApprovalDBChange = %v, want %v", got, tc.want)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Subcase 1: a pure approval-ledger changeset must not produce a commit.
+	t.Run("pure-ledger-no-commit", func(t *testing.T) {
+		store := t.TempDir()
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitInit(config); err != nil {
+			t.Fatalf("gitInit: %v", err)
+		}
+		// Seed an initial commit so HEAD exists, then write only ledger files.
+		if err := os.WriteFile(filepath.Join(store, "seed"), []byte("seed"), 0660); err != nil {
+			t.Fatalf("write seed: %v", err)
+		}
+		if _, err := gitCheckIn(config); err != nil {
+			t.Fatalf("initial gitCheckIn: %v", err)
+		}
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if err := os.WriteFile(filepath.Join(store, name), []byte("ledger-blob-"+name), 0660); err != nil {
+				t.Fatalf("write %s: %v", name, err)
 			}
-		})
-	}
+		}
+		committed, err := gitCheckIn(config)
+		if err != nil {
+			t.Fatalf("gitCheckIn on pure-ledger change: %v", err)
+		}
+		if committed {
+			t.Fatalf("pure approval-ledger changeset must not produce a commit")
+		}
+	})
+
+	// Subcase 2: a mixed ledger+XML changeset commits the XML but never the
+	// ledger file, which must remain unstaged in the worktree afterwards.
+	// gitCommit is exercised directly (rather than via gitCheckIn) to avoid
+	// the unrelated go-git v5.19.2 RepackObjects "packfile not found" defect
+	// that fires on a second commit+gc cycle; the staging/skip policy under
+	// test lives entirely in gitCommit, not in gitGC.
+	t.Run("mixed-keeps-ledger-unstaged", func(t *testing.T) {
+		store := t.TempDir()
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitInit(config); err != nil {
+			t.Fatalf("gitInit: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+			t.Fatalf("write xml: %v", err)
+		}
+		if _, err := gitCheckIn(config); err != nil {
+			t.Fatalf("initial gitCheckIn: %v", err)
+		}
+		// Now change both the XML and the ledger file in the same tick.
+		if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<b/>"), 0660); err != nil {
+			t.Fatalf("write xml2: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, "approval.db"), []byte("ledger-blob"), 0660); err != nil {
+			t.Fatalf("write approval.db: %v", err)
+		}
+		repo, err := gitRepo(config.Path)
+		if err != nil {
+			t.Fatalf("gitRepo: %v", err)
+		}
+		committed, err := gitCommit(config, repo)
+		if err != nil {
+			t.Fatalf("gitCommit mixed: %v", err)
+		}
+		if !committed {
+			t.Fatalf("mixed changeset with real XML must produce a commit")
+		}
+		// The ledger file must remain in the worktree as an untracked/ignored
+		// file and never appear in the HEAD tree.
+		head, err := repo.Head()
+		if err != nil {
+			t.Fatalf("Head: %v", err)
+		}
+		headCommit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			t.Fatalf("CommitObject: %v", err)
+		}
+		tree, err := headCommit.Tree()
+		if err != nil {
+			t.Fatalf("Tree: %v", err)
+		}
+		if _, err := tree.FindEntry("approval.db"); err == nil {
+			t.Errorf("approval.db must never be committed into the HEAD tree")
+		}
+	})
 }
 
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
@@ -3482,11 +3557,13 @@ func TestGenerateCommitMessageUnifiBypass(t *testing.T) {
 	}
 }
 
-// TestGenerateCommitMessageApprovalDBBypass verifies that a changeset touching
-// the security-approval ledger (approval.db or any SQLite WAL sidecar) is
-// committed with the short approval-db subject and its low/backup tag, so no
-// network round-trip to Ollama is attempted for the opaque binary database.
-func TestGenerateCommitMessageApprovalDBBypass(t *testing.T) {
+// TestGenerateCommitMessageIgnoresApprovalLedger verifies that the
+// security-approval ledger (approval.db and its SQLite WAL sidecars) never
+// reaches Ollama commit-message generation: the files are gitignored so they
+// do not appear in the worktree status, and generateCommitMessage returns the
+// default message with no network round-trip. This is the generation-side
+// counterpart to TestGitCommitSkipsApprovalLedger.
+func TestGenerateCommitMessageIgnoresApprovalLedger(t *testing.T) {
 	ensureDisplayDrained(t)
 	store := t.TempDir()
 	cwd, err := os.Getwd()
@@ -3496,23 +3573,23 @@ func TestGenerateCommitMessageApprovalDBBypass(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 	config := &OPNCall{Path: store, Email: "test@opnborg"}
 	config.Git.Enable = true
-	// Ollama pointed at an unreachable port: the test asserts the bypass
-	// directly by checking the message equals the approval-db subject and the
-	// generation is not even triggered.
+	// Ollama pointed at an unreachable port: the test asserts the ledger
+	// files never reach generation, so the message is the default and no
+	// network call is attempted.
 	config.Ollama.Enable = true
 	config.Ollama.URL = "http://127.0.0.1:1"
 	config.Ollama.Model = "test-model"
 	if err := gitInit(config); err != nil {
 		t.Fatalf("gitInit: %v", err)
 	}
-	// Seed an initial commit so HEAD exists, then add an approval.db change.
+	// Seed an initial commit so HEAD exists, then add only approval-ledger
+	// files. They are gitignored, so the worktree status stays clean.
 	if err := os.WriteFile(filepath.Join(store, "seed"), []byte("seed"), 0660); err != nil {
 		t.Fatalf("write seed: %v", err)
 	}
 	if _, err := gitCheckIn(config); err != nil {
 		t.Fatalf("initial gitCheckIn: %v", err)
 	}
-	// Stage a pure approval-db change: the main ledger plus its WAL sidecars.
 	for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
 		if err := os.WriteFile(filepath.Join(store, name), []byte("ledger-blob-"+name), 0660); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -3526,9 +3603,17 @@ func TestGenerateCommitMessageApprovalDBBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worktree: %v", err)
 	}
-	wantMsg := _approvalDbSubject + "\n\n" + _approvalDbTag + "\n"
-	if got := generateCommitMessage(config, repo, wtree); got != wantMsg {
-		t.Errorf("approval-db changeset must bypass Ollama and return the approval-db subject with its low/backup tag, got %q", got)
+	status, err := wtree.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	for p := range status {
+		if isApprovalDBPath(p) {
+			t.Errorf("approval-ledger file %q must not appear in worktree status (gitignored)", p)
+		}
+	}
+	if got := generateCommitMessage(config, repo, wtree); got != _commitMsg {
+		t.Errorf("approval-ledger files must never reach Ollama; want default message %q, got %q", _commitMsg, got)
 	}
 }
 
@@ -4849,6 +4934,104 @@ func TestApprovalTrackIdempotent(t *testing.T) {
 	st := approvalGet(cfg, hash)
 	if !st.approved {
 		t.Fatalf("re-tracking should not reset approval state")
+	}
+}
+
+// TestApprovalBackfillFromHistory verifies that a freshly-created approval
+// ledger is backfilled from the storage-repo git history: every
+// security-relevant commit (medium / high / critical tag) is tracked, while
+// low/none/backup commits are skipped. Re-tracking is idempotent so an
+// approval recorded before the scan survives. This exercises the
+// gitInit -> approvalDBExists -> approvalBackfillFromHistory wiring that runs
+// once when the ledger file does not yet exist on disk.
+func TestApprovalBackfillFromHistory(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	t.Cleanup(approvalClose)
+
+	store := t.TempDir()
+	cfg := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(cfg); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// Commit a low-severity change (must not be tracked) and a high-severity
+	// change (must be tracked). Commit messages carry the trailing tag: line
+	// the backfill scanner parses via auditTag.
+	if err := os.WriteFile(filepath.Join(store, "a.xml"), []byte("<a/>"), 0660); err != nil {
+		t.Fatalf("write a: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	// First commit: low severity.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<low/>"), 0660); err != nil {
+		t.Fatalf("write low: %v", err)
+	}
+	if err := commitWithMessage(cfg, "TLDR: routine alias rename\n\ntag: low"); err != nil {
+		t.Fatalf("commit low: %v", err)
+	}
+	// Second commit: high severity.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<high/>"), 0660); err != nil {
+		t.Fatalf("write high: %v", err)
+	}
+	if err := commitWithMessage(cfg, "TLDR: opened WAN admin\n\ntag: high, needs-review"); err != nil {
+		t.Fatalf("commit high: %v", err)
+	}
+	// Third commit: critical severity.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<crit/>"), 0660); err != nil {
+		t.Fatalf("write crit: %v", err)
+	}
+	if err := commitWithMessage(cfg, "TLDR: removed default drop\n\ntag: critical"); err != nil {
+		t.Fatalf("commit crit: %v", err)
+	}
+
+	// gitInit above already opened a fresh ledger (and ran an initial
+	// backfill scan that found no commits yet). The three commits above were
+	// authored via commitWithMessage, which bypasses approvalTrackCommit, so
+	// none of them are tracked yet. Re-running the backfill scan now must
+	// pick up the two security-relevant commits (high + critical) and skip
+	// the low one.
+	approvalBackfillFromHistory(cfg)
+	if !approvalDBExists(store) {
+		t.Fatalf("ledger must exist after backfill")
+	}
+	// Two security-relevant commits (high + critical) must be tracked; the
+	// low commit must not.
+	if got := approvalPendingCount(cfg); got != 2 {
+		t.Fatalf("pending after backfill = %d, want 2 (high + critical only)", got)
+	}
+}
+
+// commitWithMessage stages the whole worktree and commits with the given
+// message. It is a test helper that bypasses gitCheckIn so no gitGC runs
+// (avoiding the unrelated go-git v5.19.2 RepackObjects defect) and the commit
+// message is authored verbatim rather than via Ollama.
+func commitWithMessage(cfg *OPNCall, msg string) error {
+	repo, err := gitRepo(cfg.Path)
+	if err != nil {
+		return err
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	if _, err := wtree.Add("."); err != nil {
+		return err
+	}
+	_, err = wtree.Commit(msg, gitCommitOptions(cfg))
+	return err
+}
+
+// gitCommitOptions builds the standard auto-commit signature used by the test
+// helper.
+func gitCommitOptions(cfg *OPNCall) *git.CommitOptions {
+	return &git.CommitOptions{
+		Author: &gitobject.Signature{Name: _authorName, Email: cfg.Email, When: time.Now()},
+		All:    true,
 	}
 }
 
