@@ -68,6 +68,12 @@ const (
 	// meaningfully describe, so commit-message generation is skipped and the
 	// subject is set to this constant verbatim.
 	_unifiAutobackupSubject = "unifi-autobackup"
+	// _unifiAutobackupTag is the security-impact tag line appended to every
+	// unifi-autobackup commit message. It classifies the change as "low"
+	// severity (a routine backup rotation with no security impact) and
+	// carries the "backup" flag so the BorgAUDIT page can distinguish
+	// appliance config commits from plain Unifi backup rotations.
+	_unifiAutobackupTag = "tag: low, backup"
 )
 
 // _ollamaSystemPrompt is the persona and output contract sent to the model. It
@@ -693,7 +699,7 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		return _commitMsg
 	}
 	if hasUnifiAutobackupChange(status) {
-		return _unifiAutobackupSubject
+		return _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n"
 	}
 	if onlyUnifiChanges(status) {
 		return _commitMsg

@@ -3306,8 +3306,9 @@ func TestGenerateCommitMessageUnifiBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worktree: %v", err)
 	}
-	if got := generateCommitMessage(config, repo, wtree); got != _unifiAutobackupSubject {
-		t.Errorf("unifi-only changeset must bypass Ollama and return the unifi-autobackup subject, got %q", got)
+	wantMsg := _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n"
+	if got := generateCommitMessage(config, repo, wtree); got != wantMsg {
+		t.Errorf("unifi-only changeset must bypass Ollama and return the unifi-autobackup subject with its low/backup tag, got %q", got)
 	}
 }
 
@@ -4303,38 +4304,45 @@ func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 }
 
 // TestAuditTag verifies the security-impact tag parser: it extracts the
-// severity and the optional needs-review flag from the trailing "tag:" line
-// (which may sit at the end of a detailed analysis body or, for plain
-// commits, anywhere in the message), and falls back to the "none" bucket
-// when no tag line is present or the severity is unknown.
+// severity, the optional needs-review flag, and the optional backup flag
+// from the trailing "tag:" line (which may sit at the end of a detailed
+// analysis body or, for plain commits, anywhere in the message), and falls
+// back to the "none" bucket when no tag line is present or the severity is
+// unknown.
 func TestAuditTag(t *testing.T) {
 	cases := []struct {
 		name    string
 		msg     string
 		wantSev string
 		wantNR  bool
+		wantBk  bool
 	}{
-		{"empty", "", "none", false},
-		{"default message", "opnborg auto update", "none", false},
-		{"plain low", "TLDR: rename alias\ntag: low", "low", false},
-		{"plain medium review", "tag: medium, needs-review", "medium", true},
-		{"plain high", "tag: high", "high", false},
-		{"plain critical review", "tag: critical, needs-review", "critical", true},
-		{"annotated detailed", "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n", "medium", true},
-		{"unknown severity", "tag: catastrophic", "none", false},
-		{"tag mid body not last line", "Appliance: fw01\ntag: low\nScope: filter\n", "low", false},
-		{"whitespace tolerant", "  tag:   high  ,  needs-review  ", "high", true},
-		{"uppercase severity normalised", "TAG: Critical", "critical", false},
-		{"tag in word not matched", "this is a tagging example", "none", false},
+		{"empty", "", "none", false, false},
+		{"default message", "opnborg auto update", "none", false, false},
+		{"plain low", "TLDR: rename alias\ntag: low", "low", false, false},
+		{"plain medium review", "tag: medium, needs-review", "medium", true, false},
+		{"plain high", "tag: high", "high", false, false},
+		{"plain critical review", "tag: critical, needs-review", "critical", true, false},
+		{"annotated detailed", "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n", "medium", true, false},
+		{"unknown severity", "tag: catastrophic", "none", false, false},
+		{"tag mid body not last line", "Appliance: fw01\ntag: low\nScope: filter\n", "low", false, false},
+		{"whitespace tolerant", "  tag:   high  ,  needs-review  ", "high", true, false},
+		{"uppercase severity normalised", "TAG: Critical", "critical", false, false},
+		{"tag in word not matched", "this is a tagging example", "none", false, false},
+		{"unifi backup low", "unifi-autobackup\n\ntag: low, backup\n", "low", false, true},
+		{"backup only no severity", "tag: low, backup", "low", false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			sev, nr := auditTag(c.msg)
+			sev, nr, bk := auditTag(c.msg)
 			if sev != c.wantSev {
 				t.Errorf("auditTag severity = %q, want %q (msg=%q)", sev, c.wantSev, c.msg)
 			}
 			if nr != c.wantNR {
 				t.Errorf("auditTag needsReview = %v, want %v (msg=%q)", nr, c.wantNR, c.msg)
+			}
+			if bk != c.wantBk {
+				t.Errorf("auditTag backup = %v, want %v (msg=%q)", bk, c.wantBk, c.msg)
 			}
 		})
 	}

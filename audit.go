@@ -436,13 +436,16 @@ func splitAuditMessage(msg string) (tldr, detailed string) {
 	return tldr, detailed
 }
 
-// _auditTagRe parses the trailing "tag: <severity>[, needs-review]" line the
-// Ollama security-audit prompt instructs the model to emit. The severity is
-// one of low / medium / high / critical; the optional ", needs-review" suffix
-// flags a commit a human should inspect before it ships. The line may appear
-// at the end of an Ollama-assisted detailed analysis body or, for plain
-// commits, anywhere in the message.
-var _auditTagRe = regexp.MustCompile(`^[Tt][Aa][Gg]:\s*([a-zA-Z]+)\s*(?:,\s*(needs-review))?\s*$`)
+// _auditTagRe parses the trailing "tag: <severity>[, <flag>]" line the
+// Ollama security-audit prompt instructs the model to emit (and that opnborg
+// also writes verbatim for unifi-autobackup commits). The severity is one of
+// low / medium / high / critical; the optional ", <flag>" suffix carries a
+// secondary classifier. Two flags are recognised today: "needs-review"
+// flags a commit a human should inspect before it ships, and "backup"
+// marks a routine Unifi autoBackup rotation with no security impact. The
+// line may appear at the end of an Ollama-assisted detailed analysis body
+// or, for plain commits, anywhere in the message.
+var _auditTagRe = regexp.MustCompile(`^[Tt][Aa][Gg]:\s*([a-zA-Z]+)\s*(?:,\s*([a-zA-Z-]+))?\s*$`)
 
 // _auditSeverities is the ordered threat-level catalogue the audit dashboard
 // renders as the categorisation map. Each entry carries the machine key (as
@@ -468,12 +471,13 @@ var _auditSeverities = []struct {
 // every line (the tag may sit at the end of a detailed analysis body or, for
 // plain commits, anywhere in the message), matches it against _auditTagRe,
 // and normalises the severity to one of the known keys (low / medium / high /
-// critical). An unknown severity or no tag line yields ("none", false). The
-// needs-review flag is preserved verbatim from the tag suffix.
-func auditTag(msg string) (severity string, needsReview bool) {
-	severity = "none"
+// critical). An unknown severity or no tag line yields ("none", false, false).
+// The needsReview flag is true when the ", needs-review" suffix is present;
+// the backup flag is true when the ", backup" suffix is present (used by
+// unifi-autobackup commits to mark a routine Unifi backup rotation).
+func auditTag(msg string) (severity string, needsReview, backup bool) {
 	if msg == "" {
-		return severity, false
+		return "none", false, false
 	}
 	for _, line := range strings.Split(msg, "\n") {
 		line = strings.TrimSpace(line)
@@ -482,14 +486,22 @@ func auditTag(msg string) (severity string, needsReview bool) {
 			continue
 		}
 		sev := strings.ToLower(m[1])
+		flag := strings.ToLower(strings.TrimSpace(m[2]))
+		nr := flag == "needs-review"
+		bk := flag == "backup"
+		known := false
 		for _, s := range _auditSeverities {
 			if s.key == sev {
-				return sev, m[2] == "needs-review"
+				known = true
+				break
 			}
 		}
-		return "none", m[2] == "needs-review"
+		if !known {
+			sev = "none"
+		}
+		return sev, nr, bk
 	}
-	return severity, false
+	return "none", false, false
 }
 
 // auditSeverityClass maps a severity key to its CSS class token. An unknown
@@ -515,11 +527,15 @@ func auditSeverityClass(severity string) string {
 func renderAuditThreatDashboard(commits []auditCommit) string {
 	counts := make(map[string]int, len(_auditSeverities))
 	review := 0
+	backup := 0
 	for _, c := range commits {
-		sev, nr := auditTag(c.message)
+		sev, nr, bk := auditTag(c.message)
 		counts[sev]++
 		if nr {
 			review++
+		}
+		if bk {
+			backup++
 		}
 	}
 	total := len(commits)
@@ -570,6 +586,11 @@ func renderAuditThreatDashboard(commits []auditCommit) string {
 		s.WriteString(strconv.Itoa(review))
 		s.WriteString("</b> flagged <i>needs-review</i></span></div>")
 	}
+	if backup > 0 {
+		s.WriteString("<div class=\"atd-backup\"><span class=\"atd-backup-emoji\">💾</span><span><b>")
+		s.WriteString(strconv.Itoa(backup))
+		s.WriteString("</b> Unifi <i>backup</i> rotation</span></div>")
+	}
 	s.WriteString("<div class=\"atd-legend\"><span class=\"atd-legend-pill sev-critical\">☠️ critical</span><span class=\"atd-legend-pill sev-high\">🚨 high</span><span class=\"atd-legend-pill sev-medium\">⚠️ medium</span><span class=\"atd-legend-pill sev-low\">✅ low</span><span class=\"atd-legend-pill sev-none\">ℹ️ untagged</span></div>")
 	s.WriteString("<button type=\"button\" class=\"atd-reset\" id=\"atd-reset\" title=\"Show all commits in the timeline\">↺ reset filter</button>")
 	s.WriteString("</div>")
@@ -578,10 +599,12 @@ func renderAuditThreatDashboard(commits []auditCommit) string {
 }
 
 // auditBadgeHTML renders the inline threat-level badge for a single commit
-// summary header. The badge carries the severity emoji, the label, and the
-// needs-review flag (when set). An empty severity (the "none" bucket) renders
-// a muted "untagged" chip so every commit carries a visible threat class.
-func auditBadgeHTML(severity string, needsReview bool) string {
+// summary header. The badge carries the severity emoji, the label, the
+// needs-review flag (when set), and the backup flag (when set, marking a
+// routine Unifi autoBackup rotation). An empty severity (the "none" bucket)
+// renders a muted "untagged" chip so every commit carries a visible threat
+// class.
+func auditBadgeHTML(severity string, needsReview, backup bool) string {
 	var emoji, label, cls string
 	for _, sv := range _auditSeverities {
 		if sv.key == severity {
@@ -611,11 +634,14 @@ func auditBadgeHTML(severity string, needsReview bool) string {
 	if needsReview {
 		s.WriteString("<span class=\"audit-sev-review\" title=\"human review recommended\">👀</span>")
 	}
+	if backup {
+		s.WriteString("<span class=\"audit-sev-backup\" title=\"Unifi autoBackup rotation\">💾</span>")
+	}
 	s.WriteString("</span>")
 	return s.String()
 }
 
-// highlightAuditTagLine colorises the trailing "tag: <severity>[, needs-review]"
+// highlightAuditTagLine colorises the trailing "tag: <severity>[, <flag>]"
 // line inside a rendered analysis body so the security-impact classification
 // stands out from the surrounding analysis prose. The line is wrapped in a
 // severity-class span; all other lines pass through unchanged (already HTML-
@@ -649,7 +675,7 @@ func renderAuditCommits(commits []auditCommit) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"audit-list\" id=\"audit-list\">")
 	for _, c := range commits {
-		severity, needsReview := auditTag(c.message)
+		severity, needsReview, backup := auditTag(c.message)
 		sevClass := auditSeverityClass(severity)
 		s.WriteString("<details class=\"audit-commit ")
 		s.WriteString(sevClass)
@@ -663,7 +689,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("<span class=\"audit-author\">")
 		s.WriteString(html.EscapeString(auditDisplayAuthor(c)))
 		s.WriteString("</span>")
-		s.WriteString(auditBadgeHTML(severity, needsReview))
+		s.WriteString(auditBadgeHTML(severity, needsReview, backup))
 		s.WriteString("<span class=\"audit-date\">")
 		s.WriteString(html.EscapeString(c.when.UTC().Format("2006-01-02 15:04:05 Z07:00")))
 		s.WriteString("</span>")

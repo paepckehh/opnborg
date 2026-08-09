@@ -444,6 +444,10 @@ nav .audit-active button{border-color:var(--accent);background:var(--card-2);col
 .atd-review-emoji{font-size:.95rem}
 .atd-review b{color:var(--warn);font-weight:700}
 .atd-review i{font-style:normal;color:var(--muted)}
+.atd-backup{display:flex;align-items:center;gap:.35rem;color:#58a6ff;font-size:.78rem}
+.atd-backup-emoji{font-size:.95rem}
+.atd-backup b{color:#58a6ff;font-weight:700}
+.atd-backup i{font-style:normal;color:var(--muted)}
 .atd-legend{display:flex;flex-wrap:wrap;gap:.3rem;margin-left:auto}
 .atd-legend-pill{display:inline-flex;align-items:center;gap:.2rem;padding:.15rem .45rem;border-radius:99px;font-size:.66rem;font-weight:600;border:1px solid;letter-spacing:.02em}
 .atd-reset{margin-left:.4rem;background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .55rem;cursor:pointer;font-size:.72rem;transition:border-color .2s,color .2s,background .2s}
@@ -474,6 +478,7 @@ nav .audit-active button{border-color:var(--accent);background:var(--card-2);col
 .audit-sev-emoji{font-size:.85rem;line-height:1}
 .audit-sev-label{text-transform:uppercase}
 .audit-sev-review{font-size:.75rem;filter:drop-shadow(0 0 4px rgba(210,153,34,.7))}
+.audit-sev-backup{font-size:.75rem;filter:drop-shadow(0 0 4px rgba(88,166,255,.7))}
 .audit-commit.sev-critical{border-color:rgba(248,81,73,.65);background:linear-gradient(180deg,rgba(248,81,73,.08),var(--card-2) 38%);position:relative;box-shadow:0 0 0 1px rgba(248,81,73,.25),0 0 24px rgba(248,81,73,.18)}
 .audit-commit.sev-critical[open]{border-color:#f85149}
 .audit-commit.sev-critical::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#f85149;box-shadow:0 0 12px rgba(248,81,73,.7);animation:atd-flow 2.2s linear infinite;background-size:200% 100%;background-image:linear-gradient(90deg,#f85149,#ff8c42,#f85149)}
