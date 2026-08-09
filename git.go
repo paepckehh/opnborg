@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,11 +67,19 @@ func gitRepo(path string) (*git.Repository, error) {
 
 // gitEnsureIgnore writes the .gitignore file in the storage root when it is
 // missing, so the archive/history files and symlink targets stay out of the
-// commit history. Pre-existing files are left untouched.
+// commit history. When a .gitignore already exists it is reconciled rather
+// than clobbered: any line that would ignore the security-approval ledger
+// (approval.db or one of its SQLite WAL sidecars approval.db-wal /
+// approval.db-shm) is stripped so the ledger is version-controlled alongside
+// the backups. This migration matters because older opnborg releases wrote an
+// "approval.db" line into the .gitignore; without reconciliation those stores
+// would keep ignoring the ledger, the file would never enter the worktree
+// status, and the hasApprovalDBChange bypass in ollama.go would never fire.
+// All other lines (including operator-added custom ignores) are preserved.
 func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
-		return nil
+		return reconcileGitignoreApprovalLedger(ignore)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -79,6 +88,75 @@ func gitEnsureIgnore(config *OPNCall) error {
 		return err
 	}
 	return nil
+}
+
+// reconcileGitignoreApprovalLedger strips any line from an existing
+// .gitignore that would ignore the security-approval ledger (approval.db or a
+// SQLite WAL sidecar), rewriting the file in place when at least one such line
+// is present. It uses ignoresApprovalLedger (a conservative gitignore-pattern
+// check) so operator-added custom ignores and the canonical archive/CONFIG/Logs
+// lines are left untouched. The file is only rewritten when its content would
+// change, so a clean .gitignore incurs no write.
+func reconcileGitignoreApprovalLedger(ignore string) error {
+	raw, err := os.ReadFile(ignore)
+	if err != nil {
+		return err
+	}
+	// SplitAfter keeps the trailing newline on each piece, so dropping a
+	// ledger line removes it together with its newline and the surviving
+	// lines keep their exact original bytes (no spurious blank lines).
+	var out strings.Builder
+	changed := false
+	for _, line := range strings.SplitAfter(string(raw), "\n") {
+		if ignoresApprovalLedger(line) {
+			changed = true
+			continue
+		}
+		out.WriteString(line)
+	}
+	if !changed {
+		return nil
+	}
+	return os.WriteFile(ignore, []byte(out.String()), 0660)
+}
+
+// ignoresApprovalLedger reports whether a single .gitignore line would ignore
+// the security-approval ledger: the main database file (approval.db) or any of
+// its SQLite WAL sidecars (approval.db-wal, approval.db-shm). A gitignore
+// pattern without a slash matches by basename at any depth, so a bare
+// "approval.db" or "approval.db*" line ignores the ledger everywhere in the
+// store. The check is conservative: blank lines, comments, and any pattern
+// that does not reduce to one of the ledger filenames (with an optional
+// leading slash) are reported as not ignoring the ledger, so legitimate
+// operator-added ignores are never stripped.
+func ignoresApprovalLedger(line string) bool {
+	// A range over SplitSeq yields an empty trailing element for a
+	// newline-terminated input; an empty line never ignores anything.
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	if strings.HasPrefix(strings.TrimSpace(line), "#") {
+		return false
+	}
+	p := strings.TrimSpace(line)
+	p = strings.TrimPrefix(p, "/")
+	if strings.Contains(p, "/") {
+		// An anchored path pattern is out of scope: the ledger lives at the
+		// store root, so a nested ignore never targets it.
+		return false
+	}
+	ledger := []string{_approvalDBName, _approvalDBName + "-wal", _approvalDBName + "-shm"}
+	if slices.Contains(ledger, p) {
+		return true
+	}
+	// A trailing-* glob anchored to the ledger basename (e.g. "approval.db*")
+	// also matches the sidecars.
+	if base, ok := strings.CutSuffix(p, "*"); ok {
+		if base == _approvalDBName || strings.HasPrefix(base, _approvalDBName+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 // sshUserFromURL extracts the SSH user from an SSH git URL. It handles both the

@@ -2298,6 +2298,115 @@ func TestGitInitCreatesRepoAndIgnore(t *testing.T) {
 	}
 }
 
+// TestGitEnsureIgnoreStripsStaleApprovalLedger verifies that gitEnsureIgnore
+// reconciles a pre-existing .gitignore left over from an older opnborg
+// release (which wrote an "approval.db" line) by stripping the ledger-ignore
+// line, so the security-approval ledger and its SQLite WAL sidecars enter the
+// worktree status and the hasApprovalDBChange bypass can fire. Operator-added
+// custom ignore lines and the canonical archive/CONFIG/Logs lines must survive
+// the reconcile untouched.
+func TestGitEnsureIgnoreStripsStaleApprovalLedger(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	ignorePath := filepath.Join(store, _gitignore)
+	// Seed a stale .gitignore exactly as written by opnborg releases before
+	// the approval-ledger bypass: the canonical lines plus the legacy
+	// "approval.db" ignore, plus an operator-added custom ignore and a
+	// comment, to prove the reconcile is surgical.
+	stale := ".archive\nCONFIG*\nLogs\napproval.db\n# keep my logs\nmy-stuff/\n"
+	if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
+		t.Fatalf("write stale .gitignore: %v", err)
+	}
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitEnsureIgnore(config); err != nil {
+		t.Fatalf("gitEnsureIgnore: %v", err)
+	}
+	got, err := os.ReadFile(ignorePath)
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n"
+	if string(got) != want {
+		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
+	}
+	// Idempotent: a second reconcile must not rewrite a clean file.
+	if err := gitEnsureIgnore(config); err != nil {
+		t.Fatalf("gitEnsureIgnore (2nd): %v", err)
+	}
+	got2, _ := os.ReadFile(ignorePath)
+	if string(got2) != want {
+		t.Errorf("second reconcile changed a clean .gitignore: %q", got2)
+	}
+}
+
+// TestGitEnsureIgnoreStripsApprovalLedgerSidecars verifies the reconcile also
+// removes .gitignore lines targeting the SQLite WAL sidecars
+// (approval.db-wal / approval.db-shm) and a trailing-star "approval.db*"
+// glob, while preserving everything else.
+func TestGitEnsureIgnoreStripsApprovalLedgerSidecars(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	ignorePath := filepath.Join(store, _gitignore)
+	stale := ".archive\napproval.db-wal\napproval.db-shm\napproval.db*\nCONFIG*\nLogs\n"
+	if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitEnsureIgnore(config); err != nil {
+		t.Fatalf("gitEnsureIgnore: %v", err)
+	}
+	got, _ := os.ReadFile(ignorePath)
+	want := ".archive\nCONFIG*\nLogs\n"
+	if string(got) != want {
+		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
+	}
+}
+
+// TestIgnoresApprovalLedger verifies the gitignore-pattern detector recognises
+// every spelling that would ignore the security-approval ledger (bare
+// filename, leading-slash form, the WAL sidecars, and a trailing-star glob)
+// while rejecting blank lines, comments, anchored nested paths, and unrelated
+// patterns.
+func TestIgnoresApprovalLedger(t *testing.T) {
+	cases := map[string]struct {
+		line string
+		want bool
+	}{
+		"approval-db":           {"approval.db", true},
+		"approval-db-slash":     {"/approval.db", true},
+		"approval-db-wal":       {"approval.db-wal", true},
+		"approval-db-shm":       {"approval.db-shm", true},
+		"approval-db-wal-slash": {"/approval.db-wal", true},
+		"approval-db-glob":      {"approval.db*", true},
+		"blank":                 {"", false},
+		"whitespace":            {"   ", false},
+		"comment":               {"# approval.db", false},
+		"config-star":           {"CONFIG*", false},
+		"archive":               {".archive", false},
+		"logs":                  {"Logs", false},
+		"nested-path":           {"sub/approval.db", false},
+		"unrelated-db":          {"something.db", false},
+		"approval-prefix-txt":   {"approval.txt", false},
+		"my-stuff":              {"my-stuff/", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := ignoresApprovalLedger(tc.line); got != tc.want {
+				t.Fatalf("ignoresApprovalLedger(%q) = %v, want %v", tc.line, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGitCheckInCommitsAndIdempotent(t *testing.T) {
 	ensureDisplayDrained(t)
 	cwd, err := os.Getwd()
