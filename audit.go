@@ -14,10 +14,10 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// audit.go serves the "BorgAUDIT" WebUI tile and the per-range audit pages that
+// audit.go serves the "BorgConfigAUDIT" WebUI tile and the per-range audit pages that
 // render the storage repo git commit history (commit metadata + full unified
-// diff per commit) for the last 24 hours / 7 days / 1 month. The audit tile on
-// the index page exposes three buttons, each linking to a dedicated page so an
+// diff per commit) for the last 24 hours / 7 days / 1 / 3 / 6 months. The audit tile on
+// the index page exposes range buttons, each linking to a dedicated page so an
 // operator can review recent backup-change history at a glance, with syntax
 // highlighting for the diff details.
 
@@ -37,6 +37,8 @@ var _auditRanges = map[string]time.Duration{
 	"24h": 24 * time.Hour,
 	"7d":  7 * 24 * time.Hour,
 	"1m":  30 * 24 * time.Hour,
+	"3m":  90 * 24 * time.Hour,
+	"6m":  180 * 24 * time.Hour,
 }
 
 // _auditRangeLabels is the human-readable label shown in the page heading and
@@ -49,6 +51,8 @@ var _auditRangeLabels = []struct {
 	{"24h", "24 Hours"},
 	{"7d", "7 Days"},
 	{"1m", "1 Month"},
+	{"3m", "3 Months"},
+	{"6m", "6 Months"},
 }
 
 // _auditDefaultRange is the range served when the request carries no (or an
@@ -56,7 +60,7 @@ var _auditRangeLabels = []struct {
 const _auditDefaultRange = "24h"
 
 // getAuditTile renders the "BorgAUDIT" tile for the index page: a short
-// heading and the three range buttons, each linking to the dedicated audit
+// heading and the range buttons, each linking to the dedicated audit
 // page for that window. The tile is only emitted when git storage management
 // is enabled (OPN_GIT_ENABLE): without a git repo there is no commit history
 // to audit.
@@ -65,7 +69,7 @@ func getAuditTile() string {
 		return _empty
 	}
 	var s strings.Builder
-	s.WriteString("<div class=\"backup-section audit-tile\"><b>BorgAUDIT</b> <span class=\"member-meta\">Module:Git:CommitHistory [ Review recent backup changes ]</span>")
+	s.WriteString("<div class=\"backup-section audit-tile\"><b>BorgConfigAUDIT</b> <span class=\"member-meta\">Module:Git:CommitHistory [ Review recent backup changes ]</span>")
 	s.WriteString("<div class=\"tile-actions\">")
 	for _, r := range _auditRangeLabels {
 		s.WriteString("<a href=\"audit?range=")
@@ -153,10 +157,10 @@ func getAuditNavi(active string) string {
 // disabled the page reports that the feature needs OPN_GIT_ENABLE.
 func renderAuditPage(config *OPNCall, rangeSlug string) string {
 	if config == nil {
-		return "<div class=\"dashboard\"><h2>BorgAUDIT</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">awaiting config</span></div></div>"
+		return "<div class=\"dashboard\"><h2>BorgConfigAUDIT</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">awaiting config</span></div></div>"
 	}
 	if !config.Git.Enable {
-		return "<div class=\"dashboard\"><h2>BorgAUDIT &middot; Git Commit History</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">git management disabled (OPN_GIT_ENABLE unset), no commit history to audit</span></div></div>"
+		return "<div class=\"dashboard\"><h2>BorgConfigAUDIT &middot; Git Commit History</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">git management disabled (OPN_GIT_ENABLE unset), no commit history to audit</span></div></div>"
 	}
 	window := _auditRanges[rangeSlug]
 	_auditCurrentRange = rangeSlug
@@ -164,11 +168,18 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 	since := time.Now().Add(-window)
 	commits, err := gatherAuditCommits(config, since)
 	if err != nil {
-		return "<div class=\"dashboard\"><h2>BorgAUDIT &middot; Git Commit History &middot; " + html.EscapeString(label) + "</h2><div class=\"dash-row\"><span class=\"dash-value dash-err\">" + html.EscapeString(err.Error()) + "</span></div></div>"
+		return "<div class=\"dashboard\"><h2>BorgConfigAUDIT &middot; Git Commit History &middot; " + html.EscapeString(label) + "</h2><div class=\"dash-row\"><span class=\"dash-value dash-err\">" + html.EscapeString(err.Error()) + "</span></div></div>"
 	}
+	// Sync the approval ledger with the displayed commits so historical
+	// security-relevant commits that predate the ledger feature (or whose
+	// Ollama tag was authored before tracking was wired in) are tracked.
+	// Without this the approve-all button counts only commits the ledger
+	// already knows about and shows 0 even when the page renders approve
+	// buttons for untracked medium/high/critical commits.
+	syncAuditCommitsToLedger(config, commits)
 	var s strings.Builder
 	s.WriteString("<div class=\"dashboard audit-page\"><div class=\"audit-page-head\">")
-	s.WriteString("<h2>BorgAUDIT &middot; Git Commit History &middot; ")
+	s.WriteString("<h2>BorgConfigAUDIT &middot; Git Commit History &middot; ")
 	s.WriteString(html.EscapeString(label))
 	s.WriteString("</h2>")
 	s.WriteString(renderAuditApproveAllButton(rangeSlug))
@@ -649,13 +660,14 @@ func auditBadgeHTML(severity string, needsReview, backup bool) string {
 }
 
 // renderAuditApprovalControl renders the per-commit approval control for the
-// BorgAUDIT page. For commits whose Ollama security-impact tag is above
+// BorgConfigAUDIT page. For commits whose Ollama security-impact tag is above
 // low/none/backup (medium / high / critical) the control is either:
 //   - an "approve" button (a POST form targeting /approve?hash=<full>) when
 //     the commit is not yet approved, or
-//   - an "approved: <timestamp>" attribute box when the commit has already
-//     been approved, so an operator can see at a glance that the change was
-//     reviewed and signed off.
+//   - an "approved" attribute box showing the approval timestamp and the
+//     operator identity (source IP, Remote-User) recorded at approval time,
+//     so an operator can see at a glance that the change was reviewed and
+//     signed off. Once approved the approve button is gone entirely.
 //
 // Commits whose tag is low, none, or a plain Unifi backup rotation render no
 // approval control: they are not tracked in the ledger.
@@ -675,6 +687,11 @@ func renderAuditApprovalControl(c auditCommit, severity string) string {
 			b.WriteString("yes")
 		}
 		b.WriteString("</span>")
+		if who := approvalOperatorLabel(st); who != "" {
+			b.WriteString("<span class=\"meta-who\">")
+			b.WriteString(html.EscapeString(who))
+			b.WriteString("</span>")
+		}
 		b.WriteString("</span>")
 		return b.String()
 	}
@@ -689,6 +706,26 @@ func renderAuditApprovalControl(c auditCommit, severity string) string {
 	b.WriteString("</button>")
 	b.WriteString("</form>")
 	return b.String()
+}
+
+// approvalOperatorLabel renders a compact one-line label of the operator who
+// approved a commit, from the approval state recorded in the ledger. It
+// prefers the Remote-User authenticated identity, falls back to the source IP,
+// and appends the X-Forwarded-For chain when present. An empty label means no
+// operator identity was recorded (e.g. an approval made before the source
+// capture was wired in).
+func approvalOperatorLabel(st approvalState) string {
+	who := st.remoteUser
+	if who == "" {
+		who = st.sourceIP
+	}
+	if who == "" {
+		return ""
+	}
+	if st.xForwardedFor != "" {
+		who += " (xff: " + st.xForwardedFor + ")"
+	}
+	return "by " + who
 }
 
 // _auditCurrentRange is the range slug the audit page is currently rendering.

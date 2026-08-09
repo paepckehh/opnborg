@@ -4045,13 +4045,17 @@ func TestAuditTileOnlyWhenGitEnabled(t *testing.T) {
 	_cfg.Git.Enable = true
 	got := getAuditTile()
 	for _, want := range []string{
-		"BorgAUDIT",
+		"BorgConfigAUDIT",
 		"audit?range=24h",
 		"audit?range=7d",
 		"audit?range=1m",
+		"audit?range=3m",
+		"audit?range=6m",
 		"24 Hours",
 		"7 Days",
 		"1 Month",
+		"3 Months",
+		"6 Months",
 		"audit-tile",
 	} {
 		if !strings.Contains(got, want) {
@@ -4104,7 +4108,7 @@ func TestAuditHandlerGET(t *testing.T) {
 			t.Errorf("range=%q: status = %d, want 200", r, rr.Code)
 		}
 		body := rr.Body.String()
-		for _, want := range []string{"<!doctype html>", "<html>", "BorgAUDIT", "Git Commit History", "audit-commit"} {
+		for _, want := range []string{"<!doctype html>", "<html>", "BorgConfigAUDIT", "Git Commit History", "audit-commit"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("range=%q: body missing %q", r, want)
 			}
@@ -4133,8 +4137,8 @@ func TestRenderAuditPageStates(t *testing.T) {
 	if !strings.Contains(got, "git management disabled") {
 		t.Errorf("disabled-git should render disabled message, got: %q", got)
 	}
-	if !strings.Contains(got, "BorgAUDIT") {
-		t.Errorf("disabled-git should still carry BorgAUDIT heading, got: %q", got)
+	if !strings.Contains(got, "BorgConfigAUDIT") {
+		t.Errorf("disabled-git should still carry BorgConfigAUDIT heading, got: %q", got)
 	}
 }
 
@@ -4534,7 +4538,7 @@ func TestGetStartHTMLIncludesAuditTile(t *testing.T) {
 	_cfg = &OPNCall{Path: t.TempDir()}
 	_cfg.Git.Enable = true
 	got := getStartHTML()
-	for _, want := range []string{"BorgAUDIT", "audit?range=24h", "audit-tile"} {
+	for _, want := range []string{"BorgConfigAUDIT", "audit?range=24h", "audit-tile"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("getStartHTML missing %q", want)
 		}

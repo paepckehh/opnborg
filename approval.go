@@ -61,10 +61,15 @@ const _approvalSchema = `CREATE TABLE IF NOT EXISTS approval (
 ) STRICT;`
 
 // approvalState is the minimal approval view the audit page needs: whether the
-// commit is approved, and when it was approved.
+// commit is approved, when it was approved, and the operator source identity
+// (source IP, X-Forwarded-For chain, Remote-User) recorded at approval time so
+// the audit page can render a full who-approved-when box.
 type approvalState struct {
 	approved      bool
 	trueTimestamp time.Time
+	sourceIP      string
+	xForwardedFor string
+	remoteUser    string
 }
 
 // approvalDB is the package-global ledger handle. It is opened once (from
@@ -258,12 +263,15 @@ func approvalGet(config *OPNCall, fullHash string) approvalState {
 		return st
 	}
 	var approved int
-	var ts string
-	err = db.QueryRow(`SELECT approved, true_timestamp FROM approval WHERE commit_hash = ?`, fullHash).Scan(&approved, &ts)
+	var ts, sourceIP, xff, remoteUser string
+	err = db.QueryRow(`SELECT approved, true_timestamp, source_ip, x_forwarded_for, remote_user FROM approval WHERE commit_hash = ?`, fullHash).Scan(&approved, &ts, &sourceIP, &xff, &remoteUser)
 	if err != nil {
 		return st
 	}
 	st.approved = approved != 0
+	st.sourceIP = sourceIP
+	st.xForwardedFor = xff
+	st.remoteUser = remoteUser
 	if ts != "" {
 		if t, err := time.Parse(time.RFC3339, ts); err == nil {
 			st.trueTimestamp = t
@@ -286,6 +294,28 @@ func approvalPendingCount(config *OPNCall) int {
 	var n int
 	_ = db.QueryRow(`SELECT COUNT(*) FROM approval WHERE approved = 0`).Scan(&n)
 	return n
+}
+
+// syncAuditCommitsToLedger ensures every security-relevant commit in the
+// displayed audit window is tracked in the approval ledger. Historical commits
+// that predate the ledger feature (or whose Ollama security-impact tag was
+// authored before approvalTrackCommit was wired into gitCommit) would otherwise
+// render an approve button on the audit page but never appear in the ledger,
+// so approvalPendingCount (and the approve-all button label) would report 0
+// pending even though the page visibly shows unapproved medium/high/critical
+// commits. Re-tracking a commit already in the ledger is a safe no-op
+// (INSERT OR IGNORE) so the recorded approval state is never clobbered.
+func syncAuditCommitsToLedger(config *OPNCall, commits []auditCommit) {
+	if config == nil || config.Path == "" {
+		return
+	}
+	for _, c := range commits {
+		severity, _, _ := auditTag(c.message)
+		if !isSecurityRelevantTag(severity) || c.fullHash == "" {
+			continue
+		}
+		approvalTrackCommit(config, c.fullHash, c.message, c.when)
+	}
 }
 
 // approvalSourceFromRequest extracts the operator identity from an HTTP
