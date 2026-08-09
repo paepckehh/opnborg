@@ -22,7 +22,7 @@ const (
 	_currentDir     = "."
 	_dotGit         = ".git"
 	_gitignore      = ".gitignore"
-	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db\n"
+	_ignore         = ".archive\nCONFIG*\nLogs\n"
 	_origin         = "origin"
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"

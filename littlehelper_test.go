@@ -3180,6 +3180,67 @@ func TestHasUnifiAutobackupChange(t *testing.T) {
 	}
 }
 
+// TestIsApprovalDBPath verifies the approval-ledger path detector recognises
+// the main ledger file (approval.db) and every SQLite WAL sidecar naming
+// variant (approval.db-wal, approval.db-shm, and the hyphen-separated
+// approval-shm.db / approval-wal.db spellings), while non-ledger files are
+// rejected.
+func TestIsApprovalDBPath(t *testing.T) {
+	cases := map[string]struct {
+		path string
+		want bool
+	}{
+		"approval-db":         {"approval.db", true},
+		"approval-db-wal":     {"approval.db-wal", true},
+		"approval-db-shm":     {"approval.db-shm", true},
+		"approval-shm-db":     {"approval-shm.db", true},
+		"approval-wal-db":     {"approval-wal.db", true},
+		"nested-approval-db":  {"store/sub/approval.db", true},
+		"xml":                 {"fw01.lan/current.xml", false},
+		"unf":                 {"unifi-autobackup/current.unf", false},
+		"gitignore":           {".gitignore", false},
+		"unrelated-db":        {"something.db", false},
+		"approval-prefix-txt": {"approval.txt", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := isApprovalDBPath(tc.path); got != tc.want {
+				t.Fatalf("isApprovalDBPath(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestHasApprovalDBChange verifies that any changeset touching the
+// security-approval ledger (approval.db or one of its SQLite WAL sidecars)
+// is detected so the Ollama commit-message generation is skipped and the
+// subject is set to the approval-db constant verbatim. This covers pure
+// ledger changesets, mixed ledger+OPNsense changesets, and every sidecar
+// naming variant; a changeset with no ledger file must not match.
+func TestHasApprovalDBChange(t *testing.T) {
+	cases := map[string]struct {
+		status git.Status
+		want   bool
+	}{
+		"empty":            {git.Status{}, false},
+		"approval-db":      {git.Status{"approval.db": &git.FileStatus{}}, true},
+		"approval-db-wal":  {git.Status{"approval.db-wal": &git.FileStatus{}}, true},
+		"approval-db-shm":  {git.Status{"approval.db-shm": &git.FileStatus{}}, true},
+		"approval-shm-db":  {git.Status{"approval-shm.db": &git.FileStatus{}}, true},
+		"xml-only":         {git.Status{"fw01.lan/current.xml": &git.FileStatus{}}, false},
+		"mixed-db-and-xml": {git.Status{"approval.db": &git.FileStatus{}, "fw01.lan/current.xml": &git.FileStatus{}}, true},
+		"unf-only":         {git.Status{"unifi-autobackup/current.unf": &git.FileStatus{}}, false},
+		"unrelated-folder": {git.Status{"fw01.lan/notes.xml": &git.FileStatus{}}, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := hasApprovalDBChange(tc.status); got != tc.want {
+				t.Fatalf("hasApprovalDBChange = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
 // the system persona, the output contract, the affected-server input line, and
 // the diff payload verbatim.
@@ -3309,6 +3370,56 @@ func TestGenerateCommitMessageUnifiBypass(t *testing.T) {
 	wantMsg := _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n"
 	if got := generateCommitMessage(config, repo, wtree); got != wantMsg {
 		t.Errorf("unifi-only changeset must bypass Ollama and return the unifi-autobackup subject with its low/backup tag, got %q", got)
+	}
+}
+
+// TestGenerateCommitMessageApprovalDBBypass verifies that a changeset touching
+// the security-approval ledger (approval.db or any SQLite WAL sidecar) is
+// committed with the short approval-db subject and its low/backup tag, so no
+// network round-trip to Ollama is attempted for the opaque binary database.
+func TestGenerateCommitMessageApprovalDBBypass(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	// Ollama pointed at an unreachable port: the test asserts the bypass
+	// directly by checking the message equals the approval-db subject and the
+	// generation is not even triggered.
+	config.Ollama.Enable = true
+	config.Ollama.URL = "http://127.0.0.1:1"
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// Seed an initial commit so HEAD exists, then add an approval.db change.
+	if err := os.WriteFile(filepath.Join(store, "seed"), []byte("seed"), 0660); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	// Stage a pure approval-db change: the main ledger plus its WAL sidecars.
+	for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+		if err := os.WriteFile(filepath.Join(store, name), []byte("ledger-blob-"+name), 0660); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	wantMsg := _approvalDbSubject + "\n\n" + _approvalDbTag + "\n"
+	if got := generateCommitMessage(config, repo, wtree); got != wantMsg {
+		t.Errorf("approval-db changeset must bypass Ollama and return the approval-db subject with its low/backup tag, got %q", got)
 	}
 }
 

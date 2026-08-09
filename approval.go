@@ -32,8 +32,13 @@ import (
 
 const (
 	// _approvalDBName is the on-disk filename of the approval ledger, placed
-	// at the root of the backup store. It is added to .gitignore so the
-	// auto-commit loop never commits the ledger itself.
+	// at the root of the backup store. It is NOT gitignored: the ledger is
+	// version-controlled alongside the backups so an operator's approval
+	// history travels with the store. The auto-commit loop commits every
+	// ledger update (and its SQLite WAL sidecars approval.db-wal /
+	// approval.db-shm) with a short subject ("approval-db") via the
+	// hasApprovalDBChange bypass in ollama.go, so a ledger rotation never
+	// triggers a detailed Ollama commit message or self-tracks in the ledger.
 	_approvalDBName = "approval.db"
 	// _approvalDriver is the database/sql driver name registered by
 	// modernc.org/sqlite (a pure-Go, CGO-free SQLite implementation, so the
