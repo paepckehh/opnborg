@@ -60,19 +60,6 @@ const _approvalSchema = `CREATE TABLE IF NOT EXISTS approval (
 	committed_at    TEXT    NOT NULL DEFAULT ''
 ) STRICT;`
 
-// approvalRecord is the ledger view of a single tracked commit.
-type approvalRecord struct {
-	CommitHash    string
-	Approved      bool
-	TrueTimestamp time.Time
-	SourceIP      string
-	XForwardedFor string
-	RemoteUser    string
-	Severity      string
-	CommitSubject string
-	CommittedAt   time.Time
-}
-
 // approvalState is the minimal approval view the audit page needs: whether the
 // commit is approved, and when it was approved.
 type approvalState struct {
@@ -199,7 +186,7 @@ func approvalTrackCommit(config *OPNCall, fullHash, message string, committedAt 
 // and capped for ledger display. For Ollama-assisted messages this is the TLDR
 // headline; for plain commits it is the static "opnborg auto update" subject.
 func commitHeadline(msg string) string {
-	for _, line := range strings.Split(msg, "\n") {
+	for line := range strings.SplitSeq(msg, "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			if len(line) > 160 {

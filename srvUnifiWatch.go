@@ -33,7 +33,7 @@ func srvUnifiWatch(config *OPNCall) {
 	displayChan <- []byte("[UNIFI][WATCH][START][SOURCE] " + config.Unifi.Watch.Path)
 
 	// initial sync so the store reflects the current source state immediately
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 
 	// set status once from the initial pass (degraded if the sync failed)
 	setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
@@ -73,9 +73,8 @@ func srvUnifiWatch(config *OPNCall) {
 			if timer != nil {
 				timer.Stop()
 			}
-			ts := time.Now()
 			timer = time.AfterFunc(debounce, func() {
-				syncUnifiWatch(config, ts)
+				syncUnifiWatch(config)
 				setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 				// allow the main loop to poke the next sync cycle on /force
 				select {
@@ -91,8 +90,7 @@ func srvUnifiWatch(config *OPNCall) {
 			setUnifiWatchStatus(config, true, false)
 		case <-updateUnifiWatch:
 			// manual trigger (/force) or daily rollover
-			ts := time.Now()
-			syncUnifiWatch(config, ts)
+			syncUnifiWatch(config)
 			setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 		}
 	}
@@ -105,7 +103,7 @@ func srvUnifiWatch(config *OPNCall) {
 // (files seen / synced / skipped, last synced file name, last sync timestamp
 // and any error reason) on config.Unifi.Watch under unifiWatchMutex so the
 // main WebUI tile and the config-dashboard Unifi panel can surface them.
-func syncUnifiWatch(config *OPNCall, ts time.Time) {
+func syncUnifiWatch(config *OPNCall) {
 
 	// refresh marker mtime
 	if fi, err := os.Stat(config.Unifi.Watch.Meta); err == nil {
@@ -247,7 +245,7 @@ func archivedCount(config *OPNCall, server string) int {
 		return 0
 	}
 	count := 0
-	for _, line := range strings.Split(string(data), _linefeed) {
+	for line := range strings.SplitSeq(string(data), _linefeed) {
 		if _, digest, found := strings.Cut(line, _tab); found && digest != "" {
 			count++
 		}
@@ -266,7 +264,7 @@ func archivedSums(config *OPNCall, server string) map[[32]byte]bool {
 	if err != nil {
 		return out
 	}
-	for _, line := range strings.Split(string(data), _linefeed) {
+	for line := range strings.SplitSeq(string(data), _linefeed) {
 		_, digest, found := strings.Cut(line, _tab)
 		if !found || digest == "" {
 			continue

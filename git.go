@@ -144,10 +144,7 @@ func normalizeFingerprint(fp string) string {
 	if fp == "" {
 		return ""
 	}
-	if strings.HasPrefix(fp, _sshFingerprintPrefix) {
-		fp = fp[len(_sshFingerprintPrefix):]
-	}
-	return fp
+	return strings.TrimPrefix(fp, _sshFingerprintPrefix)
 }
 
 // _sshFingerprintPrefix is the OpenSSH SHA-256 fingerprint prefix used by

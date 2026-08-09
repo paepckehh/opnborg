@@ -151,12 +151,12 @@ func srvUnifiBackup(config *OPNCall) {
 
 					// read body
 					unf, err := io.ReadAll(res.Body)
+					_ = res.Body.Close()
 					if err != nil {
 						backupOK = false
 						notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
 						displayChan <- []byte(notice)
 					}
-					_ = res.Body.Close()
 
 					// check file
 					if backupOK {

@@ -171,27 +171,21 @@ func srv(config *OPNCall) error {
 			endBackupPass()
 		}
 
-		// check files into local git repo
-		if config.dirty.Load() {
-			if config.Git.Enable {
-				if committed, err := gitCheckIn(config); err != nil {
-					displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL] " + err.Error())
-					return err
-				} else if committed {
-					displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
-				}
-			}
-			displayChan <- []byte("[CHANGES-DETECTED][UPDATES-DONE][FINISH]")
-		} else if config.Git.Enable && config.Git.Upstream != "" {
-			// No local changes this tick, but an upstream is configured: still
-			// reconcile the remote so a previous failed push or an upstream drift
-			// is corrected every pass (force-push via the configured refspec).
+		// check files into local git repo. gitCheckIn handles both the
+		// dirty-worktree case (commit + push + gc) and the clean-worktree but
+		// upstream-configured case (reconcile remote every pass so a previous
+		// failed push or upstream drift is corrected), so a single call covers
+		// both branches.
+		if config.Git.Enable && (config.dirty.Load() || config.Git.Upstream != "") {
 			if committed, err := gitCheckIn(config); err != nil {
 				displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL] " + err.Error())
 				return err
 			} else if committed {
 				displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
 			}
+		}
+		if config.dirty.Load() {
+			displayChan <- []byte("[CHANGES-DETECTED][UPDATES-DONE][FINISH]")
 		}
 
 		// finish

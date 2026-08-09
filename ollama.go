@@ -507,8 +507,12 @@ func renderCommitSummary(stats []fileDiffStat, totalIns, totalDel int) string {
 // can describe the complete new state rather than only the patch.
 func renderFileBlock(stat fileDiffStat, diff, workContent string) string {
 	var b strings.Builder
-	b.WriteString("=== FILE: " + stat.path + " ===\n")
-	b.WriteString("change: " + stat.kind + "\n")
+	b.WriteString("=== FILE: ")
+	b.WriteString(stat.path)
+	b.WriteString(" ===\n")
+	b.WriteString("change: ")
+	b.WriteString(stat.kind)
+	b.WriteString("\n")
 	fmt.Fprintf(&b, "size: %d bytes -> %d bytes\n", stat.oldBytes, stat.newBytes)
 	fmt.Fprintf(&b, "lines: %d -> %d\n", stat.oldLines, stat.newLines)
 	fmt.Fprintf(&b, "insertions: %d, deletions: %d\n", stat.insertions, stat.deletions)

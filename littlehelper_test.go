@@ -1828,7 +1828,7 @@ func TestSyncUnifiWatchCopiesNewestUnf(t *testing.T) {
 		t.Fatalf("write new: %v", err)
 	}
 
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 
 	got, err := os.ReadFile(filepath.Join(store, _uniWatch, "current.unf"))
 	if err != nil {
@@ -1858,7 +1858,7 @@ func TestSyncUnifiWatchSkipsTooSmall(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "tiny.unf"), []byte("x"), 0644); err != nil {
 		t.Fatalf("write tiny: %v", err)
 	}
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 	if _, err := os.Stat(filepath.Join(store, _uniWatch, "current.unf")); !os.IsNotExist(err) {
 		t.Errorf("too-small backup should not be checked into store")
 	}
@@ -1901,7 +1901,7 @@ func TestSyncUnifiWatchCopiesAllFiles(t *testing.T) {
 		t.Fatalf("write new: %v", err)
 	}
 
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 
 	// newest wins current.unf
 	got, err := os.ReadFile(filepath.Join(store, _uniWatch, "current.unf"))
@@ -1948,7 +1948,7 @@ func TestSyncUnifiWatchCopiesAllFiles(t *testing.T) {
 		t.Errorf("LastSyncErr should be empty on success, got %q", config.Unifi.Watch.LastSyncErr)
 	}
 	// a second pass should skip both (now deduped against current.unf)
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 	if config.Unifi.Watch.SyncedFiles != 0 {
 		t.Errorf("second pass SyncedFiles = %d, want 0 (deduped)", config.Unifi.Watch.SyncedFiles)
 	}
@@ -1972,7 +1972,7 @@ func TestSyncUnifiWatchRecordsReadDirError(t *testing.T) {
 	config := &OPNCall{Path: store}
 	config.Unifi.Watch.Path = "/nonexistent/opnborg/watch/source"
 	config.Unifi.Watch.Meta = "/nonexistent/opnborg/watch/source/autobackup_meta.json"
-	syncUnifiWatch(config, time.Now())
+	syncUnifiWatch(config)
 	if config.Unifi.Watch.LastSyncErr == "" {
 		t.Errorf("LastSyncErr should be set when the source folder is unreadable")
 	}
@@ -2489,10 +2489,10 @@ func TestGitCheckInRunsGC(t *testing.T) {
 		t.Fatalf("gitInit: %v", err)
 	}
 	// Several distinct blobs so the commit produces multiple loose objects.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := os.WriteFile(
 			filepath.Join(store, fmt.Sprintf("file%d.xml", i)),
-			[]byte(fmt.Sprintf("<x>%d</x>", i)), 0660); err != nil {
+			fmt.Appendf(nil, "<x>%d</x>", i), 0660); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 	}
@@ -2961,7 +2961,7 @@ func TestAppendProgressAppend(t *testing.T) {
 // configured cap and that the newest entries are retained once it overflows.
 func TestAppendProgressRingCap(t *testing.T) {
 	resetProgressState()
-	for i := 0; i < _progressCap+50; i++ {
+	for i := range _progressCap + 50 {
 		appendProgress([]byte("line-" + strconv.Itoa(i)))
 	}
 	progressMu.Lock()
@@ -4638,7 +4638,7 @@ func TestApprovalApproveAll(t *testing.T) {
 	if _, err := approvalDBOpen(dir); err != nil {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		hash := fmt.Sprintf("hash%02d00000000000000000000000000000000000", i)
 		msg := "TLDR: change\n\ntag: high"
 		approvalTrackCommit(cfg, hash, msg, time.Now())
@@ -4811,7 +4811,7 @@ func TestApprovalApproveAllButton(t *testing.T) {
 	if !strings.Contains(got, "(0)") {
 		t.Errorf("empty ledger should show (0), got %q", got)
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		approvalTrackCommit(cfg, fmt.Sprintf("h%02d0000000000000000000000000000000000000", i), "tag: high", time.Now())
 	}
 	got = renderAuditApproveAllButton("7d")

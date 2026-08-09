@@ -486,7 +486,7 @@ func auditTag(msg string) (severity string, needsReview, backup bool) {
 	if msg == "" {
 		return "none", false, false
 	}
-	for _, line := range strings.Split(msg, "\n") {
+	for line := range strings.SplitSeq(msg, "\n") {
 		line = strings.TrimSpace(line)
 		m := _auditTagRe.FindStringSubmatch(line)
 		if m == nil {
@@ -947,12 +947,6 @@ func highlightXMLLine(line string) string {
 	return b.String()
 }
 
-// highlightXMLTagRaw renders a single raw element tag (from "<" to ">") with
-// the tag name and attribute name/value pairs individually colored. Every
-// piece is HTML-escaped so the output is safe to embed.
-// highlightXMLTagRaw renders a single raw element tag (from "<" to ">") with
-// the tag name and attribute name/value pairs individually colored. Every
-// piece is HTML-escaped so the output is safe to embed.
 // highlightXMLTagRaw renders a single raw element tag (from "<" to ">") with
 // the tag name and attribute name/value pairs individually colored. Every
 // piece is HTML-escaped so the output is safe to embed.
