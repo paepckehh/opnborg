@@ -4244,11 +4244,15 @@ func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 	}
 	out := renderAuditCommits([]auditCommit{annotated, plain})
 	for _, want := range []string{
-		`<div class="audit-tldr">TLDR: tighten WAN inbound filter</div>`,
+		`<div class="audit-tldr sev-medium">TLDR: tighten WAN inbound filter</div>`,
 		`<details class="audit-analysis">`,
 		`<summary class="audit-analysis-head">Detailed Analysis</summary>`,
-		`tag: medium, needs-review`,
+		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
 		`<pre class="audit-message audit-analysis-body">`,
+		`<details class="audit-commit sev-medium" open data-sev="medium">`,
+		`<span class="audit-sev-badge sev-medium" data-sev="medium">`,
+		`<span class="audit-sev-label">Medium</span>`,
+		`<span class="audit-sev-review" title="human review recommended">👀</span>`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("annotated commit missing %q in output:\n%s", want, out)
@@ -4261,6 +4265,110 @@ func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 	}
 	if !strings.Contains(out, "opnborg auto update") {
 		t.Errorf("plain commit message should be rendered verbatim")
+	}
+	// the untagged plain commit must carry the "none" severity bucket so the
+	// dashboard filter and the untagged card count agree.
+	if !strings.Contains(out, `<details class="audit-commit sev-none" open data-sev="none">`) {
+		t.Errorf("plain commit should be tagged with the none severity bucket:\n%s", out)
+	}
+}
+
+// TestAuditTag verifies the security-impact tag parser: it extracts the
+// severity and the optional needs-review flag from the trailing "tag:" line
+// (which may sit at the end of a detailed analysis body or, for plain
+// commits, anywhere in the message), and falls back to the "none" bucket
+// when no tag line is present or the severity is unknown.
+func TestAuditTag(t *testing.T) {
+	cases := []struct {
+		name    string
+		msg     string
+		wantSev string
+		wantNR  bool
+	}{
+		{"empty", "", "none", false},
+		{"default message", "opnborg auto update", "none", false},
+		{"plain low", "TLDR: rename alias\ntag: low", "low", false},
+		{"plain medium review", "tag: medium, needs-review", "medium", true},
+		{"plain high", "tag: high", "high", false},
+		{"plain critical review", "tag: critical, needs-review", "critical", true},
+		{"annotated detailed", "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n", "medium", true},
+		{"unknown severity", "tag: catastrophic", "none", false},
+		{"tag mid body not last line", "Appliance: fw01\ntag: low\nScope: filter\n", "low", false},
+		{"whitespace tolerant", "  tag:   high  ,  needs-review  ", "high", true},
+		{"uppercase severity normalised", "TAG: Critical", "critical", false},
+		{"tag in word not matched", "this is a tagging example", "none", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sev, nr := auditTag(c.msg)
+			if sev != c.wantSev {
+				t.Errorf("auditTag severity = %q, want %q (msg=%q)", sev, c.wantSev, c.msg)
+			}
+			if nr != c.wantNR {
+				t.Errorf("auditTag needsReview = %v, want %v (msg=%q)", nr, c.wantNR, c.msg)
+			}
+		})
+	}
+}
+
+// TestRenderAuditThreatDashboard verifies the summary dashboard tallies
+// commits by security severity and renders a card per threat class (so the
+// categorisation map shows all five buckets even when empty), plus the
+// total and the needs-review counter.
+func TestRenderAuditThreatDashboard(t *testing.T) {
+	commits := []auditCommit{
+		{message: "opnborg auto update"},
+		{message: "TLDR: a\n\nDetailed Analysis:\n\nbody\ntag: low\n"},
+		{message: "tag: medium, needs-review"},
+		{message: "tag: critical, needs-review"},
+		{message: "tag: high"},
+	}
+	out := renderAuditThreatDashboard(commits)
+	for _, want := range []string{
+		`<section class="audit-threat-dash"`,
+		`Security Threat Level Summary`,
+		`data-sev="critical"`,
+		`data-sev="high"`,
+		`data-sev="medium"`,
+		`data-sev="low"`,
+		`data-sev="none"`,
+		`>1</span>`,        // critical count = 1
+		`>5</span>`,        // total = 5
+		`needs-review</i>`, // review footer
+		`>2</b>`,           // 2 needs-review (medium + critical)
+		`atd-reset`,
+		`☠️`,
+		`🚨`,
+		`⚠️`,
+		`✅`,
+		`ℹ️`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dashboard missing %q in output:\n%s", want, out)
+		}
+	}
+	// every severity bucket must render even when empty (e.g. low has 1,
+	// critical has 1, etc. — the matrix always lists all five cards).
+	if got := strings.Count(out, `class="atd-card `); got != 5 {
+		t.Errorf("dashboard should render 5 severity cards, got %d", got)
+	}
+}
+
+// TestHighlightAuditTagLine verifies the trailing tag line is wrapped in a
+// severity-class span while the surrounding analysis body is left intact.
+func TestHighlightAuditTagLine(t *testing.T) {
+	body := "Appliance: fw01\nScope: filter\ntag: high, needs-review"
+	out := highlightAuditTagLine(body)
+	if !strings.Contains(out, `<span class="audit-tag-line sev-high">tag: high, needs-review</span>`) {
+		t.Errorf("tag line should be wrapped in a sev-high span: %s", out)
+	}
+	if !strings.Contains(out, "Appliance: fw01") {
+		t.Errorf("non-tag lines should pass through unchanged: %s", out)
+	}
+	// a body with no tag line is returned unchanged (no spurious span).
+	plain := "just analysis\nno tag here"
+	if got := highlightAuditTagLine(plain); got != plain {
+		t.Errorf("body without tag line should pass through, got %q", got)
 	}
 }
 

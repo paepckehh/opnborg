@@ -3,6 +3,7 @@ package opnborg
 import (
 	"errors"
 	"html"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -176,11 +177,52 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 	if len(commits) == 0 {
 		s.WriteString("<div class=\"audit-empty\"><span class=\"dash-muted\">no commits in the selected window</span></div>")
 	} else {
+		s.WriteString(renderAuditThreatDashboard(commits))
 		s.WriteString(renderAuditCommits(commits))
 	}
 	s.WriteString("</div>")
+	s.WriteString(_auditFilterScript)
 	return s.String()
 }
+
+// _auditFilterScript is the small client-side controller that turns the
+// threat-level dashboard cards into click-to-filter toggles for the commit
+// timeline below. Clicking a card toggles the visibility of the matching
+// commits (identified by the data-sev attribute injected by
+// renderAuditCommits) without reordering them, so the chronological order is
+// preserved. The reset button restores the full timeline. The script is
+// idempotent: it re-binds on each page load and never touches commits that
+// lack the dashboard.
+const _auditFilterScript = `<script>
+(function(){
+  var dash=document.getElementById('audit-threat-dash');
+  var list=document.getElementById('audit-list');
+  if(!dash||!list)return;
+  var cards=Array.prototype.slice.call(dash.querySelectorAll('.atd-card'));
+  var commits=Array.prototype.slice.call(list.querySelectorAll('.audit-commit'));
+  var reset=document.getElementById('atd-reset');
+  function apply(){
+    var active=cards.filter(function(c){return c.getAttribute('data-active')==='true';}).map(function(c){return c.getAttribute('data-sev');});
+    var all=active.length===cards.length||active.length===0;
+    commits.forEach(function(co){
+      var sev=co.getAttribute('data-sev')||'none';
+      co.classList.toggle('sev-hidden',!all&&active.indexOf(sev)===-1);
+    });
+  }
+  cards.forEach(function(card){
+    card.addEventListener('click',function(){
+      var on=card.getAttribute('data-active')==='true';
+      card.setAttribute('data-active',on?'false':'true');
+      apply();
+    });
+  });
+  if(reset){reset.addEventListener('click',function(){
+    cards.forEach(function(c){c.setAttribute('data-active','true');});
+    apply();
+  });}
+  apply();
+})();
+</script>`
 
 // auditRangeLabel returns the human-readable label for a range slug.
 func auditRangeLabel(slug string) string {
@@ -394,6 +436,207 @@ func splitAuditMessage(msg string) (tldr, detailed string) {
 	return tldr, detailed
 }
 
+// _auditTagRe parses the trailing "tag: <severity>[, needs-review]" line the
+// Ollama security-audit prompt instructs the model to emit. The severity is
+// one of low / medium / high / critical; the optional ", needs-review" suffix
+// flags a commit a human should inspect before it ships. The line may appear
+// at the end of an Ollama-assisted detailed analysis body or, for plain
+// commits, anywhere in the message.
+var _auditTagRe = regexp.MustCompile(`^[Tt][Aa][Gg]:\s*([a-zA-Z]+)\s*(?:,\s*(needs-review))?\s*$`)
+
+// _auditSeverities is the ordered threat-level catalogue the audit dashboard
+// renders as the categorisation map. Each entry carries the machine key (as
+// written by the model in the tag: line), the emoji glyph used as the modern
+// logo, the human label, the one-line description, and the CSS class token that
+// drives the card / badge / summary styling. The order is highest-severity
+// first so the dashboard reads top-down by risk.
+var _auditSeverities = []struct {
+	key   string
+	emoji string
+	label string
+	desc  string
+	css   string
+}{
+	{"critical", "☠️", "Critical", "key control removed or sensitive service exposed", "sev-critical"},
+	{"high", "🚨", "High", "attack surface broadened or hardening weakened", "sev-high"},
+	{"medium", "⚠️", "Medium", "bounded hardening or exposure change", "sev-medium"},
+	{"low", "✅", "Low", "routine change, no security impact", "sev-low"},
+	{"none", "ℹ️", "Untagged", "no AI security tag in commit message", "sev-none"},
+}
+
+// auditTag extracts the security-impact tag from a commit message. It scans
+// every line (the tag may sit at the end of a detailed analysis body or, for
+// plain commits, anywhere in the message), matches it against _auditTagRe,
+// and normalises the severity to one of the known keys (low / medium / high /
+// critical). An unknown severity or no tag line yields ("none", false). The
+// needs-review flag is preserved verbatim from the tag suffix.
+func auditTag(msg string) (severity string, needsReview bool) {
+	severity = "none"
+	if msg == "" {
+		return severity, false
+	}
+	for _, line := range strings.Split(msg, "\n") {
+		line = strings.TrimSpace(line)
+		m := _auditTagRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		sev := strings.ToLower(m[1])
+		for _, s := range _auditSeverities {
+			if s.key == sev {
+				return sev, m[2] == "needs-review"
+			}
+		}
+		return "none", m[2] == "needs-review"
+	}
+	return severity, false
+}
+
+// auditSeverityClass maps a severity key to its CSS class token. An unknown
+// key resolves to the "none" bucket so the audit page always renders a valid
+// class.
+func auditSeverityClass(severity string) string {
+	for _, s := range _auditSeverities {
+		if s.key == severity {
+			return s.css
+		}
+	}
+	return "sev-none"
+}
+
+// renderAuditThreatDashboard renders the interactive animated summary
+// dashboard shown at the head of the audit page. It tallies the commits by
+// security severity (derived from the tag: line of each commit message),
+// renders a compact threat-level categorisation map (emoji + label + count +
+// animated bar), and exposes the matrix as click-to-filter buttons so an
+// operator can isolate a threat class without leaving the chronological
+// commit order. The counts include every commit in the window, including
+// untagged ones, so the dashboard always sums to the total commit count.
+func renderAuditThreatDashboard(commits []auditCommit) string {
+	counts := make(map[string]int, len(_auditSeverities))
+	review := 0
+	for _, c := range commits {
+		sev, nr := auditTag(c.message)
+		counts[sev]++
+		if nr {
+			review++
+		}
+	}
+	total := len(commits)
+	var s strings.Builder
+	s.WriteString("<section class=\"audit-threat-dash\" id=\"audit-threat-dash\">")
+	s.WriteString("<div class=\"atd-head\">")
+	s.WriteString("<div class=\"atd-title\"><span class=\"atd-title-emoji\">🛡️</span><span>Security Threat Level Summary</span></div>")
+	s.WriteString("<div class=\"atd-sub\">AI-triaged commit risk distribution &middot; click a threat class to filter the timeline</div>")
+	s.WriteString("</div>")
+	s.WriteString("<div class=\"atd-grid\">")
+	for _, sv := range _auditSeverities {
+		n := counts[sv.key]
+		pct := 0
+		if total > 0 {
+			pct = int(math.Round(float64(n) * 100 / float64(total)))
+		}
+		s.WriteString("<button type=\"button\" class=\"atd-card ")
+		s.WriteString(sv.css)
+		s.WriteString("\" data-sev=\"")
+		s.WriteString(sv.key)
+		s.WriteString("\" data-active=\"true\" title=\"Click to toggle ")
+		s.WriteString(sv.label)
+		s.WriteString(" commits in the timeline\">")
+		s.WriteString("<span class=\"atd-card-emoji\">")
+		s.WriteString(sv.emoji)
+		s.WriteString("</span>")
+		s.WriteString("<span class=\"atd-card-label\">")
+		s.WriteString(sv.label)
+		s.WriteString("</span>")
+		s.WriteString("<span class=\"atd-card-count\">")
+		s.WriteString(strconv.Itoa(n))
+		s.WriteString("</span>")
+		s.WriteString("<span class=\"atd-card-desc\">")
+		s.WriteString(html.EscapeString(sv.desc))
+		s.WriteString("</span>")
+		s.WriteString("<span class=\"atd-card-bar\"><i style=\"width:")
+		s.WriteString(strconv.Itoa(pct))
+		s.WriteString("%\"></i></span>")
+		s.WriteString("</button>")
+	}
+	s.WriteString("</div>")
+	s.WriteString("<div class=\"atd-footer\">")
+	s.WriteString("<div class=\"atd-total\"><span class=\"atd-total-n\">")
+	s.WriteString(strconv.Itoa(total))
+	s.WriteString("</span><span class=\"atd-total-l\">commits in window</span></div>")
+	if review > 0 {
+		s.WriteString("<div class=\"atd-review\"><span class=\"atd-review-emoji\">👀</span><span><b>")
+		s.WriteString(strconv.Itoa(review))
+		s.WriteString("</b> flagged <i>needs-review</i></span></div>")
+	}
+	s.WriteString("<div class=\"atd-legend\"><span class=\"atd-legend-pill sev-critical\">☠️ critical</span><span class=\"atd-legend-pill sev-high\">🚨 high</span><span class=\"atd-legend-pill sev-medium\">⚠️ medium</span><span class=\"atd-legend-pill sev-low\">✅ low</span><span class=\"atd-legend-pill sev-none\">ℹ️ untagged</span></div>")
+	s.WriteString("<button type=\"button\" class=\"atd-reset\" id=\"atd-reset\" title=\"Show all commits in the timeline\">↺ reset filter</button>")
+	s.WriteString("</div>")
+	s.WriteString("</section>")
+	return s.String()
+}
+
+// auditBadgeHTML renders the inline threat-level badge for a single commit
+// summary header. The badge carries the severity emoji, the label, and the
+// needs-review flag (when set). An empty severity (the "none" bucket) renders
+// a muted "untagged" chip so every commit carries a visible threat class.
+func auditBadgeHTML(severity string, needsReview bool) string {
+	var emoji, label, cls string
+	for _, sv := range _auditSeverities {
+		if sv.key == severity {
+			emoji = sv.emoji
+			label = sv.label
+			cls = sv.css
+			break
+		}
+	}
+	if cls == "" {
+		emoji = "ℹ️"
+		label = "Untagged"
+		cls = "sev-none"
+	}
+	var s strings.Builder
+	s.WriteString("<span class=\"audit-sev-badge ")
+	s.WriteString(cls)
+	s.WriteString("\" data-sev=\"")
+	s.WriteString(html.EscapeString(severity))
+	s.WriteString("\">")
+	s.WriteString("<span class=\"audit-sev-emoji\">")
+	s.WriteString(emoji)
+	s.WriteString("</span>")
+	s.WriteString("<span class=\"audit-sev-label\">")
+	s.WriteString(label)
+	s.WriteString("</span>")
+	if needsReview {
+		s.WriteString("<span class=\"audit-sev-review\" title=\"human review recommended\">👀</span>")
+	}
+	s.WriteString("</span>")
+	return s.String()
+}
+
+// highlightAuditTagLine colorises the trailing "tag: <severity>[, needs-review]"
+// line inside a rendered analysis body so the security-impact classification
+// stands out from the surrounding analysis prose. The line is wrapped in a
+// severity-class span; all other lines pass through unchanged (already HTML-
+// escaped by the caller).
+func highlightAuditTagLine(body string) string {
+	if body == "" {
+		return ""
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		m := _auditTagRe.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		sev := strings.ToLower(m[1])
+		cls := auditSeverityClass(sev)
+		lines[i] = "<span class=\"audit-tag-line " + cls + "\">" + line + "</span>"
+	}
+	return strings.Join(lines, "\n")
+}
+
 // renderAuditCommits emits the per-commit list HTML. Each commit is a
 // collapsible <details> card carrying the header (hash, author, date, file
 // stats), the commit message, and the syntax-highlighted unified diff.
@@ -404,9 +647,15 @@ func splitAuditMessage(msg string) (tldr, detailed string) {
 // headlines and expand the body only for commits that warrant a closer look.
 func renderAuditCommits(commits []auditCommit) string {
 	var s strings.Builder
-	s.WriteString("<div class=\"audit-list\">")
+	s.WriteString("<div class=\"audit-list\" id=\"audit-list\">")
 	for _, c := range commits {
-		s.WriteString("<details class=\"audit-commit\" open>")
+		severity, needsReview := auditTag(c.message)
+		sevClass := auditSeverityClass(severity)
+		s.WriteString("<details class=\"audit-commit ")
+		s.WriteString(sevClass)
+		s.WriteString("\" open data-sev=\"")
+		s.WriteString(html.EscapeString(severity))
+		s.WriteString("\">")
 		s.WriteString("<summary class=\"audit-commit-head\">")
 		s.WriteString("<span class=\"audit-hash\">")
 		s.WriteString(html.EscapeString(c.hash))
@@ -414,6 +663,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("<span class=\"audit-author\">")
 		s.WriteString(html.EscapeString(auditDisplayAuthor(c)))
 		s.WriteString("</span>")
+		s.WriteString(auditBadgeHTML(severity, needsReview))
 		s.WriteString("<span class=\"audit-date\">")
 		s.WriteString(html.EscapeString(c.when.UTC().Format("2006-01-02 15:04:05 Z07:00")))
 		s.WriteString("</span>")
@@ -428,15 +678,17 @@ func renderAuditCommits(commits []auditCommit) string {
 		tldr, detailed := splitAuditMessage(c.message)
 		if tldr == "" {
 			s.WriteString("<pre class=\"audit-message\">")
-			s.WriteString(html.EscapeString(c.message))
+			s.WriteString(highlightAuditTagLine(html.EscapeString(c.message)))
 			s.WriteString("</pre>")
 		} else {
-			s.WriteString("<div class=\"audit-tldr\">")
+			s.WriteString("<div class=\"audit-tldr ")
+			s.WriteString(sevClass)
+			s.WriteString("\">")
 			s.WriteString(html.EscapeString(tldr))
 			s.WriteString("</div>")
 			if detailed != "" {
 				s.WriteString("<details class=\"audit-analysis\"><summary class=\"audit-analysis-head\">Detailed Analysis</summary><pre class=\"audit-message audit-analysis-body\">")
-				s.WriteString(html.EscapeString(detailed))
+				s.WriteString(highlightAuditTagLine(html.EscapeString(detailed)))
 				s.WriteString("</pre></details>")
 			}
 		}
