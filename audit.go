@@ -412,12 +412,12 @@ func safeAuthorName(s object.Signature) string {
 }
 
 // auditDisplayAuthor returns the author name shown in the audit page header.
-// When the commit carries an Ollama TLDR headline but the recorded git author
-// is still the static OPNBORG-AUTO-COMMIT handle (commits made before the
-// TLDR-derived author feature, or a model response the author extraction did
-// not recognise), the shortened TLDR headline is shown instead so the audit
-// log surfaces the change at a glance. Commits without a TLDR line keep the
-// recorded git author name unchanged.
+// When the commit carries an Ollama summary headline but the recorded git
+// author is still the static OPNBORG-AUTO-COMMIT handle (commits made before
+// the TLDR-derived author feature, or a model response the author extraction
+// did not recognise), the summary headline is shown instead so the audit
+// log surfaces the change at a glance. Commits without an Ollama headline
+// keep the recorded git author name unchanged.
 func auditDisplayAuthor(c auditCommit) string {
 	if c.author == _authorName {
 		if name := authorFromCommitMessage(c.message); name != "" {
@@ -427,29 +427,33 @@ func auditDisplayAuthor(c auditCommit) string {
 	return c.author
 }
 
-// _auditDetailedAnalysisMarker is the header line that separates the TLDR
+// _auditDetailedAnalysisMarker is the header line that separates the summary
 // headline from the full analysis body in an Ollama-assisted commit message
 // (see assembleAnnotatedCommitMessage in ollama.go).
 const _auditDetailedAnalysisMarker = "Detailed Analysis:"
 
-// splitAuditMessage splits an Ollama-assisted commit message into the TLDR
-// headline and the detailed analysis body. Messages that carry no TLDR
-// headline (the default "opnborg auto update" message, the .unf bypass, or a
-// plain manual commit) return an empty tldr and the full message as the body,
-// so the audit page renders them unchanged.
+// splitAuditMessage splits an Ollama-assisted commit message into the summary
+// headline and the detailed analysis body. Messages that carry no annotation
+// (the default "opnborg auto update" message, the .unf bypass, or a plain
+// manual commit) return an empty headline and the full message as the body,
+// so the audit page renders them unchanged. Commits whose subject still
+// carries a legacy "TLDR: " marker (committed by older builds) are split too,
+// keeping the rendered headline clean.
 func splitAuditMessage(msg string) (tldr, detailed string) {
 	msg = strings.TrimSpace(msg)
 	if msg == "" {
 		return "", ""
-	}
-	if !strings.HasPrefix(msg, _authorNameTldrPrefix) {
-		return "", msg
 	}
 	head, body, ok := strings.Cut(msg, _auditDetailedAnalysisMarker)
 	if !ok {
 		return "", msg
 	}
 	tldr = strings.TrimSpace(head)
+	if strings.HasPrefix(strings.ToLower(tldr), "tldr") {
+		if i := strings.IndexByte(tldr, ':'); i >= 0 {
+			tldr = strings.TrimSpace(tldr[i+1:])
+		}
+	}
 	detailed = strings.TrimSpace(body)
 	return tldr, detailed
 }

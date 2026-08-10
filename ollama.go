@@ -663,15 +663,15 @@ func headFileContent(tree *object.Tree, pth string) (string, error) {
 // result can be embedded verbatim as the first line of the commit message.
 const _ollamaTldrPrompt = `You are a senior infrastructure and Unix firewall engineer. Below is the detailed security and impact analysis you just authored for an automated opnborg backup commit of an OPNsense firewall configuration.
 
-Summarise that analysis into a single, concise TLDR sentence that captures the essence of the change and its security impact. The sentence must be self-contained (it will be the headline of the git commit message) and written in plain prose, no bullet points, no markdown.
+Summarise that analysis into a single, concise summary sentence that captures the essence of the change and its security impact. The sentence must be self-contained (it will be the headline of the git commit message) and written in plain prose, no bullet points, no markdown.
 
 Output contract (obey exactly, no preamble, no markdown fences):
 - Return exactly one line.
-- Start with "TLDR: " followed by the summary sentence.
-- No trailing newline, no extra prose, no "tag:" line, no quotation marks.
+- Return only the summary sentence.
+- No trailing newline, no extra prose, no "tag:" line, no quotation marks, no "TLDR:" marker.
 - Keep it under 160 characters.
 
-If the analysis is empty or unintelligible, return exactly: TLDR: opnborg auto update
+If the analysis is empty or unintelligible, return exactly: opnborg auto update
 
 --- BEGIN DETAILED ANALYSIS ---
 %s
@@ -691,8 +691,8 @@ If the analysis is empty or unintelligible, return exactly: TLDR: opnborg auto u
 // enabled and the change set is describable, two REST calls are made to the
 // model: the first produces the exhaustive detailed analysis (headline +
 // in-depth security/impact review + trailing "tag:" severity line), and the
-// second distils that analysis into a single TLDR sentence. The final commit
-// message is assembled as the TLDR line on top, a blank line, a "Detailed
+// second distils that analysis into a single summary sentence. The final commit
+// message is assembled as the summary line on top, a blank line, a "Detailed
 // Analysis:" marker, and the full detailed analysis underneath. On any error
 // or empty response at either stage the default message is used as a fallback
 // so a model outage never blocks the backup from being committed.
@@ -730,10 +730,11 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		return _commitMsg
 	}
 	// Second pass: ask the model to resume its detailed analysis as a single
-	// TLDR sentence, then assemble the final commit message with the TLDR
-	// on top and the full detailed analysis under a "Detailed Analysis:"
-	// marker. A failure here degrades gracefully to the detailed analysis
-	// alone (no TLDR header) so the commit still ships with the rich body.
+	// summary sentence, then assemble the final commit message with the
+	// summary on top and the full detailed analysis under a "Detailed
+	// Analysis:" marker. A failure here degrades gracefully to the detailed
+	// analysis alone (no summary header) so the commit still ships with the
+	// rich body.
 	tldr, terr := ollamaGenerate(config, fmt.Sprintf(_ollamaTldrPrompt, msg))
 	tldr = normalizeTldrHeadline(tldr)
 	if terr != nil || tldr == "" {
@@ -741,32 +742,20 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		displayChan <- []byte("[OLLAMA][OK] commit message generated (detailed analysis only)")
 		return msg
 	}
-	displayChan <- []byte("[OLLAMA][OK] commit message generated (TLDR + detailed analysis)")
+	displayChan <- []byte("[OLLAMA][OK] commit message generated (summary + detailed analysis)")
 	return assembleAnnotatedCommitMessage(tldr, msg)
 }
 
-// normalizeTldrHeadline coerces the model's TLDR response into the canonical
-// "TLDR: <sentence>" form so the downstream author-name extraction and the
+// normalizeTldrHeadline coerces the model's summary response into the canonical
+// "<sentence>" form so the downstream author-name extraction and the
 // audit-page message splitter both reliably recognise it. Models do not
-// always obey the one-line / "TLDR: " contract: they may wrap the marker in
-// markdown emphasis ("**TLDR:**"), drop the space after the colon, prepend a
-// preamble line, or omit the marker entirely. This function takes the first
-// non-empty line, strips leading markdown / quote characters, recognises a
-// case-insensitive "TLDR" marker optionally followed by markdown and a colon
-// (stripping it so the canonical prefix is re-added uniformly), and prepends
-// "TLDR: " when no marker is present. An empty input yields an empty result
-// so the caller can fall back to the detailed-analysis-only message.
-// normalizeTldrHeadline coerces the model's TLDR response into the canonical
-// "TLDR: <sentence>" form so the downstream author-name extraction and the
-// audit-page message splitter both reliably recognise it. Models do not
-// always obey the one-line / "TLDR: " contract: they may wrap the marker in
+// always obey the one-line contract: they may wrap the marker in
 // markdown emphasis ("**TLDR:**"), drop the space after the colon, prepend a
 // preamble line, or omit the marker entirely. This function scans the lines
 // for the first one carrying a TLDR marker (falling back to the first
-// non-empty line), strips the marker plus any surrounding markdown so the
-// canonical prefix is re-added uniformly, and prepends "TLDR: " when no
-// marker is present. An empty input yields an empty result so the caller can
-// fall back to the detailed-analysis-only message.
+// non-empty line) and strips the marker plus any surrounding markdown. An
+// empty input yields an empty result so the caller can fall back to the
+// detailed-analysis-only message.
 func normalizeTldrHeadline(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -787,23 +776,21 @@ func normalizeTldrHeadline(raw string) string {
 			headline = line
 		}
 	}
-	if headline == "" {
-		return ""
-	}
-	lower := strings.ToLower(headline)
-	if strings.HasPrefix(lower, "tldr") {
-		rest := headline[len("tldr"):]
-		rest = strings.TrimLeft(rest, "*_`#")
-		if len(rest) > 0 && rest[0] == ':' {
-			rest = rest[1:]
-			rest = strings.TrimLeft(rest, "*_`# ")
-			headline = strings.TrimSpace(rest)
+	// Strip a TLDR marker if the model still emits one (the prompt forbids
+	// it, but be tolerant), then return the bare sentence.
+	if headline != "" {
+		lower := strings.ToLower(headline)
+		if strings.HasPrefix(lower, "tldr") {
+			rest := headline[len("tldr"):]
+			rest = strings.TrimLeft(rest, "*_`#")
+			if len(rest) > 0 && rest[0] == ':' {
+				rest = rest[1:]
+				rest = strings.TrimLeft(rest, "*_`# ")
+				headline = strings.TrimSpace(rest)
+			}
 		}
 	}
-	if headline == "" {
-		return ""
-	}
-	return _authorNameTldrPrefix + headline
+	return strings.TrimSpace(headline)
 }
 
 // fallbackTldrErr renders a non-nil TLDR-stage error for the log line, or a
@@ -816,14 +803,14 @@ func fallbackTldrErr(err error) string {
 }
 
 // assembleAnnotatedCommitMessage builds the final commit message from the
-// TLDR summary line and the full detailed analysis. The layout is:
+// summary line and the full detailed analysis. The layout is:
 //
-//	TLDR: <summary line>
+//	<summary line>
 //
 //	Detailed Analysis:
 //	<detailed analysis, including the trailing tag: severity line>
 //
-// Exactly one blank line separates the TLDR from the "Detailed Analysis:"
+// Exactly one blank line separates the summary from the "Detailed Analysis:"
 // header, and exactly one blank line separates the header from the body.
 func assembleAnnotatedCommitMessage(tldr, detailed string) string {
 	tldr = strings.TrimSpace(tldr)
@@ -832,26 +819,28 @@ func assembleAnnotatedCommitMessage(tldr, detailed string) string {
 }
 
 // _authorNameMaxRunes caps the git commit author name derived from an
-// Ollama TLDR headline. Git author names have no hard length limit, but the
-// TLDR sentence can run up to the model's 160-character ceiling, which is too
+// Ollama summary headline. Git author names have no hard length limit, but the
+// summary sentence can run up to the model's 160-character ceiling, which is too
 // long for `git log --format=%an`. We cap at 72 runes (the conventional commit
 // headline width) so the commit log stays readable.
 const _authorNameMaxRunes = 72
 
-// _authorNameTldrPrefix is the leading marker of an Ollama TLDR headline. It is
-// stripped before the headline is reused as the commit author name.
+// _authorNameTldrPrefix is the leading marker that older Ollama commits
+// carried on their summary headline. It is stripped (if present) before the
+// headline is reused as the commit author name.
 const _authorNameTldrPrefix = "TLDR: "
 
-// authorFromCommitMessage returns a short, sanitised version of the TLDR
+// authorFromCommitMessage returns a short, sanitised version of the summary
 // headline carried by an Ollama-assisted commit message, suitable for use as
 // the git commit author name in place of the static OPNBORG-AUTO-COMMIT
-// handle. It takes the first line of the message, strips the leading "TLDR: "
-// marker, collapses runs of whitespace into single spaces, drops control
-// characters and the characters git's identity parser treats specially (<, >,
-// ", \) so the resulting name is always a valid git identity, and truncates to
-// _authorNameMaxRunes. An empty input, an input with no first line, or one
-// whose first line carries no TLDR marker returns "" so the caller can fall
-// back to the static _authorName handle.
+// handle. It takes the first line of the message, strips a leading "TLDR: "
+// marker if one is still present (the prompt forbids it, but old commits and
+// misbehaving models may carry one), collapses runs of whitespace into single
+// spaces, drops control characters and the characters git's identity parser
+// treats specially (<, >, ", \) so the resulting name is always a valid git
+// identity, and truncates to _authorNameMaxRunes. An empty input or an input
+// with no first line returns "" so the caller can fall back to the static
+// _authorName handle.
 func authorFromCommitMessage(msg string) string {
 	firstLine := strings.TrimSpace(msg)
 	if firstLine == "" {
@@ -860,12 +849,18 @@ func authorFromCommitMessage(msg string) string {
 	if i := strings.IndexByte(firstLine, '\n'); i >= 0 {
 		firstLine = strings.TrimSpace(firstLine[:i])
 	}
-	if !strings.HasPrefix(firstLine, _authorNameTldrPrefix) {
+	// Recognise Ollama-authored messages by their annotation marker (current
+	// format) or their legacy "TLDR: " subject prefix (older builds); a bare
+	// manual commit subject or the default message must not be reused.
+	annotated := strings.Contains(msg, _auditDetailedAnalysisMarker)
+	if !strings.HasPrefix(firstLine, _authorNameTldrPrefix) && !annotated {
 		return ""
 	}
-	firstLine = strings.TrimSpace(firstLine[len(_authorNameTldrPrefix):])
-	if firstLine == "" {
-		return ""
+	if strings.HasPrefix(firstLine, _authorNameTldrPrefix) {
+		firstLine = strings.TrimSpace(firstLine[len(_authorNameTldrPrefix):])
+		if firstLine == "" {
+			return ""
+		}
 	}
 	var b strings.Builder
 	b.Grow(len(firstLine))

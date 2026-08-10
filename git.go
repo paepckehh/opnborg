@@ -368,9 +368,9 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 		commitMsg = msg
 		// When Ollama authored the message, replace the static
 		// OPNBORG-AUTO-COMMIT author handle with a short, sanitised
-		// version of the TLDR summary headline so the commit log surfaces
+		// version of the summary headline so the commit log surfaces
 		// the change at a glance. Falls back to _authorName when the
-		// message carries no TLDR line (default message, .unf bypass, or
+		// message carries no summary line (default message, .unf bypass, or
 		// a model outage that degraded to the detailed analysis alone).
 		if name := authorFromCommitMessage(msg); name != "" {
 			authorName = name

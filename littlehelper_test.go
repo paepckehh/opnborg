@@ -3631,10 +3631,10 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	// Stand up a fake Ollama /api/generate that returns the detailed analysis
-	// on the first call and a TLDR summary on the second call, mirroring the
-	// two-pass flow in generateCommitMessage.
+	// on the first call and a summary sentence on the second call, mirroring
+	// the two-pass flow in generateCommitMessage.
 	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
-	const tldrMsg = "TLDR: tightened WAN inbound filter set"
+	const tldrMsg = "tightened WAN inbound filter set"
 	mux := http.NewServeMux()
 	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -3716,7 +3716,7 @@ func TestGenerateCommitMessageNormalisesMarkdownTldr(t *testing.T) {
 
 	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
 	const markdownTldr = "**TLDR:** tightened WAN inbound filter set"
-	const canonicalTldr = "TLDR: tightened WAN inbound filter set"
+	const canonicalTldr = "tightened WAN inbound filter set"
 	mux := http.NewServeMux()
 	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -3855,10 +3855,12 @@ func TestGitDiffTextFirstCommitIsEmpty(t *testing.T) {
 	}
 }
 
-// TestAuthorFromCommitMessage verifies the TLDR headline embedded in an
+// TestAuthorFromCommitMessage verifies the summary headline embedded in an
 // Ollama-assisted commit message is extracted, sanitised, and truncated into
-// a valid git author name, and that messages without a TLDR line fall back to
-// the empty string so the caller keeps the static OPNBORG-AUTO-COMMIT handle.
+// a valid git author name, and that messages without a summary line fall back
+// to the empty string so the caller keeps the static OPNBORG-AUTO-COMMIT
+// handle. Messages whose subject still carries a legacy "TLDR: " marker
+// (committed by older builds) are tolerated and stripped too.
 func TestAuthorFromCommitMessage(t *testing.T) {
 	long := strings.Repeat("a", _authorNameMaxRunes)
 	tests := []struct {
@@ -3868,18 +3870,19 @@ func TestAuthorFromCommitMessage(t *testing.T) {
 	}{
 		{"empty", "", ""},
 		{"default message no tldr", _commitMsg, ""},
-		{"bare tldr", "TLDR: tightened WAN inbound filter set", "tightened WAN inbound filter set"},
-		{"tldr with detailed body", "TLDR: tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
-		{"tldr extra spaces collapsed", "TLDR:   multi   spaces  here", "multi spaces here"},
-		{"tldr trailing whitespace trimmed", "TLDR: trimmed line   ", "trimmed line"},
-		{"tldr drops git special chars", `TLDR: drop <email> and "quote" \back chars`, "drop email and quote back chars"},
-		{"tldr drops control chars", "TLDR: a\tb\nc", "a b"},
-		{"tldr empty after prefix", "TLDR:", ""},
-		{"tldr only prefix and spaces", "TLDR:   ", ""},
-		{"no tldr prefix", "tightened WAN inbound filter set", ""},
-		{"tldr truncated to cap", "TLDR: " + strings.Repeat("a", _authorNameMaxRunes+50), long},
-		{"tldr exactly at cap", "TLDR: " + strings.Repeat("a", _authorNameMaxRunes), long},
-		{"tldr leading newline then marker", "\n\nTLDR: tightened", "tightened"},
+		{"bare summary annotated", "tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody", "tightened WAN inbound filter set"},
+		{"summary with detailed body", "tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
+		{"legacy tldr marker stripped", "TLDR: tightened WAN inbound filter set", "tightened WAN inbound filter set"},
+		{"legacy tldr with detailed body", "TLDR: tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
+		{"extra spaces collapsed", "tightened   multi   spaces  here\n\nDetailed Analysis:\n\nbody", "tightened multi spaces here"},
+		{"trailing whitespace trimmed", "trimmed line  \n\nDetailed Analysis:\n\nbody", "trimmed line"},
+		{"drops git special chars", `drop <email> and "quote" \back chars` + "\n\nDetailed Analysis:\n\nbody", "drop email and quote back chars"},
+		{"drops control chars", "a\tb\n\nDetailed Analysis:\n\nbody", "a b"},
+		{"empty after marker", "TLDR:", ""},
+		{"only marker and spaces", "TLDR:   ", ""},
+		{"truncated to cap", strings.Repeat("a", _authorNameMaxRunes+50) + "\n\nDetailed Analysis:\n\nbody", long},
+		{"exactly at cap", strings.Repeat("a", _authorNameMaxRunes) + "\n\nDetailed Analysis:\n\nbody", long},
+		{"leading newline then marker", "\n\nTLDR: tightened", "tightened"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3890,11 +3893,11 @@ func TestAuthorFromCommitMessage(t *testing.T) {
 	}
 }
 
-// TestNormalizeTldrHeadline verifies the model TLDR response is coerced into
-// the canonical "TLDR: <sentence>" form so the downstream author-name
-// extraction and the audit-page message splitter both reliably recognise it,
-// even when the model wraps the marker in markdown, drops the space, adds a
-// preamble line, or omits the marker entirely.
+// TestNormalizeTldrHeadline verifies the model summary response is coerced
+// into the bare "<sentence>" form so the downstream author-name extraction
+// and the audit-page message splitter both reliably recognise it, even when
+// the model wraps the marker in markdown, drops the space, adds a preamble
+// line, or omits the marker entirely.
 func TestNormalizeTldrHeadline(t *testing.T) {
 	tests := []struct {
 		name string
@@ -3902,20 +3905,21 @@ func TestNormalizeTldrHeadline(t *testing.T) {
 		want string
 	}{
 		{"empty", "", ""},
-		{"already canonical", "TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"trailing whitespace", "TLDR: tighten WAN filter  \n", "TLDR: tighten WAN filter"},
-		{"markdown bold marker", "**TLDR:** tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"markdown italic marker", "_TLDR:_ tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"no space after colon", "TLDR:tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"lowercase marker", "tldr: tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"uppercase marker", "TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"preamble line then marker", "Here is the summary:\nTLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
-		{"no marker at all", "tighten WAN inbound filter set", "TLDR: tighten WAN inbound filter set"},
-		{"leading quote", "\"TLDR: tighten WAN filter\"", "TLDR: tighten WAN filter\""},
-		{"leading markdown fence", "```TLDR: tighten WAN filter", "TLDR: tighten WAN filter"},
+		{"already canonical", "tighten WAN filter", "tighten WAN filter"},
+		{"legacy tldr marker stripped", "TLDR: tighten WAN filter", "tighten WAN filter"},
+		{"trailing whitespace", "tighten WAN filter  \n", "tighten WAN filter"},
+		{"markdown bold marker stripped", "**TLDR:** tighten WAN filter", "tighten WAN filter"},
+		{"markdown italic marker stripped", "_TLDR:_ tighten WAN filter", "tighten WAN filter"},
+		{"no space after colon", "TLDR:tighten WAN filter", "tighten WAN filter"},
+		{"lowercase marker", "tldr: tighten WAN filter", "tighten WAN filter"},
+		{"uppercase marker", "TLDR: tighten WAN filter", "tighten WAN filter"},
+		{"preamble line then marker", "Here is the summary:\nTLDR: tighten WAN filter", "tighten WAN filter"},
+		{"no marker at all", "tighten WAN inbound filter set", "tighten WAN inbound filter set"},
+		{"leading quote", "\"TLDR: tighten WAN filter\"", "tighten WAN filter\""},
+		{"leading markdown fence", "```TLDR: tighten WAN filter", "tighten WAN filter"},
 		{"only whitespace and marker", "  TLDR:  ", ""},
 		{"marker empty after colon", "TLDR:", ""},
-		{"multi line keeps first", "TLDR: first line\nsecond line", "TLDR: first line"},
+		{"multi line keeps first", "TLDR: first line\nsecond line", "first line"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3926,9 +3930,9 @@ func TestNormalizeTldrHeadline(t *testing.T) {
 	}
 }
 
-// TestAuditDisplayAuthor verifies the audit page shows the shortened TLDR
+// TestAuditDisplayAuthor verifies the audit page shows the shortened summary
 // headline as the commit author when the recorded git author is still the
-// static OPNBORG-AUTO-COMMIT handle but the message carries a TLDR line.
+// static OPNBORG-AUTO-COMMIT handle but the message carries a summary line.
 func TestAuditDisplayAuthor(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -3936,9 +3940,10 @@ func TestAuditDisplayAuthor(t *testing.T) {
 		message string
 		want    string
 	}{
-		{"static author with tldr", _authorName, "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
-		{"static author no tldr", _authorName, "opnborg auto update", _authorName},
-		{"tldr author kept", "tighten WAN filter", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"static author with summary", _authorName, "tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"static author with legacy marker", _authorName, "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"static author no summary", _authorName, "opnborg auto update", _authorName},
+		{"summary author kept", "tighten WAN filter", "tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
 		{"manual author kept", "PAEPCKE, Michael", "manual commit message", "PAEPCKE, Michael"},
 	}
 	for _, tt := range tests {
@@ -3967,7 +3972,7 @@ func TestGitCommitUsesTldrAuthorName(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
-	const tldrMsg = "TLDR: tightened WAN inbound filter set"
+	const tldrMsg = "tightened WAN inbound filter set"
 	mux := http.NewServeMux()
 	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -4530,10 +4535,11 @@ func TestGatherAuditCommits(t *testing.T) {
 	}
 }
 
-// TestSplitAuditMessage verifies the TLDR / detailed-analysis splitter that the
-// audit page uses to render Ollama-assisted commit messages: it extracts the
-// TLDR headline and the detailed body when the marker is present, and falls
-// back to the full message otherwise.
+// TestSplitAuditMessage verifies the summary / detailed-analysis splitter that
+// the audit page uses to render Ollama-assisted commit messages: it extracts
+// the summary headline and the detailed body when the marker is present, and
+// falls back to the full message otherwise. A legacy "TLDR: " marker on the
+// subject is stripped from the rendered headline.
 func TestSplitAuditMessage(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -4544,10 +4550,12 @@ func TestSplitAuditMessage(t *testing.T) {
 		{"empty", "", "", ""},
 		{"default message", "opnborg auto update", "", "opnborg auto update"},
 		{"manual commit", "first", "", "first"},
+		{"bare summary no marker", "tighten WAN filter", "", "tighten WAN filter"},
+		{"full annotated", "tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "tighten WAN filter", "body with tag: low"},
+		{"legacy tldr annotated", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "tighten WAN filter", "body with tag: low"},
+		{"annotated trailing whitespace", "headline  \n\nDetailed Analysis:\n\n  body  \n", "headline", "body"},
+		{"leading newline before headline", "\n\nheadline\n\nDetailed Analysis:\n\nbody", "headline", "body"},
 		{"tldr only no marker", "TLDR: tighten WAN filter", "", "TLDR: tighten WAN filter"},
-		{"full annotated", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "TLDR: tighten WAN filter", "body with tag: low"},
-		{"annotated trailing whitespace", "TLDR: headline  \n\nDetailed Analysis:\n\n  body  \n", "TLDR: headline", "body"},
-		{"leading newline before tldr", "\n\nTLDR: headline\n\nDetailed Analysis:\n\nbody", "TLDR: headline", "body"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -4563,15 +4571,15 @@ func TestSplitAuditMessage(t *testing.T) {
 }
 
 // TestRenderAuditCommitsTldrToggle verifies that renderAuditCommits renders the
-// TLDR headline as a highlighted banner and hides the detailed analysis behind
-// a collapsed <details> toggle when the commit message is Ollama-annotated, and
-// that plain messages render unchanged.
+// summary headline as a highlighted banner and hides the detailed analysis
+// behind a collapsed <details> toggle when the commit message is
+// Ollama-annotated, and that plain messages render unchanged.
 func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 	annotated := auditCommit{
 		hash:    "abcdef0",
 		author:  "OPNBORG-AUTO-COMMIT",
 		when:    time.Now(),
-		message: "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n",
+		message: "tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n",
 		diff:    "",
 	}
 	plain := auditCommit{
@@ -4583,7 +4591,7 @@ func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 	}
 	out := renderAuditCommits([]auditCommit{annotated, plain})
 	for _, want := range []string{
-		`<div class="audit-tldr sev-medium">TLDR: tighten WAN inbound filter</div>`,
+		`<div class="audit-tldr sev-medium">tighten WAN inbound filter</div>`,
 		`<details class="audit-analysis">`,
 		`<summary class="audit-analysis-head">Detailed Analysis</summary>`,
 		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
