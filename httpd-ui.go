@@ -17,7 +17,7 @@ const (
 	_bodyStart = "<body>" + _lf
 	_bodyEnd   = "</body>" + _lf
 
-	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1><div class=\"semver\">[ " + SemVer + " ]</div></header>" + _lf
+	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1><div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ " + SemVer + " ]</a></div></header>" + _lf
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
 	_forceInfo    = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
