@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	_currentDir = "."
-	_dotGit     = ".git"
-	_gitignore  = ".gitignore"
+	_dotGit    = ".git"
+	_gitignore = ".gitignore"
 	// _ignore is the canonical .gitignore content written into the storage
 	// root. It keeps the archive/history files, the symlink targets, the
 	// logs, and the on-disk security-approval ledger out of the commit
@@ -185,12 +184,21 @@ func ignoresApprovalLedger(line string) bool {
 
 // isApprovalDBPath reports whether a worktree path is a file of the
 // security-approval ledger (approval.db) or one of its SQLite WAL sidecars
-// (approval.db-wal, approval.db-shm). It matches by base name so ledger files
-// are detected regardless of which store subfolder they land in. gitCommit
+// (approval.db-wal, approval.db-shm). The primary guard is the substring
+// "approval.db": it matches the main database and every WAL sidecar at any
+// depth in the store ("approval.db", "approval.db-wal", "approval.db-shm",
+// "store/sub/approval.db", "approval.db.bak", ...), which is exactly the
+// "never commit a file containing the string 'approval.db'" guarantee. The
+// base-name fallback additionally catches ledger-style spellings that do not
+// literally contain "approval.db" (e.g. a hypothetical "approval-wal.db")
+// so the protection is strictly broader than the substring alone. gitCommit
 // uses it to skip every approval-ledger path at staging time so a ledger
 // update can never enter a commit, even when a stale or hand-edited .gitignore
 // failed to ignore the file.
 func isApprovalDBPath(p string) bool {
+	if strings.Contains(p, _approvalDBName) {
+		return true
+	}
 	base := filepath.Base(p)
 	if !strings.HasPrefix(base, "approval") {
 		return false
@@ -315,19 +323,22 @@ func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 // gitCommit stages the whole worktree and commits any pending changes. It
 // returns committed=false (a no-op) when the worktree is clean. The on-disk
 // security-approval ledger (approval.db and its SQLite WAL sidecars
-// approval.db-wal / approval.db-shm) is never staged: even if a stale or
-// hand-edited .gitignore failed to ignore it, the staging loop below skips
-// every approval-ledger path individually so a ledger update can never enter a
-// commit. When the only pending changes are approval-ledger files the tick is
-// treated as a clean no-op.
-// gitCommit stages the whole worktree and commits any pending changes. It
-// returns committed=false (a no-op) when the worktree is clean. The on-disk
-// security-approval ledger (approval.db and its SQLite WAL sidecars
 // approval.db-wal / approval.db-shm) is never committed: it is gitignored (see
 // _ignore / reconcileGitignoreApprovalLedger, reconciled at the start of every
 // gitCheckIn) so wtree.Add(".") never stages it, and the status partition
 // below treats a changeset that touches only approval-ledger files as a clean
 // no-op so no commit (and no Ollama round-trip) is spent on a ledger rotation.
+//
+// The staging is path-by-path rather than wtree.Add("."): go-git's
+// wtree.Add(".") and CommitOptions.All both re-stage tracked-but-gitignored
+// files — a file committed before it was added to .gitignore stays tracked,
+// and go-git's gitignore matcher only excludes untracked ignored files, so a
+// modified tracked approval.db would be re-staged on every tick. Staging each
+// non-ledger path from the status map explicitly (and committing with
+// All:false so autoAddModifiedAndDeleted never runs) guarantees a ledger file
+// is never staged, regardless of .gitignore state. The status map already
+// excludes gitignored untracked files, so non-ledger staging coverage is
+// identical to wtree.Add(".").
 func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	wtree, err := repo.Worktree()
 	if err != nil {
@@ -351,8 +362,19 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	if !hasReal {
 		return false, nil
 	}
-	if _, err := wtree.Add(_currentDir); err != nil {
-		return false, err
+	// Stage every pending change individually, skipping the on-disk
+	// security-approval ledger. See the function doc comment for why
+	// wtree.Add(".") + CommitOptions.All cannot be used: they re-stage
+	// tracked-but-gitignored ledger files. The status map excludes
+	// gitignored untracked files, so this stages the same non-ledger set
+	// that wtree.Add(".") would, minus any approval.db* path.
+	for p := range status {
+		if isApprovalDBPath(p) {
+			continue
+		}
+		if _, err := wtree.Add(p); err != nil {
+			return false, err
+		}
 	}
 	// Choose the commit message. The default is the static _commitMsg string.
 	// When Ollama-assisted generation is enabled (OLLAMA_DESC_URL +
@@ -382,7 +404,7 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 			Email: config.Email,
 			When:  time.Now(),
 		},
-		All:               true,
+		All:               false,
 		AllowEmptyCommits: false,
 	})
 	if err != nil {

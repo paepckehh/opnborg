@@ -3425,6 +3425,137 @@ func TestGitCommitSkipsApprovalLedger(t *testing.T) {
 	})
 }
 
+// TestGitCommitSkipsTrackedApprovalLedger verifies the belt-and-suspenders
+// guard that .gitignore alone cannot provide: once an approval.db file has
+// been committed into history (so it is tracked), .gitignore no longer keeps
+// its worktree modifications out of subsequent commits — go-git's gitignore
+// matcher only excludes untracked ignored files. gitCommit must still refuse
+// to re-stage it, so a tracked-ledger modification plus a real XML change
+// produces a commit that carries the new XML but NOT the new ledger blob.
+func TestGitCommitSkipsTrackedApprovalLedger(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	// Hand-craft a .gitignore that does NOT ignore the ledger, so the only
+	// thing keeping approval.db out of commits is gitCommit's explicit skip.
+	if err := os.WriteFile(filepath.Join(store, ".gitignore"), []byte(".archive\nCONFIG*\nLogs\n"), 0660); err != nil {
+		t.Fatalf("write gitignore: %v", err)
+	}
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	// Commit a tracked approval.db AND a real XML file in the first pass to
+	// simulate a legacy repo where the ledger was committed before the
+	// ignore policy existed. gitInit reconciled .gitignore to add the
+	// approval.db* line, but a tracked file stays tracked regardless.
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "approval.db"), []byte("ledger-v1"), 0660); err != nil {
+		t.Fatalf("write approval.db: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add xml: %v", err)
+	}
+	// Stage the ledger straight through the worktree to bypass gitCommit's
+	// skip and establish the tracked-legacy state.
+	if _, err := wtree.Add("approval.db"); err != nil {
+		t.Fatalf("add approval.db: %v", err)
+	}
+	if _, err := wtree.Commit("seed", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "seed", Email: "test@opnborg", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("seed commit: %v", err)
+	}
+	// Now modify both files and run gitCommit: the XML must be committed,
+	// the ledger modification must NOT be.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<b/>"), 0660); err != nil {
+		t.Fatalf("write xml2: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "approval.db"), []byte("ledger-v2-must-not-commit"), 0660); err != nil {
+		t.Fatalf("write approval.db v2: %v", err)
+	}
+	committed, err := gitCommit(config, repo)
+	if err != nil {
+		t.Fatalf("gitCommit: %v", err)
+	}
+	if !committed {
+		t.Fatalf("mixed changeset with real XML must produce a commit")
+	}
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Head: %v", err)
+	}
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	tree, err := headCommit.Tree()
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	entry, err := tree.FindEntry("approval.db")
+	if err != nil {
+		t.Fatalf("approval.db should still be tracked at its original blob: %v", err)
+	}
+	// The committed blob must still hold the v1 content, proving the v2
+	// worktree modification was never staged into this commit.
+	blob, err := repo.BlobObject(entry.Hash)
+	if err != nil {
+		t.Fatalf("BlobObject: %v", err)
+	}
+	r, err := blob.Reader()
+	if err != nil {
+		t.Fatalf("Reader: %v", err)
+	}
+	got, err := io.ReadAll(r)
+	r.Close()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "ledger-v1" {
+		t.Fatalf("approval.db worktree modification was committed: HEAD blob = %q, want %q", string(got), "ledger-v1")
+	}
+	// And the real XML change must have landed.
+	xmlEntry, err := tree.FindEntry("fw01.lan/current.xml")
+	if err != nil {
+		t.Fatalf("xml entry missing: %v", err)
+	}
+	xmlBlob, err := repo.BlobObject(xmlEntry.Hash)
+	if err != nil {
+		t.Fatalf("xml blob: %v", err)
+	}
+	xr, err := xmlBlob.Reader()
+	if err != nil {
+		t.Fatalf("xml reader: %v", err)
+	}
+	xmlGot, err := io.ReadAll(xr)
+	xr.Close()
+	if err != nil {
+		t.Fatalf("xml readall: %v", err)
+	}
+	if string(xmlGot) != "<b/>" {
+		t.Fatalf("xml change not committed: HEAD blob = %q, want %q", string(xmlGot), "<b/>")
+	}
+}
+
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
 // the system persona, the output contract, the affected-server input line, and
 // the diff payload verbatim.
