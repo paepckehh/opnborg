@@ -20,11 +20,20 @@ import (
 )
 
 const (
-	// _ollamaTimeout caps how long a single diff summarisation may block the
-	// main loop before opnborg gives up and falls back to the default commit
-	// message. A local Ollama daemon answers in a few seconds; the ceiling just
-	// guards against a wedged model server stalling the backup cadence.
-	_ollamaTimeout = 2 * time.Minute
+	// _ollamaTimeout caps how long a single diff summarisation call may wait
+	// for the Ollama daemon to answer before that attempt is abandoned and
+	// retried. A local Ollama daemon answers in a few seconds; the 30 s
+	// ceiling guards against a transiently slow or overloaded model server
+	// stalling the backup cadence, and pairs with _ollamaMaxRetries so a
+	// single wedged call never blocks the loop for the full retry budget.
+	_ollamaTimeout = 30 * time.Second
+	// _ollamaMaxRetries bounds how many times opnborg retries a single diff
+	// summarisation call when the Ollama daemon times out, returns an error
+	// HTTP status, or delivers an empty response. Each attempt is announced
+	// on the CLI via displayChan so an operator can see the model server
+	// struggling. After the final failed attempt opnborg falls back to the
+	// default commit message so the backup is never left uncommitted.
+	_ollamaMaxRetries = 3
 	// _ollamaMaxDiffBytes caps the enriched diff payload sent to the model so a
 	// multi-megabyte full-config XML rotation does not overrun the model context
 	// window. The cap is generous because the enriched diff carries per-file
@@ -154,6 +163,8 @@ Output contract (obey exactly, no preamble, no markdown fences):
 
   tag: <severity>[, needs-review]
 
+  Write the tag line as plain text only. Do NOT wrap it or any part of it in markdown formatting — no bold, italic, underscore, or backtick characters. The line must begin with the literal characters "tag:" so an automated grep can find it. Do not add a code fence, a bullet, or any punctuation around it.
+
   where <severity> is one of: low, medium, high, critical.
   - low: routine or no security impact (e.g. alias description edit, logging tweak, cosmetic rename).
   - medium: changes hardening or exposure in a bounded way (e.g. tightened a rule, rotated a certificate, adjusted an interface).
@@ -257,7 +268,34 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 	return out.Response, nil
 }
 
-// ollamaTagsModel is one entry in the /api/tags response model list.
+// ollamaGenerateWithRetry calls ollamaGenerate up to _ollamaMaxRetries times,
+// returning the first non-empty trimmed response. Each failed attempt
+// (network/timeout error, non-200 status, JSON decode failure, or an empty
+// model response) is announced on the CLI via displayChan so an operator can
+// see the model server struggling, and the loop retries immediately. The
+// returned string is already trimmed of surrounding whitespace. When every
+// attempt fails the last error is returned so the caller can fall back to
+// the default commit message.
+func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= _ollamaMaxRetries; attempt++ {
+		msg, err := ollamaGenerate(config, prompt)
+		if err != nil {
+			lastErr = err
+			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error()))
+			continue
+		}
+		msg = strings.TrimSpace(msg)
+		if msg == "" {
+			lastErr = errors.New("ollama returned an empty response")
+			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] empty response from model", attempt, _ollamaMaxRetries))
+			continue
+		}
+		return msg, nil
+	}
+	return "", lastErr
+}
+
 type ollamaTagsModel struct {
 	Name string `json:"name"`
 }
@@ -695,13 +733,9 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		return _commitMsg
 	}
 	servers := extractServersFromStatus(status)
-	msg, err := ollamaGenerate(config, ollamaPrompt(servers, diff))
+	msg, err := ollamaGenerateWithRetry(config, ollamaPrompt(servers, diff))
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][FAIL] " + err.Error())
-		return _commitMsg
-	}
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
 		return _commitMsg
 	}
 	displayChan <- []byte("[OLLAMA][OK] commit message generated")

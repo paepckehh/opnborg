@@ -3839,6 +3839,11 @@ func TestHasAuditTagLine(t *testing.T) {
 		{"unifi backup tag", "unifi-autobackup\n\ntag: low, backup", true},
 		{"tag in word not matched", "this is a tagging example", false},
 		{"uppercase tag normalised", "TAG: Critical", true},
+		{"markdown bold tag in tail", "headline\n\nbody line one\nbody line two\n**tag: low**", true},
+		{"markdown italic tag in tail", "headline\n\nbody one\nbody two\n*tag: medium, needs-review*", true},
+		{"markdown underscore tag in tail", "headline\n\nbody one\nbody two\n__tag: high__", true},
+		{"markdown backtick tag in tail", "headline\n\nbody one\nbody two\n`tag: critical`", true},
+		{"markdown bold tag in body not matched", "headline\n\n**tag: low**\nbody one\nbody two\nbody three", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -4538,6 +4543,9 @@ func TestAuditTag(t *testing.T) {
 		{"tag in word not matched", "this is a tagging example", "none", false, false},
 		{"unifi backup low", "unifi-autobackup\n\ntag: low, backup\n", "low", false, true},
 		{"backup only no severity", "tag: low, backup", "low", false, true},
+		{"markdown bold tag in tail", "headline\n\nbody one\nbody two\n**tag: low**", "low", false, false},
+		{"markdown italic tag needs-review in tail", "headline\n\nbody one\nbody two\n*tag: medium, needs-review*", "medium", true, false},
+		{"markdown backtick critical in tail", "headline\n\nbody one\nbody two\n`tag: critical`", "critical", false, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -4613,6 +4621,12 @@ func TestHighlightAuditTagLine(t *testing.T) {
 	plain := "just analysis\nno tag here"
 	if got := highlightAuditTagLine(plain); got != plain {
 		t.Errorf("body without tag line should pass through, got %q", got)
+	}
+	// a markdown-emphasis-wrapped tag line in the tail is still highlighted.
+	markdownBody := "Appliance: fw01\nScope: filter\nMore analysis\n**tag: high, needs-review**"
+	mout := highlightAuditTagLine(markdownBody)
+	if !strings.Contains(mout, `<span class="audit-tag-line sev-high">**tag: high, needs-review**</span>`) {
+		t.Errorf("markdown-wrapped tag line should be highlighted: %s", mout)
 	}
 }
 
@@ -5122,5 +5136,251 @@ func TestApprovalApproveAllButton(t *testing.T) {
 	got = renderAuditApproveAllButton("7d")
 	if !strings.Contains(got, "(2)") {
 		t.Errorf("pending count should be (2), got %q", got)
+	}
+}
+
+// TestGenerateCommitMessageRetriesOnEmpty verifies that when the Ollama
+// endpoint returns an empty response, opnborg retries up to
+// _ollamaMaxRetries times and uses the first non-empty model response. A
+// fake server returns empty for the first two calls and the real message
+// on the third.
+func TestGenerateCommitMessageRetriesOnEmpty(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount < _ollamaMaxRetries {
+			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: ""})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: modelMsg})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, modelMsg)
+	}
+	if callCount != _ollamaMaxRetries {
+		t.Errorf("expected %d model calls, got %d", _ollamaMaxRetries, callCount)
+	}
+}
+
+// TestGenerateCommitMessageRetriesOnErrorThenFallsBack verifies that when
+// the Ollama endpoint is unreachable on every attempt, opnborg retries
+// _ollamaMaxRetries times and then falls back to the default commit
+// message so the backup is never left uncommitted.
+func TestGenerateCommitMessageRetriesOnErrorThenFallsBack(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = "http://127.0.0.1:1" // nothing listening
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<x/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<y/>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	if got := generateCommitMessage(config, repo, wtree); got != _commitMsg {
+		t.Errorf("unreachable Ollama should fall back to default message after retries, got %q", got)
+	}
+}
+
+// TestGenerateCommitMessageRetriesOnErrorThenSucceeds verifies that when
+// the Ollama endpoint returns an HTTP error on the first attempt but a
+// valid response on the second, opnborg uses the model response from the
+// successful retry.
+func TestGenerateCommitMessageRetriesOnErrorThenSucceeds(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: modelMsg})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, modelMsg)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 model calls (1 error + 1 success), got %d", callCount)
+	}
+}
+
+// TestLastThirdLines verifies the tail-extraction helper returns the
+// trailing third of a message by line count and degrades gracefully for
+// very short inputs (always returning at least one line).
+func TestLastThirdLines(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"single line", "tag: low", "tag: low"},
+		{"two lines", "headline\ntag: low", "tag: low"},
+		{"three lines", "a\nb\ntag: low", "tag: low"},
+		{"six lines", "l1\nl2\nl3\nl4\nl5\nl6", "l5\nl6"},
+		{"nine lines", "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9", "l7\nl8\nl9"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := lastThirdLines(c.in); got != c.want {
+				t.Errorf("lastThirdLines(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestMatchAuditTagLine covers the per-line matcher: the strict pass on
+// every line, and the lenient markdown-emphasis-stripping pass gated by
+// allowLoose.
+func TestMatchAuditTagLine(t *testing.T) {
+	cases := []struct {
+		name       string
+		line       string
+		allowLoose bool
+		wantSev    string
+		wantFlag   string
+		ok         bool
+	}{
+		{"strict low", "tag: low", false, "low", "", true},
+		{"strict needs-review", "tag: medium, needs-review", false, "medium", "needs-review", true},
+		{"bold tag strict miss", "**tag: low**", false, "", "", false},
+		{"bold tag loose hit", "**tag: low**", true, "low", "", true},
+		{"italic tag loose hit", "*tag: medium, needs-review*", true, "medium", "needs-review", true},
+		{"underscore tag loose hit", "__tag: high__", true, "high", "", true},
+		{"backtick tag loose hit", "`tag: critical`", true, "critical", "", true},
+		{"not a tag line", "just analysis", true, "", "", false},
+		{"tag in word", "this is a tagging example", true, "", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := matchAuditTagLine(c.line, c.allowLoose)
+			if !c.ok {
+				if m != nil {
+					t.Errorf("matchAuditTagLine(%q, %v) = %v, want nil", c.line, c.allowLoose, m)
+				}
+				return
+			}
+			if m == nil {
+				t.Fatalf("matchAuditTagLine(%q, %v) = nil, want match", c.line, c.allowLoose)
+			}
+			if m[1] != c.wantSev {
+				t.Errorf("severity = %q, want %q", m[1], c.wantSev)
+			}
+			if m[2] != c.wantFlag {
+				t.Errorf("flag = %q, want %q", m[2], c.wantFlag)
+			}
+		})
 	}
 }

@@ -438,6 +438,79 @@ func auditDisplayAuthor(c auditCommit) string {
 // plain commits, anywhere in the message.
 var _auditTagRe = regexp.MustCompile(`^[Tt][Aa][Gg]:\s*([a-zA-Z]+)\s*(?:,\s*([a-zA-Z-]+))?\s*$`)
 
+// _auditTagEmphasisCutset lists the markdown emphasis and code characters
+// the lenient tag-line fallback strips from both ends of a candidate line
+// before matching it against _auditTagRe. Models occasionally wrap the tag
+// line in bold/italic/underline or backtick code spans despite the prompt
+// forbidding it; stripping these lets opnborg still recover the severity.
+const _auditTagEmphasisCutset = "*_`~"
+
+// matchAuditTagLine tests a single line against the tag-line contract. The
+// strict pass (_auditTagRe on the trimmed line) is always applied. When
+// allowLoose is true and the strict pass misses, leading/trailing markdown
+// emphasis characters are stripped before retrying _auditTagRe, so lines
+// such as "**tag: low**", "*tag: medium, needs-review*", "__tag: high__",
+// or "`tag: critical`" still classify. The regex submatches (severity +
+// optional flag) are returned, or nil when the line is not a tag line.
+func matchAuditTagLine(line string, allowLoose bool) []string {
+	trimmed := strings.TrimSpace(line)
+	if m := _auditTagRe.FindStringSubmatch(trimmed); m != nil {
+		return m
+	}
+	if !allowLoose {
+		return nil
+	}
+	stripped := strings.Trim(trimmed, _auditTagEmphasisCutset)
+	if stripped == trimmed {
+		return nil
+	}
+	return _auditTagRe.FindStringSubmatch(stripped)
+}
+
+// lastThirdLines returns the trailing third of msg by line count, ensuring
+// at least one line is returned for short messages. The lenient tag-line
+// fallback scan is restricted to this tail so a "tag:" mention embedded in
+// the analysis body never produces a false-positive classification.
+func lastThirdLines(msg string) string {
+	lines := strings.Split(msg, "\n")
+	n := len(lines)
+	start := n - n/3
+	if start >= n {
+		start = n - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	return strings.Join(lines[start:], "\n")
+}
+
+// findAuditTagLine locates the security-impact "tag:" line in a commit
+// message. It first scans every line with the strict _auditTagRe. When that
+// fails it falls back to a lenient scan of the last third of the message
+// that tolerates markdown emphasis wrapping (**tag: low**, *tag: low*,
+// __tag: high__, `tag: critical`, etc.) by stripping leading/trailing
+// emphasis characters before matching. The fallback is restricted to the
+// tail so a "tag:" mention in the body never produces a false positive. It
+// returns the regex submatches (severity + optional flag) or nil when no
+// tag is found.
+func findAuditTagLine(msg string) []string {
+	if msg == "" {
+		return nil
+	}
+	for line := range strings.SplitSeq(msg, "\n") {
+		if m := matchAuditTagLine(line, false); m != nil {
+			return m
+		}
+	}
+	tail := lastThirdLines(msg)
+	for line := range strings.SplitSeq(tail, "\n") {
+		if m := matchAuditTagLine(line, true); m != nil {
+			return m
+		}
+	}
+	return nil
+}
+
 // _auditSeverities is the ordered threat-level catalogue the audit dashboard
 // renders as the categorisation map. Each entry carries the machine key (as
 // written by the model in the tag: line), the emoji glyph used as the modern
@@ -462,51 +535,46 @@ var _auditSeverities = []struct {
 // line, the marker opnborg (and the Ollama security-audit prompt) writes on
 // every AI-authored commit message. It is the signal that distinguishes an
 // Ollama-assisted commit (whose headline may be reused as the commit author
-// name) from a plain manual commit or the static default message.
+// name) from a plain manual commit or the static default message. The
+// detection uses findAuditTagLine, which first scans every line for the
+// strict "tag:" form and, when that misses, falls back to a lenient scan
+// of the last third of the message that tolerates markdown emphasis
+// wrapping (**tag: low**, *tag: medium*, etc.) the model sometimes emits
+// despite the prompt forbidding it.
 func hasAuditTagLine(msg string) bool {
-	for line := range strings.SplitSeq(msg, "\n") {
-		if _auditTagRe.MatchString(strings.TrimSpace(line)) {
-			return true
-		}
-	}
-	return false
+	return findAuditTagLine(msg) != nil
 }
 
-// auditTag extracts the security-impact tag from a commit message. It scans
-// every line (the tag may sit at the end of an Ollama commit body or, for
-// plain commits, anywhere in the message), matches it against _auditTagRe,
-// and normalises the severity to one of the known keys (low / medium / high /
-// critical). An unknown severity or no tag line yields ("none", false, false).
-// The needsReview flag is true when the ", needs-review" suffix is present;
-// the backup flag is true when the ", backup" suffix is present (used by
-// unifi-autobackup commits to mark a routine Unifi backup rotation).
+// auditTag extracts the security-impact tag from a commit message. It uses
+// findAuditTagLine, which scans every line for the strict "tag:" form and,
+// when that misses, falls back to a lenient scan of the last third of the
+// message that tolerates markdown emphasis wrapping (**tag: low**, etc.)
+// before normalising the severity to one of the known keys (low / medium /
+// high / critical). An unknown severity or no tag line yields
+// ("none", false, false). The needsReview flag is true when the
+// ", needs-review" suffix is present; the backup flag is true when the
+// ", backup" suffix is present (used by unifi-autobackup commits to mark a
+// routine Unifi backup rotation).
 func auditTag(msg string) (severity string, needsReview, backup bool) {
-	if msg == "" {
+	m := findAuditTagLine(msg)
+	if m == nil {
 		return "none", false, false
 	}
-	for line := range strings.SplitSeq(msg, "\n") {
-		line = strings.TrimSpace(line)
-		m := _auditTagRe.FindStringSubmatch(line)
-		if m == nil {
-			continue
+	sev := strings.ToLower(m[1])
+	flag := strings.ToLower(strings.TrimSpace(m[2]))
+	nr := flag == "needs-review"
+	bk := flag == "backup"
+	known := false
+	for _, s := range _auditSeverities {
+		if s.key == sev {
+			known = true
+			break
 		}
-		sev := strings.ToLower(m[1])
-		flag := strings.ToLower(strings.TrimSpace(m[2]))
-		nr := flag == "needs-review"
-		bk := flag == "backup"
-		known := false
-		for _, s := range _auditSeverities {
-			if s.key == sev {
-				known = true
-				break
-			}
-		}
-		if !known {
-			sev = "none"
-		}
-		return sev, nr, bk
 	}
-	return "none", false, false
+	if !known {
+		sev = "none"
+	}
+	return sev, nr, bk
 }
 
 // auditSeverityClass maps a severity key to its CSS class token. An unknown
@@ -755,14 +823,25 @@ func renderAuditApproveAllButton(rangeSlug string) string {
 // line inside a rendered analysis body so the security-impact classification
 // stands out from the surrounding analysis prose. The line is wrapped in a
 // severity-class span; all other lines pass through unchanged (already HTML-
-// escaped by the caller).
+// escaped by the caller). The strict "tag:" form is matched on every line;
+// the lenient, markdown-emphasis-tolerant form is matched only in the last
+// third of the message to avoid highlighting a "tag:" mention in the body.
 func highlightAuditTagLine(body string) string {
 	if body == "" {
 		return ""
 	}
 	lines := strings.Split(body, "\n")
+	n := len(lines)
+	tailStart := n - n/3
+	if tailStart >= n {
+		tailStart = n - 1
+	}
+	if tailStart < 0 {
+		tailStart = 0
+	}
 	for i, line := range lines {
-		m := _auditTagRe.FindStringSubmatch(strings.TrimSpace(line))
+		allowLoose := i >= tailStart
+		m := matchAuditTagLine(line, allowLoose)
 		if m == nil {
 			continue
 		}
