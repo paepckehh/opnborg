@@ -258,8 +258,9 @@ func approvalTrackCommit(config *OPNCall, fullHash, message string, committedAt 
 }
 
 // commitHeadline returns the first non-empty line of a commit message, trimmed
-// and capped for ledger display. For Ollama-assisted messages this is the TLDR
-// headline; for plain commits it is the static "opnborg auto update" subject.
+// and capped for ledger display. For Ollama-assisted messages this is the
+// model's commit headline; for plain commits it is the static "opnborg auto
+// update" subject.
 func commitHeadline(msg string) string {
 	for line := range strings.SplitSeq(msg, "\n") {
 		line = strings.TrimSpace(line)

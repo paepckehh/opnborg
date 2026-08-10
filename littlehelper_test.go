@@ -3619,8 +3619,11 @@ func TestGenerateCommitMessageIgnoresApprovalLedger(t *testing.T) {
 
 // TestGenerateCommitMessageUsesOllamaOnXML verifies that for a non-.unf
 // (OPNsense XML) changeset with Ollama enabled, the model's response is used
-// as the commit message. A local HTTP server stands in for the Ollama
-// /api/generate endpoint.
+// verbatim as the commit message. A local HTTP server stands in for the
+// Ollama /api/generate endpoint. opnborg makes a single REST call: the model
+// is responsible for the full message (headline + structured body + trailing
+// "tag:" severity line), so its response is returned trimmed with no further
+// assembly.
 func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 	ensureDisplayDrained(t)
 	store := t.TempDir()
@@ -3630,11 +3633,9 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Stand up a fake Ollama /api/generate that returns the detailed analysis
-	// on the first call and a summary sentence on the second call, mirroring
-	// the two-pass flow in generateCommitMessage.
-	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
-	const tldrMsg = "tightened WAN inbound filter set"
+	// Stand up a fake Ollama /api/generate that returns a full commit message
+	// (headline + body + tag line) in a single call.
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
 	mux := http.NewServeMux()
 	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -3652,12 +3653,7 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 			t.Errorf("model = %q, want test-model", req.Model)
 		}
 		callCount++
-		switch callCount {
-		case 1:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
-		default:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: tldrMsg})
-		}
+		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: modelMsg})
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -3694,80 +3690,15 @@ func TestGenerateCommitMessageUsesOllamaOnXML(t *testing.T) {
 		t.Fatalf("worktree: %v", err)
 	}
 	got := generateCommitMessage(config, repo, wtree)
-	wantMsg := tldrMsg + "\n\nDetailed Analysis:\n\n" + detailedMsg + "\n"
-	if got != wantMsg {
-		t.Errorf("generateCommitMessage = %q, want %q", got, wantMsg)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, modelMsg)
 	}
-}
-
-// TestGenerateCommitMessageNormalisesMarkdownTldr verifies that when the
-// model wraps the TLDR marker in markdown emphasis or omits the canonical
-// "TLDR: " prefix, generateCommitMessage still produces a commit message
-// whose first line carries the canonical prefix so the author-name
-// extraction and the audit-page splitter both recognise it.
-func TestGenerateCommitMessageNormalisesMarkdownTldr(t *testing.T) {
-	ensureDisplayDrained(t)
-	store := t.TempDir()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
+	if callCount != 1 {
+		t.Errorf("expected exactly one model call, got %d", callCount)
 	}
-	t.Cleanup(func() { _ = os.Chdir(cwd) })
-
-	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
-	const markdownTldr = "**TLDR:** tightened WAN inbound filter set"
-	const canonicalTldr = "tightened WAN inbound filter set"
-	mux := http.NewServeMux()
-	var callCount int
-	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		switch callCount {
-		case 1:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
-		default:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: markdownTldr})
-		}
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	config := &OPNCall{Path: store, Email: "test@opnborg"}
-	config.Git.Enable = true
-	config.Ollama.Enable = true
-	config.Ollama.URL = srv.URL
-	config.Ollama.Model = "test-model"
-	if err := gitInit(config); err != nil {
-		t.Fatalf("gitInit: %v", err)
-	}
-	fwDir := filepath.Join(store, "fw01.lan")
-	if err := os.MkdirAll(fwDir, 0770); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
-		t.Fatalf("write xml: %v", err)
-	}
-	if _, err := gitCheckIn(config); err != nil {
-		t.Fatalf("initial gitCheckIn: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
-		t.Fatalf("write xml v2: %v", err)
-	}
-	repo, err := gitRepo(config.Path)
-	if err != nil {
-		t.Fatalf("gitRepo: %v", err)
-	}
-	wtree, err := repo.Worktree()
-	if err != nil {
-		t.Fatalf("worktree: %v", err)
-	}
-	got := generateCommitMessage(config, repo, wtree)
-	wantMsg := canonicalTldr + "\n\nDetailed Analysis:\n\n" + detailedMsg + "\n"
-	if got != wantMsg {
-		t.Errorf("generateCommitMessage = %q, want %q", got, wantMsg)
-	}
-	// The author-name extraction must succeed on the normalised message.
-	if name := authorFromCommitMessage(got); name != "tightened WAN inbound filter set" {
-		t.Errorf("authorFromCommitMessage = %q, want %q", name, "tightened WAN inbound filter set")
+	// The author-name extraction must succeed on the model's headline.
+	if name := authorFromCommitMessage(got); name != "Tighten WAN inbound filter rule set" {
+		t.Errorf("authorFromCommitMessage = %q, want %q", name, "Tighten WAN inbound filter rule set")
 	}
 }
 
@@ -3855,12 +3786,11 @@ func TestGitDiffTextFirstCommitIsEmpty(t *testing.T) {
 	}
 }
 
-// TestAuthorFromCommitMessage verifies the summary headline embedded in an
-// Ollama-assisted commit message is extracted, sanitised, and truncated into
-// a valid git author name, and that messages without a summary line fall back
-// to the empty string so the caller keeps the static OPNBORG-AUTO-COMMIT
-// handle. Messages whose subject still carries a legacy "TLDR: " marker
-// (committed by older builds) are tolerated and stripped too.
+// TestAuthorFromCommitMessage verifies the headline of an Ollama-assisted
+// commit message (recognised by its trailing "tag:" severity line) is
+// extracted, sanitised, and truncated into a valid git author name, and
+// that messages without a tag line fall back to the empty string so the
+// caller keeps the static OPNBORG-AUTO-COMMIT handle.
 func TestAuthorFromCommitMessage(t *testing.T) {
 	long := strings.Repeat("a", _authorNameMaxRunes)
 	tests := []struct {
@@ -3869,20 +3799,18 @@ func TestAuthorFromCommitMessage(t *testing.T) {
 		want string
 	}{
 		{"empty", "", ""},
-		{"default message no tldr", _commitMsg, ""},
-		{"bare summary annotated", "tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody", "tightened WAN inbound filter set"},
-		{"summary with detailed body", "tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
-		{"legacy tldr marker stripped", "TLDR: tightened WAN inbound filter set", "tightened WAN inbound filter set"},
-		{"legacy tldr with detailed body", "TLDR: tightened WAN inbound filter set\n\nDetailed Analysis:\n\nbody\n", "tightened WAN inbound filter set"},
-		{"extra spaces collapsed", "tightened   multi   spaces  here\n\nDetailed Analysis:\n\nbody", "tightened multi spaces here"},
-		{"trailing whitespace trimmed", "trimmed line  \n\nDetailed Analysis:\n\nbody", "trimmed line"},
-		{"drops git special chars", `drop <email> and "quote" \back chars` + "\n\nDetailed Analysis:\n\nbody", "drop email and quote back chars"},
-		{"drops control chars", "a\tb\n\nDetailed Analysis:\n\nbody", "a b"},
-		{"empty after marker", "TLDR:", ""},
-		{"only marker and spaces", "TLDR:   ", ""},
-		{"truncated to cap", strings.Repeat("a", _authorNameMaxRunes+50) + "\n\nDetailed Analysis:\n\nbody", long},
-		{"exactly at cap", strings.Repeat("a", _authorNameMaxRunes) + "\n\nDetailed Analysis:\n\nbody", long},
-		{"leading newline then marker", "\n\nTLDR: tightened", "tightened"},
+		{"default message no tag", _commitMsg, ""},
+		{"manual commit no tag", "manual commit subject", ""},
+		{"ollama headline with tag", "tightened WAN inbound filter set\n\nAppliance: fw01\nScope: filter\ntag: low", "tightened WAN inbound filter set"},
+		{"ollama headline with tag and trailing newline", "tightened WAN inbound filter set\n\nbody\ntag: medium, needs-review\n", "tightened WAN inbound filter set"},
+		{"extra spaces collapsed", "tightened   multi   spaces  here\n\ntag: low", "tightened multi spaces here"},
+		{"trailing whitespace trimmed", "trimmed line  \n\ntag: low", "trimmed line"},
+		{"drops git special chars", `drop <email> and "quote" \back chars` + "\n\ntag: high", "drop email and quote back chars"},
+		{"drops control chars", "a\tb\n\ntag: low", "a b"},
+		{"truncated to cap", strings.Repeat("a", _authorNameMaxRunes+50) + "\n\ntag: low", long},
+		{"exactly at cap", strings.Repeat("a", _authorNameMaxRunes) + "\n\ntag: low", long},
+		{"unknown severity still recognised", "headline\n\ntag: catastrophic", "headline"},
+		{"unifi autobackup subject", _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n", _unifiAutobackupSubject},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3893,46 +3821,37 @@ func TestAuthorFromCommitMessage(t *testing.T) {
 	}
 }
 
-// TestNormalizeTldrHeadline verifies the model summary response is coerced
-// into the bare "<sentence>" form so the downstream author-name extraction
-// and the audit-page message splitter both reliably recognise it, even when
-// the model wraps the marker in markdown, drops the space, adds a preamble
-// line, or omits the marker entirely.
-func TestNormalizeTldrHeadline(t *testing.T) {
-	tests := []struct {
+// TestHasAuditTagLine verifies the tag-trailer detector that distinguishes
+// Ollama-assisted commit messages (which carry a trailing "tag:" severity
+// line) from plain manual commits and the static default message.
+func TestHasAuditTagLine(t *testing.T) {
+	cases := []struct {
 		name string
 		in   string
-		want string
+		want bool
 	}{
-		{"empty", "", ""},
-		{"already canonical", "tighten WAN filter", "tighten WAN filter"},
-		{"legacy tldr marker stripped", "TLDR: tighten WAN filter", "tighten WAN filter"},
-		{"trailing whitespace", "tighten WAN filter  \n", "tighten WAN filter"},
-		{"markdown bold marker stripped", "**TLDR:** tighten WAN filter", "tighten WAN filter"},
-		{"markdown italic marker stripped", "_TLDR:_ tighten WAN filter", "tighten WAN filter"},
-		{"no space after colon", "TLDR:tighten WAN filter", "tighten WAN filter"},
-		{"lowercase marker", "tldr: tighten WAN filter", "tighten WAN filter"},
-		{"uppercase marker", "TLDR: tighten WAN filter", "tighten WAN filter"},
-		{"preamble line then marker", "Here is the summary:\nTLDR: tighten WAN filter", "tighten WAN filter"},
-		{"no marker at all", "tighten WAN inbound filter set", "tighten WAN inbound filter set"},
-		{"leading quote", "\"TLDR: tighten WAN filter\"", "tighten WAN filter\""},
-		{"leading markdown fence", "```TLDR: tighten WAN filter", "tighten WAN filter"},
-		{"only whitespace and marker", "  TLDR:  ", ""},
-		{"marker empty after colon", "TLDR:", ""},
-		{"multi line keeps first", "TLDR: first line\nsecond line", "first line"},
+		{"empty", "", false},
+		{"default message", _commitMsg, false},
+		{"manual commit", "fix something", false},
+		{"low tag", "headline\n\ntag: low", true},
+		{"medium needs-review", "tag: medium, needs-review", true},
+		{"critical", "tag: critical", true},
+		{"unifi backup tag", "unifi-autobackup\n\ntag: low, backup", true},
+		{"tag in word not matched", "this is a tagging example", false},
+		{"uppercase tag normalised", "TAG: Critical", true},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeTldrHeadline(tt.in); got != tt.want {
-				t.Errorf("normalizeTldrHeadline(%q) = %q, want %q", tt.in, got, tt.want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := hasAuditTagLine(c.in); got != c.want {
+				t.Errorf("hasAuditTagLine(%q) = %v, want %v", c.in, got, c.want)
 			}
 		})
 	}
 }
 
-// TestAuditDisplayAuthor verifies the audit page shows the shortened summary
-// headline as the commit author when the recorded git author is still the
-// static OPNBORG-AUTO-COMMIT handle but the message carries a summary line.
+// TestAuditDisplayAuthor verifies the audit page shows the commit headline
+// as the commit author when the recorded git author is still the static
+// OPNBORG-AUTO-COMMIT handle but the message carries a "tag:" line.
 func TestAuditDisplayAuthor(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -3940,10 +3859,10 @@ func TestAuditDisplayAuthor(t *testing.T) {
 		message string
 		want    string
 	}{
-		{"static author with summary", _authorName, "tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
-		{"static author with legacy marker", _authorName, "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
-		{"static author no summary", _authorName, "opnborg auto update", _authorName},
-		{"summary author kept", "tighten WAN filter", "tighten WAN filter\n\nDetailed Analysis:\n\nbody", "tighten WAN filter"},
+		{"static author with tag", _authorName, "tighten WAN filter\n\nAppliance: fw01\ntag: low", "tighten WAN filter"},
+		{"static author with tag needs-review", _authorName, "tighten WAN filter\n\ntag: medium, needs-review", "tighten WAN filter"},
+		{"static author no tag", _authorName, "opnborg auto update", _authorName},
+		{"headline author kept", "tighten WAN filter", "tighten WAN filter\n\ntag: low", "tighten WAN filter"},
 		{"manual author kept", "PAEPCKE, Michael", "manual commit message", "PAEPCKE, Michael"},
 	}
 	for _, tt := range tests {
@@ -3956,13 +3875,14 @@ func TestAuditDisplayAuthor(t *testing.T) {
 	}
 }
 
-// TestGitCommitUsesTldrAuthorName verifies that when Ollama is enabled and
-// produces a TLDR headline, the committed author name is a sanitised version
-// of that TLDR rather than the static OPNBORG-AUTO-COMMIT handle. The fake
-// Ollama server mirrors the two-pass generate flow (detailed analysis then
-// TLDR). It calls gitCommit directly (instead of gitCheckIn) so the gc/repack
-// step does not run, keeping the same repo handle usable for inspection.
-func TestGitCommitUsesTldrAuthorName(t *testing.T) {
+// TestGitCommitUsesHeadlineAuthorName verifies that when Ollama is enabled
+// the committed author name is a sanitised version of the model's commit
+// headline rather than the static OPNBORG-AUTO-COMMIT handle. The fake
+// Ollama server returns a full commit message (headline + body + tag line)
+// in a single call. It calls gitCommit directly (instead of gitCheckIn) so
+// the gc/repack step does not run, keeping the same repo handle usable for
+// inspection.
+func TestGitCommitUsesHeadlineAuthorName(t *testing.T) {
 	ensureDisplayDrained(t)
 	store := t.TempDir()
 	cwd, err := os.Getwd()
@@ -3971,18 +3891,13 @@ func TestGitCommitUsesTldrAuthorName(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	const detailedMsg = "Tighten WAN inbound filter rule set\n\nExtensive body."
-	const tldrMsg = "tightened WAN inbound filter set"
+	const headline = "Tighten WAN inbound filter rule set"
+	const modelMsg = headline + "\n\nAppliance: fw01\nScope: filter\ntag: low"
 	mux := http.NewServeMux()
 	var callCount int
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		switch callCount {
-		case 1:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: detailedMsg})
-		default:
-			_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: tldrMsg})
-		}
+		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: modelMsg})
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -4024,8 +3939,8 @@ func TestGitCommitUsesTldrAuthorName(t *testing.T) {
 		t.Errorf("seed commit author name = %q, want %q", seedCommit.Author.Name, _authorName)
 	}
 	// Mutate the XML so the worktree diff is non-empty and not a .unf file,
-	// then commit again. Ollama produces a TLDR, so the author handle must
-	// be replaced with the sanitised TLDR headline.
+	// then commit again. Ollama produces a headline, so the author handle
+	// must be replaced with the sanitised headline.
 	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
 		t.Fatalf("write xml v2: %v", err)
 	}
@@ -4040,15 +3955,18 @@ func TestGitCommitUsesTldrAuthorName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("commit object: %v", err)
 	}
-	const wantAuthor = "tightened WAN inbound filter set"
+	const wantAuthor = headline
 	if commit.Author.Name != wantAuthor {
 		t.Errorf("commit author name = %q, want %q", commit.Author.Name, wantAuthor)
 	}
 	if commit.Author.Email != config.Email {
 		t.Errorf("commit author email = %q, want %q", commit.Author.Email, config.Email)
 	}
-	if !strings.HasPrefix(commit.Message, tldrMsg) {
-		t.Errorf("commit message = %q, want prefix %q", commit.Message, tldrMsg)
+	if !strings.HasPrefix(commit.Message, headline) {
+		t.Errorf("commit message = %q, want prefix %q", commit.Message, headline)
+	}
+	if callCount != 1 {
+		t.Errorf("expected exactly one model call, got %d", callCount)
 	}
 }
 
@@ -4535,51 +4453,16 @@ func TestGatherAuditCommits(t *testing.T) {
 	}
 }
 
-// TestSplitAuditMessage verifies the summary / detailed-analysis splitter that
-// the audit page uses to render Ollama-assisted commit messages: it extracts
-// the summary headline and the detailed body when the marker is present, and
-// falls back to the full message otherwise. A legacy "TLDR: " marker on the
-// subject is stripped from the rendered headline.
-func TestSplitAuditMessage(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      string
-		wantTl  string
-		wantDet string
-	}{
-		{"empty", "", "", ""},
-		{"default message", "opnborg auto update", "", "opnborg auto update"},
-		{"manual commit", "first", "", "first"},
-		{"bare summary no marker", "tighten WAN filter", "", "tighten WAN filter"},
-		{"full annotated", "tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "tighten WAN filter", "body with tag: low"},
-		{"legacy tldr annotated", "TLDR: tighten WAN filter\n\nDetailed Analysis:\n\nbody with tag: low\n", "tighten WAN filter", "body with tag: low"},
-		{"annotated trailing whitespace", "headline  \n\nDetailed Analysis:\n\n  body  \n", "headline", "body"},
-		{"leading newline before headline", "\n\nheadline\n\nDetailed Analysis:\n\nbody", "headline", "body"},
-		{"tldr only no marker", "TLDR: tighten WAN filter", "", "TLDR: tighten WAN filter"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			tl, det := splitAuditMessage(c.in)
-			if tl != c.wantTl {
-				t.Errorf("tldr = %q, want %q", tl, c.wantTl)
-			}
-			if det != c.wantDet {
-				t.Errorf("detailed = %q, want %q", det, c.wantDet)
-			}
-		})
-	}
-}
-
-// TestRenderAuditCommitsTldrToggle verifies that renderAuditCommits renders the
-// summary headline as a highlighted banner and hides the detailed analysis
-// behind a collapsed <details> toggle when the commit message is
-// Ollama-annotated, and that plain messages render unchanged.
-func TestRenderAuditCommitsTldrToggle(t *testing.T) {
-	annotated := auditCommit{
+// TestRenderAuditCommitsMessage verifies that renderAuditCommits renders the
+// full Ollama commit message (headline + body + tag line) in a single
+// audit-message block, and that plain messages render verbatim. There is no
+// summary/detailed split: the whole message is shown in one pre block.
+func TestRenderAuditCommitsMessage(t *testing.T) {
+	ollama := auditCommit{
 		hash:    "abcdef0",
 		author:  "OPNBORG-AUTO-COMMIT",
 		when:    time.Now(),
-		message: "tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n",
+		message: "tighten WAN inbound filter\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n",
 		diff:    "",
 	}
 	plain := auditCommit{
@@ -4589,31 +4472,38 @@ func TestRenderAuditCommitsTldrToggle(t *testing.T) {
 		message: "opnborg auto update",
 		diff:    "",
 	}
-	out := renderAuditCommits([]auditCommit{annotated, plain})
+	out := renderAuditCommits([]auditCommit{ollama, plain})
 	for _, want := range []string{
-		`<div class="audit-tldr sev-medium">tighten WAN inbound filter</div>`,
-		`<details class="audit-analysis">`,
-		`<summary class="audit-analysis-head">Detailed Analysis</summary>`,
+		`<pre class="audit-message">tighten WAN inbound filter`,
 		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
-		`<pre class="audit-message audit-analysis-body">`,
 		`<details class="audit-commit sev-medium" open data-sev="medium">`,
 		`<span class="audit-sev-badge sev-medium" data-sev="medium">`,
 		`<span class="audit-sev-label">Medium</span>`,
 		`<span class="audit-sev-review" title="human review recommended">👀</span>`,
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("annotated commit missing %q in output:\n%s", want, out)
+			t.Errorf("ollama commit missing %q in output:\n%s", want, out)
 		}
 	}
-	// the annotated commit's detailed analysis must NOT also be rendered as a
-	// plain (top-level) audit-message block (it should be inside the toggle)
-	if strings.Count(out, `<pre class="audit-message">`) != 1 {
-		t.Errorf("plain message should render exactly one top-level audit-message block, got %d", strings.Count(out, `<pre class="audit-message">`))
+	// No summary banner or detailed-analysis toggle should be emitted.
+	for _, absent := range []string{
+		`audit-tldr`,
+		`audit-analysis`,
+		`audit-analysis-head`,
+		`audit-analysis-body`,
+	} {
+		if strings.Contains(out, absent) {
+			t.Errorf("output should not contain %q:\n%s", absent, out)
+		}
+	}
+	// Each commit renders exactly one top-level audit-message block.
+	if strings.Count(out, `<pre class="audit-message">`) != 2 {
+		t.Errorf("expected exactly two audit-message blocks, got %d", strings.Count(out, `<pre class="audit-message">`))
 	}
 	if !strings.Contains(out, "opnborg auto update") {
 		t.Errorf("plain commit message should be rendered verbatim")
 	}
-	// the untagged plain commit must carry the "none" severity bucket so the
+	// The untagged plain commit must carry the "none" severity bucket so the
 	// dashboard filter and the untagged card count agree.
 	if !strings.Contains(out, `<details class="audit-commit sev-none" open data-sev="none">`) {
 		t.Errorf("plain commit should be tagged with the none severity bucket:\n%s", out)
@@ -4636,11 +4526,11 @@ func TestAuditTag(t *testing.T) {
 	}{
 		{"empty", "", "none", false, false},
 		{"default message", "opnborg auto update", "none", false, false},
-		{"plain low", "TLDR: rename alias\ntag: low", "low", false, false},
+		{"plain low", "rename alias\ntag: low", "low", false, false},
 		{"plain medium review", "tag: medium, needs-review", "medium", true, false},
 		{"plain high", "tag: high", "high", false, false},
 		{"plain critical review", "tag: critical, needs-review", "critical", true, false},
-		{"annotated detailed", "TLDR: tighten WAN inbound filter\n\nDetailed Analysis:\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n", "medium", true, false},
+		{"annotated detailed", "tighten WAN inbound filter\n\nAppliance: fw01\nScope: filter\ntag: medium, needs-review\n", "medium", true, false},
 		{"unknown severity", "tag: catastrophic", "none", false, false},
 		{"tag mid body not last line", "Appliance: fw01\ntag: low\nScope: filter\n", "low", false, false},
 		{"whitespace tolerant", "  tag:   high  ,  needs-review  ", "high", true, false},
@@ -4672,7 +4562,7 @@ func TestAuditTag(t *testing.T) {
 func TestRenderAuditThreatDashboard(t *testing.T) {
 	commits := []auditCommit{
 		{message: "opnborg auto update"},
-		{message: "TLDR: a\n\nDetailed Analysis:\n\nbody\ntag: low\n"},
+		{message: "a\n\nbody\ntag: low\n"},
 		{message: "tag: medium, needs-review"},
 		{message: "tag: critical, needs-review"},
 		{message: "tag: high"},
@@ -4871,7 +4761,7 @@ func TestApprovalDBRoundTrip(t *testing.T) {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
 	hash := "abcdef0123456789abcdef0123456789abcdef01"
-	msg := "TLDR: opened WAN admin\n\nDetailed Analysis:\n...\ntag: high, needs-review"
+	msg := "opened WAN admin\n\nAppliance: fw01\n...\ntag: high, needs-review"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
 	st := approvalGet(cfg, hash)
 	if st.approved {
@@ -4908,10 +4798,10 @@ func TestApprovalTrackSkipsLowSeverity(t *testing.T) {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
 	cases := map[string]string{
-		"low":          "TLDR: alias rename\n\ntag: low",
+		"low":          "alias rename\n\ntag: low",
 		"backup":       "unifi-autobackup\n\ntag: low, backup",
 		"none":         "opnborg auto update",
-		"needs-review": "TLDR: routine\n\ntag: low, needs-review",
+		"needs-review": "routine\n\ntag: low, needs-review",
 	}
 	for name, msg := range cases {
 		approvalTrackCommit(cfg, "hash-"+name, msg, time.Now())
@@ -4932,7 +4822,7 @@ func TestApprovalTrackIdempotent(t *testing.T) {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
 	hash := "deadbeef00000000000000000000000000000000"
-	msg := "TLDR: tightened WAN filter\n\ntag: medium"
+	msg := "tightened WAN filter\n\ntag: medium"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
 	if err := approvalApprove(cfg, hash, "10.0.0.9", "", "bob"); err != nil {
 		t.Fatalf("approvalApprove: %v", err)
@@ -4979,21 +4869,21 @@ func TestApprovalBackfillFromHistory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<low/>"), 0660); err != nil {
 		t.Fatalf("write low: %v", err)
 	}
-	if err := commitWithMessage(cfg, "TLDR: routine alias rename\n\ntag: low"); err != nil {
+	if err := commitWithMessage(cfg, "routine alias rename\n\ntag: low"); err != nil {
 		t.Fatalf("commit low: %v", err)
 	}
 	// Second commit: high severity.
 	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<high/>"), 0660); err != nil {
 		t.Fatalf("write high: %v", err)
 	}
-	if err := commitWithMessage(cfg, "TLDR: opened WAN admin\n\ntag: high, needs-review"); err != nil {
+	if err := commitWithMessage(cfg, "opened WAN admin\n\ntag: high, needs-review"); err != nil {
 		t.Fatalf("commit high: %v", err)
 	}
 	// Third commit: critical severity.
 	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<crit/>"), 0660); err != nil {
 		t.Fatalf("write crit: %v", err)
 	}
-	if err := commitWithMessage(cfg, "TLDR: removed default drop\n\ntag: critical"); err != nil {
+	if err := commitWithMessage(cfg, "removed default drop\n\ntag: critical"); err != nil {
 		t.Fatalf("commit crit: %v", err)
 	}
 
@@ -5055,7 +4945,7 @@ func TestApprovalApproveAll(t *testing.T) {
 	}
 	for i := range 3 {
 		hash := fmt.Sprintf("hash%02d00000000000000000000000000000000000", i)
-		msg := "TLDR: change\n\ntag: high"
+		msg := "change\n\ntag: high"
 		approvalTrackCommit(cfg, hash, msg, time.Now())
 	}
 	if got := approvalPendingCount(cfg); got != 3 {
@@ -5117,7 +5007,7 @@ func TestApprovalCommitTrackingViaGit(t *testing.T) {
 	if _, err := wtree.Add("."); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	hash, err := wtree.Commit("TLDR: opened WAN admin\n\ntag: high, needs-review", &git.CommitOptions{
+	hash, err := wtree.Commit("opened WAN admin\n\ntag: high, needs-review", &git.CommitOptions{
 		Author: &gitobject.Signature{Name: _authorName, Email: cfg.Email, When: time.Now()},
 		All:    true,
 	})
@@ -5178,7 +5068,7 @@ func TestApprovalAuditUI(t *testing.T) {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
 	hash := "cafef00d00000000000000000000000000000000"
-	msg := "TLDR: broadened WAN inbound\n\ntag: critical, needs-review"
+	msg := "broadened WAN inbound\n\ntag: critical, needs-review"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
 	c := auditCommit{hash: hash[:7], fullHash: hash, message: msg}
 	got := renderAuditApprovalControl(c, "critical")

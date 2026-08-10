@@ -398,12 +398,6 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .audit-date{color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
 .audit-stats{margin-left:auto;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
 .audit-message{margin:0;padding:.55rem .8rem;background:rgba(0,0,0,.22);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:.78rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--fg)}
-.audit-tldr{margin:0;padding:.6rem .8rem;background:rgba(74,158,255,.08);border-top:2px solid var(--accent);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:.84rem;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--accent-2);font-weight:600;text-shadow:0 0 14px rgba(74,158,255,.3)}
-.audit-analysis{margin:0;border-bottom:1px solid var(--border)}
-.audit-analysis>summary.audit-analysis-head{padding:.4rem .8rem;cursor:pointer;list-style:none;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;background:rgba(0,0,0,.28)}
-.audit-analysis>summary.audit-analysis-head::-webkit-details-marker{display:none}
-.audit-analysis[open]>summary.audit-analysis-head{color:var(--accent-2);border-bottom:1px solid var(--border)}
-.audit-analysis-body{border-top:none;border-bottom:none}
 .audit-diff{margin:0;border-bottom:1px solid var(--border)}
 .audit-diff>summary.audit-diff-head{cursor:pointer;list-style:none}
 .audit-diff>summary.audit-diff-head::-webkit-details-marker{display:none}
@@ -500,10 +494,6 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .audit-commit.sev-high::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#ff8c42;box-shadow:0 0 10px rgba(255,140,66,.6)}
 .audit-commit.sev-medium{border-color:rgba(210,153,34,.4)}
 .audit-commit.sev-medium[open]{border-color:rgba(210,153,34,.8)}
-.audit-tldr.sev-critical{border-top-color:#f85149;color:#f85149}
-.audit-tldr.sev-high{border-top-color:#ff8c42;color:#ff8c42}
-.audit-tldr.sev-medium{border-top-color:#d29922;color:#d29922}
-.audit-tldr.sev-low{border-top-color:#3fb950}
 .audit-tag-line{display:inline-block;width:100%;font-weight:700;border-top:1px dashed var(--sev-bd);margin-top:.3rem;padding-top:.3rem;color:var(--sev)}
 .audit-tag-line.sev-critical{background:rgba(248,81,73,.12);text-shadow:0 0 8px rgba(248,81,73,.4)}
 .audit-tag-line.sev-high{background:rgba(255,140,66,.12);text-shadow:0 0 8px rgba(255,140,66,.4)}

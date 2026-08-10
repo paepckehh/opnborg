@@ -412,12 +412,12 @@ func safeAuthorName(s object.Signature) string {
 }
 
 // auditDisplayAuthor returns the author name shown in the audit page header.
-// When the commit carries an Ollama summary headline but the recorded git
-// author is still the static OPNBORG-AUTO-COMMIT handle (commits made before
-// the TLDR-derived author feature, or a model response the author extraction
-// did not recognise), the summary headline is shown instead so the audit
-// log surfaces the change at a glance. Commits without an Ollama headline
-// keep the recorded git author name unchanged.
+// When the commit carries an Ollama headline but the recorded git author is
+// still the static OPNBORG-AUTO-COMMIT handle (commits made before the
+// headline-derived author feature, or a model response the author extraction
+// did not recognise), the headline is shown instead so the audit log surfaces
+// the change at a glance. Commits without an Ollama headline keep the
+// recorded git author name unchanged.
 func auditDisplayAuthor(c auditCommit) string {
 	if c.author == _authorName {
 		if name := authorFromCommitMessage(c.message); name != "" {
@@ -427,37 +427,6 @@ func auditDisplayAuthor(c auditCommit) string {
 	return c.author
 }
 
-// _auditDetailedAnalysisMarker is the header line that separates the summary
-// headline from the full analysis body in an Ollama-assisted commit message
-// (see assembleAnnotatedCommitMessage in ollama.go).
-const _auditDetailedAnalysisMarker = "Detailed Analysis:"
-
-// splitAuditMessage splits an Ollama-assisted commit message into the summary
-// headline and the detailed analysis body. Messages that carry no annotation
-// (the default "opnborg auto update" message, the .unf bypass, or a plain
-// manual commit) return an empty headline and the full message as the body,
-// so the audit page renders them unchanged. Commits whose subject still
-// carries a legacy "TLDR: " marker (committed by older builds) are split too,
-// keeping the rendered headline clean.
-func splitAuditMessage(msg string) (tldr, detailed string) {
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
-		return "", ""
-	}
-	head, body, ok := strings.Cut(msg, _auditDetailedAnalysisMarker)
-	if !ok {
-		return "", msg
-	}
-	tldr = strings.TrimSpace(head)
-	if strings.HasPrefix(strings.ToLower(tldr), "tldr") {
-		if i := strings.IndexByte(tldr, ':'); i >= 0 {
-			tldr = strings.TrimSpace(tldr[i+1:])
-		}
-	}
-	detailed = strings.TrimSpace(body)
-	return tldr, detailed
-}
-
 // _auditTagRe parses the trailing "tag: <severity>[, <flag>]" line the
 // Ollama security-audit prompt instructs the model to emit (and that opnborg
 // also writes verbatim for unifi-autobackup commits). The severity is one of
@@ -465,8 +434,8 @@ func splitAuditMessage(msg string) (tldr, detailed string) {
 // secondary classifier. Two flags are recognised today: "needs-review"
 // flags a commit a human should inspect before it ships, and "backup"
 // marks a routine Unifi autoBackup rotation with no security impact. The
-// line may appear at the end of an Ollama-assisted detailed analysis body
-// or, for plain commits, anywhere in the message.
+// line may appear at the end of an Ollama-assisted commit body or, for
+// plain commits, anywhere in the message.
 var _auditTagRe = regexp.MustCompile(`^[Tt][Aa][Gg]:\s*([a-zA-Z]+)\s*(?:,\s*([a-zA-Z-]+))?\s*$`)
 
 // _auditSeverities is the ordered threat-level catalogue the audit dashboard
@@ -489,8 +458,22 @@ var _auditSeverities = []struct {
 	{"none", "ℹ️", "Untagged", "no AI security tag in commit message", "sev-none"},
 }
 
+// hasAuditTagLine reports whether msg carries a trailing "tag:" severity
+// line, the marker opnborg (and the Ollama security-audit prompt) writes on
+// every AI-authored commit message. It is the signal that distinguishes an
+// Ollama-assisted commit (whose headline may be reused as the commit author
+// name) from a plain manual commit or the static default message.
+func hasAuditTagLine(msg string) bool {
+	for line := range strings.SplitSeq(msg, "\n") {
+		if _auditTagRe.MatchString(strings.TrimSpace(line)) {
+			return true
+		}
+	}
+	return false
+}
+
 // auditTag extracts the security-impact tag from a commit message. It scans
-// every line (the tag may sit at the end of a detailed analysis body or, for
+// every line (the tag may sit at the end of an Ollama commit body or, for
 // plain commits, anywhere in the message), matches it against _auditTagRe,
 // and normalises the severity to one of the known keys (low / medium / high /
 // critical). An unknown severity or no tag line yields ("none", false, false).
@@ -792,11 +775,6 @@ func highlightAuditTagLine(body string) string {
 // renderAuditCommits emits the per-commit list HTML. Each commit is a
 // collapsible <details> card carrying the header (hash, author, date, file
 // stats), the commit message, and the syntax-highlighted unified diff.
-//
-// When the commit message carries an Ollama TLDR headline the summary is
-// rendered as a highlighted banner and the detailed analysis is hidden behind
-// a collapsible toggle (collapsed by default) so an operator can scan the
-// headlines and expand the body only for commits that warrant a closer look.
 func renderAuditCommits(commits []auditCommit) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"audit-list\" id=\"audit-list\">")
@@ -828,23 +806,9 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("</span></span>")
 		s.WriteString(renderAuditApprovalControl(c, severity))
 		s.WriteString("</summary>")
-		tldr, detailed := splitAuditMessage(c.message)
-		if tldr == "" {
-			s.WriteString("<pre class=\"audit-message\">")
-			s.WriteString(highlightAuditTagLine(html.EscapeString(c.message)))
-			s.WriteString("</pre>")
-		} else {
-			s.WriteString("<div class=\"audit-tldr ")
-			s.WriteString(sevClass)
-			s.WriteString("\">")
-			s.WriteString(html.EscapeString(tldr))
-			s.WriteString("</div>")
-			if detailed != "" {
-				s.WriteString("<details class=\"audit-analysis\"><summary class=\"audit-analysis-head\">Detailed Analysis</summary><pre class=\"audit-message audit-analysis-body\">")
-				s.WriteString(highlightAuditTagLine(html.EscapeString(detailed)))
-				s.WriteString("</pre></details>")
-			}
-		}
+		s.WriteString("<pre class=\"audit-message\">")
+		s.WriteString(highlightAuditTagLine(html.EscapeString(c.message)))
+		s.WriteString("</pre>")
 		if c.diff == "" {
 			s.WriteString("<div class=\"audit-diff-empty\"><span class=\"dash-muted\">no diff (root commit or binary-only changes)</span></div>")
 		} else {
