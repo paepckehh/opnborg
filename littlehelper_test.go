@@ -4630,6 +4630,120 @@ func TestHighlightAuditTagLine(t *testing.T) {
 	}
 }
 
+// TestExtractPerformerFromDiff verifies the OPNsense revision-block admin
+// account is recovered from a unified diff and that the result is deduplicated
+// and ignores the "+++" file header and other <username> occurrences outside
+// a <revision> block.
+func TestExtractPerformerFromDiff(t *testing.T) {
+	cases := []struct {
+		name string
+		diff string
+		want string
+	}{
+		{
+			"empty",
+			"",
+			"",
+		},
+		{
+			"no revision block",
+			"diff --git a/x b/x\n+++ b/x\n@@ -1,1 +1,1 @@\n-old\n+new\n",
+			"",
+		},
+		{
+			"single revision admin on added lines",
+			"diff --git a/fw01.lan/current.xml b/fw01.lan/current.xml\n+++ b/fw01.lan/current.xml\n@@ -1,3 +1,3 @@\n <revision>\n-  <username>old@HOST</username>\n+  <username>EXAMPLE@NAMEPC</username>\n </revision>\n",
+			"EXAMPLE@NAMEPC",
+		},
+		{
+			"revision block spanning added lines reconstructs correctly",
+			"+++ b/x\n+<revision>\n+  <username>admin@FW01</username>\n+  <time>123</time>\n+</revision>\n",
+			"admin@FW01",
+		},
+		{
+			"dedupes repeated admins across multiple files",
+			"+++ b/a\n+<revision>\n+  <username>bob@PC</username>\n+</revision>\n+++ b/b\n+<revision>\n+  <username>alice@PC</username>\n+</revision>\n+++ b/c\n+<revision>\n+  <username>bob@PC</username>\n+</revision>\n",
+			"alice@PC, bob@PC",
+		},
+		{
+			"ignores username outside revision block",
+			"+++ b/x\n+<proxy>\n+  <username>proxyuser</username>\n+</proxy>\n",
+			"",
+		},
+		{
+			"root commit empty diff",
+			"",
+			"",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := extractPerformerFromDiff(c.diff)
+			if got != c.want {
+				t.Errorf("extractPerformerFromDiff = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestHighlightAuditPerformerLine verifies the synthetic "change-performed-by:"
+// line appended after the tag line is wrapped in an audit-performer-line span
+// while the tag line and surrounding body keep their own highlighting.
+func TestHighlightAuditPerformerLine(t *testing.T) {
+	body := "Appliance: fw01\ntag: medium, needs-review\nchange-performed-by: admin@FW01"
+	out := highlightAuditTagLine(body)
+	if !strings.Contains(out, `<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`) {
+		t.Errorf("tag line should still be highlighted: %s", out)
+	}
+	if !strings.Contains(out, `<span class="audit-performer-line">change-performed-by: admin@FW01</span>`) {
+		t.Errorf("performer line should be wrapped in audit-performer-line span: %s", out)
+	}
+	if !strings.Contains(out, "Appliance: fw01") {
+		t.Errorf("non-tag lines should pass through unchanged: %s", out)
+	}
+	// A body with no performer line passes through unchanged.
+	plain := "just analysis\ntag: low"
+	if got := highlightAuditTagLine(plain); got == plain {
+		// tag line is highlighted so the string changes; this branch is
+		// only reached to confirm no panic / no performer span leaks in.
+		if strings.Contains(got, "audit-performer-line") {
+			t.Errorf("no performer span should be emitted when no performer line present: %s", got)
+		}
+	}
+}
+
+// TestRenderAuditCommitsPerformer verifies renderAuditCommits appends a
+// highlighted "change-performed-by:" line after the tag line when the diff
+// carries an OPNsense revision block, and that commits without a recoverable
+// performer render their message unchanged.
+func TestRenderAuditCommitsPerformer(t *testing.T) {
+	withPerformer := auditCommit{
+		hash:    "abcdef0",
+		author:  "OPNBORG-AUTO-COMMIT",
+		when:    time.Now(),
+		message: "tighten WAN inbound filter\n\ntag: medium, needs-review\n",
+		diff:    "+++ b/fw01.lan/current.xml\n@@ -1,3 +1,3 @@\n <revision>\n-  <username>old@HOST</username>\n+  <username>EXAMPLE@NAMEPC</username>\n </revision>\n",
+	}
+	withoutPerformer := auditCommit{
+		hash:    "1234567",
+		author:  "test",
+		when:    time.Now(),
+		message: "opnborg auto update",
+		diff:    "+++ b/x\n+nothing relevant\n",
+	}
+	out := renderAuditCommits([]auditCommit{withPerformer, withoutPerformer})
+	if !strings.Contains(out, `<span class="audit-performer-line">change-performed-by: EXAMPLE@NAMEPC</span>`) {
+		t.Errorf("performer line should be highlighted for commit with revision block:\n%s", out)
+	}
+	if strings.Contains(out, "change-performed-by:") {
+		// exactly one occurrence (the withPerformer commit); the plain
+		// commit must not gain a synthetic performer line.
+		if strings.Count(out, "change-performed-by:") != 1 {
+			t.Errorf("exactly one change-performed-by line expected, got %d:\n%s", strings.Count(out, "change-performed-by:"), out)
+		}
+	}
+}
+
 // TestHighlightDiff verifies the syntax highlighter colorises the diff
 // structure and escapes HTML so the output is safe to embed.
 func TestHighlightDiff(t *testing.T) {

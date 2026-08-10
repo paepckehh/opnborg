@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -577,6 +578,100 @@ func auditTag(msg string) (severity string, needsReview, backup bool) {
 	return sev, nr, bk
 }
 
+// _auditPerformerRe extracts the admin account that authored a configuration
+// change from the OPNsense config.xml revision block embedded in a backup
+// diff. The revision block carries the identity of the operator who last
+// applied a change on the appliance as <revision><username>NAME@HOST</username>
+// ...</revision>. <username> is the first child of <revision>, so the pattern
+// anchors on the opening <revision> tag to avoid matching <username> elements
+// elsewhere in the config (proxy auth, monitoring agents). The match is run
+// over the reconstructed new-version content (see extractPerformerFromDiff),
+// so it tolerates the revision block being split across context and added
+// diff lines.
+var _auditPerformerRe = regexp.MustCompile(
+	`<revision>\s*<username>([^<]+)</username>`,
+)
+
+// _auditPerformerLineRe matches the synthetic "change-performed-by:" line the
+// audit renderer appends after the security-impact "tag:" line. It is matched
+// on the HTML-escaped message body, so the colon and dash are literal. The
+// captured group holds the comma-separated admin identities.
+var _auditPerformerLineRe = regexp.MustCompile(`^[Cc]hange-performed-by:\s*(.+)$`)
+
+// extractPerformerFromDiff reconstructs the new-version file content from a
+// unified diff and returns the admin account(s) recorded in the OPNsense
+// revision block, deduplicated and joined with ", ". The revision block
+// records the operator who last applied a change on the appliance, so it is
+// the authoritative source for "who performed the audited change".
+//
+// Reconstruction: context lines and added ("+") lines contribute to the new
+// content; deleted ("-") lines and diff meta lines (file headers, hunk
+// markers, etc.) are dropped. This lets the <revision>...<username> pattern
+// match even when the <revision> opening tag is a context line (unchanged)
+// and only the <username> value was rewritten, which is the common case for
+// an OPNsense backup diff. An empty string is returned when no revision
+// username can be recovered (e.g. binary-only commits, root commits, or diffs
+// where the revision block was not touched).
+func extractPerformerFromDiff(diff string) string {
+	if diff == "" {
+		return ""
+	}
+	var b strings.Builder
+	for line := range strings.SplitSeq(diff, "\n") {
+		switch {
+		case line == "":
+			b.WriteByte('\n')
+		case strings.HasPrefix(line, "diff --git"),
+			strings.HasPrefix(line, "index "),
+			strings.HasPrefix(line, "--- "),
+			strings.HasPrefix(line, "+++"),
+			strings.HasPrefix(line, "@@"),
+			strings.HasPrefix(line, "\\ "),
+			strings.HasPrefix(line, "new file"),
+			strings.HasPrefix(line, "deleted file"),
+			strings.HasPrefix(line, "old mode"),
+			strings.HasPrefix(line, "new mode"),
+			strings.HasPrefix(line, "similarity "),
+			strings.HasPrefix(line, "rename "),
+			strings.HasPrefix(line, "copy "):
+			// diff meta line: not part of the file content.
+		case strings.HasPrefix(line, "-"):
+			// deleted line: excluded from the new version.
+		case strings.HasPrefix(line, "+"):
+			b.WriteString(line[1:])
+			b.WriteByte('\n')
+		default:
+			// context line: the leading char is a space; strip it so
+			// the reconstructed content reads like the source file.
+			if strings.HasPrefix(line, " ") {
+				b.WriteString(line[1:])
+			} else {
+				b.WriteString(line)
+			}
+			b.WriteByte('\n')
+		}
+	}
+	content := b.String()
+	if content == "" {
+		return ""
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, m := range _auditPerformerRe.FindAllStringSubmatch(content, -1) {
+		v := strings.TrimSpace(m[1])
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return strings.Join(out, ", ")
+}
+
 // auditSeverityClass maps a severity key to its CSS class token. An unknown
 // key resolves to the "none" bucket so the audit page always renders a valid
 // class.
@@ -820,12 +915,19 @@ func renderAuditApproveAllButton(rangeSlug string) string {
 	return b.String()
 }
 
-// line inside a rendered analysis body so the security-impact classification
-// stands out from the surrounding analysis prose. The line is wrapped in a
-// severity-class span; all other lines pass through unchanged (already HTML-
-// escaped by the caller). The strict "tag:" form is matched on every line;
-// the lenient, markdown-emphasis-tolerant form is matched only in the last
-// third of the message to avoid highlighting a "tag:" mention in the body.
+// highlightAuditTagLine wraps the trailing security-impact "tag:" line and the
+// synthetic "change-performed-by:" line (appended by renderAuditCommits from
+// the OPNsense revision block in the diff) in highlight spans so the
+// security-impact classification and the admin account that performed the
+// change stand out from the surrounding analysis prose. The "tag:" line is
+// wrapped in a severity-class span; the "change-performed-by:" line is wrapped
+// in an "audit-performer-line" span. All other lines pass through unchanged
+// (already HTML-escaped by the caller). The strict "tag:" form is matched on
+// every line; the lenient, markdown-emphasis-tolerant form is matched only in
+// the last third of the message to avoid highlighting a "tag:" mention in the
+// body. The "change-performed-by:" line is matched anywhere in the message
+// since it is only ever appended by the renderer and never authored by the
+// model, so a body mention cannot produce a false positive.
 func highlightAuditTagLine(body string) string {
 	if body == "" {
 		return ""
@@ -842,12 +944,15 @@ func highlightAuditTagLine(body string) string {
 	for i, line := range lines {
 		allowLoose := i >= tailStart
 		m := matchAuditTagLine(line, allowLoose)
-		if m == nil {
+		if m != nil {
+			sev := strings.ToLower(m[1])
+			cls := auditSeverityClass(sev)
+			lines[i] = "<span class=\"audit-tag-line " + cls + "\">" + line + "</span>"
 			continue
 		}
-		sev := strings.ToLower(m[1])
-		cls := auditSeverityClass(sev)
-		lines[i] = "<span class=\"audit-tag-line " + cls + "\">" + line + "</span>"
+		if _auditPerformerLineRe.MatchString(line) {
+			lines[i] = "<span class=\"audit-performer-line\">" + line + "</span>"
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -886,8 +991,17 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("</span></span>")
 		s.WriteString(renderAuditApprovalControl(c, severity))
 		s.WriteString("</summary>")
+		// Append a synthetic "change-performed-by:" line after the tag line
+		// when the diff carries an OPNsense revision block, so the admin
+		// account that performed the audited change is surfaced alongside
+		// the security-impact classification. The line is highlighted like
+		// the tag line by highlightAuditTagLine.
+		msg := c.message
+		if performer := extractPerformerFromDiff(c.diff); performer != "" {
+			msg = strings.TrimRight(msg, "\n") + "\nchange-performed-by: " + performer
+		}
 		s.WriteString("<pre class=\"audit-message\">")
-		s.WriteString(highlightAuditTagLine(html.EscapeString(c.message)))
+		s.WriteString(highlightAuditTagLine(html.EscapeString(msg)))
 		s.WriteString("</pre>")
 		if c.diff == "" {
 			s.WriteString("<div class=\"audit-diff-empty\"><span class=\"dash-muted\">no diff (root commit or binary-only changes)</span></div>")

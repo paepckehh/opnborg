@@ -499,6 +499,7 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .audit-tag-line.sev-high{background:rgba(255,140,66,.12);text-shadow:0 0 8px rgba(255,140,66,.4)}
 .audit-tag-line.sev-medium{background:rgba(210,153,34,.10)}
 .audit-tag-line.sev-low{background:rgba(63,185,80,.10)}
+.audit-performer-line{display:inline-block;width:100%;font-weight:700;border-top:1px dashed var(--sev-bd);margin-top:.3rem;padding-top:.3rem;color:#7aa2f7;background:rgba(122,162,247,.10);text-shadow:0 0 8px rgba(122,162,247,.35)}
 .audit-commit.sev-hidden{display:none}
 .audit-page-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem}
 .approve-all-form{margin-left:auto}
