@@ -4476,7 +4476,7 @@ func TestRenderAuditCommitsMessage(t *testing.T) {
 	for _, want := range []string{
 		`<pre class="audit-message">tighten WAN inbound filter`,
 		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
-		`<details class="audit-commit sev-medium" open data-sev="medium">`,
+		`<details class="audit-commit sev-medium" data-sev="medium">`,
 		`<span class="audit-sev-badge sev-medium" data-sev="medium">`,
 		`<span class="audit-sev-label">Medium</span>`,
 		`<span class="audit-sev-review" title="human review recommended">👀</span>`,
@@ -4505,7 +4505,7 @@ func TestRenderAuditCommitsMessage(t *testing.T) {
 	}
 	// The untagged plain commit must carry the "none" severity bucket so the
 	// dashboard filter and the untagged card count agree.
-	if !strings.Contains(out, `<details class="audit-commit sev-none" open data-sev="none">`) {
+	if !strings.Contains(out, `<details class="audit-commit sev-none" data-sev="none">`) {
 		t.Errorf("plain commit should be tagged with the none severity bucket:\n%s", out)
 	}
 }

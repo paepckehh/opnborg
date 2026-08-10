@@ -783,7 +783,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		sevClass := auditSeverityClass(severity)
 		s.WriteString("<details class=\"audit-commit ")
 		s.WriteString(sevClass)
-		s.WriteString("\" open data-sev=\"")
+		s.WriteString("\" data-sev=\"")
 		s.WriteString(html.EscapeString(severity))
 		s.WriteString("\">")
 		s.WriteString("<summary class=\"audit-commit-head\">")
