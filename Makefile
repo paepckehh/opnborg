@@ -30,10 +30,10 @@ run: update build
 	./$(PROJECT)
 
 deps:
-	git config core.fileMode false
 	rm -rf go.mod go.sum
 	go mod init paepcke.de/$(PROJECT)
 	go mod tidy -v
+	git config core.fileMode false
 
 check:
 	gofmt -l .

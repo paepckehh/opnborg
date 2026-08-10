@@ -324,16 +324,16 @@ func getDashboard(config *OPNCall) string {
 
 	// panel 1: backup folder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Backup Store</div>")
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Path</span><span class=\"dash-value\">" + html.EscapeString(d.storePath) + "</span></div>")
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Servers</span><span class=\"dash-value\">" + strconv.Itoa(d.servers) + "</span></div>")
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Archives</span><span class=\"dash-value\">" + strconv.Itoa(d.archives) + "</span></div>")
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Unifi Backups</span><span class=\"dash-value\">" + strconv.Itoa(d.unifiArchives) + "</span></div>")
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Size</span><span class=\"dash-value\">" + humanBytes(d.archiveBytes) + "</span></div>")
+	writeDashRow(&s, "Path", html.EscapeString(d.storePath))
+	writeDashRow(&s, "Servers", strconv.Itoa(d.servers))
+	writeDashRow(&s, "Archives", strconv.Itoa(d.archives))
+	writeDashRow(&s, "Unifi Backups", strconv.Itoa(d.unifiArchives))
+	writeDashRow(&s, "Size", humanBytes(d.archiveBytes))
 	newest := "n/a"
 	if !d.newestArchive.IsZero() {
 		newest = d.newestArchive.UTC().Format(time.RFC3339)
 	}
-	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Newest</span><span class=\"dash-value\">" + newest + "</span></div>")
+	writeDashRow(&s, "Newest", newest)
 	s.WriteString("</div>")
 
 	// panel 2: local git repo
@@ -341,7 +341,9 @@ func getDashboard(config *OPNCall) string {
 	if !d.gitEnabled {
 		s.WriteString("<div class=\"dash-row\"><span class=\"dash-value dash-muted\">git management disabled (OPN_GIT_ENABLE unset)</span></div>")
 	} else if d.gitError != "" {
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-value dash-err\">" + html.EscapeString(d.gitError) + "</span></div>")
+		s.WriteString("<div class=\"dash-row\"><span class=\"dash-value dash-err\">")
+		s.WriteString(html.EscapeString(d.gitError))
+		s.WriteString("</span></div>")
 	} else {
 		head := d.gitHead
 		if head == "" {
@@ -359,11 +361,11 @@ func getDashboard(config *OPNCall) string {
 		if msg == "" {
 			msg = "n/a"
 		}
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">HEAD</span><span class=\"dash-value\">" + head + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Commits</span><span class=\"dash-value\">" + strconv.Itoa(d.gitCommits) + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Last Commit</span><span class=\"dash-value\">" + lastC + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Worktree</span><span class=\"dash-value\">" + dirtyState + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Message</span><span class=\"dash-value\">" + html.EscapeString(msg) + "</span></div>")
+		writeDashRow(&s, "HEAD", head)
+		writeDashRow(&s, "Commits", strconv.Itoa(d.gitCommits))
+		writeDashRow(&s, "Last Commit", lastC)
+		writeDashRow(&s, "Worktree", dirtyState)
+		writeDashRow(&s, "Message", html.EscapeString(msg))
 	}
 	s.WriteString("</div>")
 
@@ -372,8 +374,8 @@ func getDashboard(config *OPNCall) string {
 	if !d.upstreamConfigured {
 		s.WriteString("<div class=\"dash-row\"><span class=\"dash-value dash-muted\">no upstream configured (OPN_GIT_UPSTREAM unset)</span></div>")
 	} else {
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">URL</span><span class=\"dash-value\">" + html.EscapeString(d.upstreamURL) + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Tracking</span><span class=\"dash-value\">" + html.EscapeString(d.upstreamRemote) + "</span></div>")
+		writeDashRow(&s, "URL", html.EscapeString(d.upstreamURL))
+		writeDashRow(&s, "Tracking", html.EscapeString(d.upstreamRemote))
 		status := ""
 		switch {
 		case d.upstreamNever:
@@ -387,7 +389,7 @@ func getDashboard(config *OPNCall) string {
 		default:
 			status = "<span class=\"dash-err\">diverged: " + strconv.Itoa(d.upstreamAhead) + " ahead / " + strconv.Itoa(d.upstreamBehind) + " behind</span>"
 		}
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">State</span><span class=\"dash-value\">" + status + "</span></div>")
+		writeDashRow(&s, "State", status)
 		last := "never"
 		if !d.upstreamLastTS.IsZero() {
 			last = d.upstreamLastTS.UTC().Format(time.RFC3339)
@@ -400,10 +402,10 @@ func getDashboard(config *OPNCall) string {
 				pushState = "<span class=\"dash-err\">last push failed</span>"
 			}
 		}
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Last Push</span><span class=\"dash-value\">" + last + "</span></div>")
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Push Result</span><span class=\"dash-value\">" + pushState + "</span></div>")
+		writeDashRow(&s, "Last Push", last)
+		writeDashRow(&s, "Push Result", pushState)
 		if d.upstreamLastMsg != "" {
-			s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Detail</span><span class=\"dash-value\">" + html.EscapeString(d.upstreamLastMsg) + "</span></div>")
+			writeDashRow(&s, "Detail", html.EscapeString(d.upstreamLastMsg))
 		}
 	}
 	s.WriteString("</div>")
