@@ -508,11 +508,10 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .approve-form{display:inline-flex;margin-left:.25rem}
 .btn-approve{background:linear-gradient(135deg,rgba(63,185,80,.3),rgba(63,185,80,.14));color:#fff;border:1px solid var(--ok);padding:.28rem .6rem;border-radius:6px;font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap;backdrop-filter:var(--glass-2);transition:box-shadow .2s,filter .2s,transform .15s}
 .btn-approve:hover{filter:brightness(1.15);box-shadow:0 0 16px rgba(63,185,80,.4);transform:translateY(-1px)}
-.meta-approved{display:inline-flex;flex-direction:column;gap:.1rem;padding:.25rem .55rem;border-radius:6px;border:1px solid var(--ok);background:rgba(63,185,80,.12);color:var(--ok);font-size:.7rem;font-weight:700;white-space:nowrap;box-shadow:0 0 14px rgba(63,185,80,.18);backdrop-filter:var(--glass-2)}
-.meta-approved .meta-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;opacity:.85}
-.meta-approved .meta-value{font-variant-numeric:tabular-nums}
-.meta-approved .meta-who{font-size:.62rem;font-weight:600;opacity:.85}
-@media(max-width:640px){.approve-all-form{margin-left:0;width:100%}.btn-approve-all{width:100%}.meta-approved{width:100%}}
+.meta-approved{display:inline-flex;align-items:center;padding:.18rem .5rem;border-radius:6px;border:1px solid var(--border);background:var(--card-2);color:var(--muted);font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;cursor:default;backdrop-filter:var(--glass-2)}
+.meta-approved:hover{border-color:var(--ok);color:var(--ok);box-shadow:0 0 10px rgba(63,185,80,.22)}
+.meta-approved .meta-label{opacity:.9}
+@media(max-width:640px){.approve-all-form{margin-left:0;width:100%}.btn-approve-all{width:100%}.meta-approved{width:auto}}
 @media(max-width:960px){.atd-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:640px){.member-row{flex-direction:column;align-items:flex-start}.member-main{flex-direction:column;align-items:flex-start}.meta-box{width:100%}.dashboard-grid{grid-template-columns:1fr}.raw-env-grid{grid-template-columns:1fr}.audit-stats{margin-left:0}.atd-grid{grid-template-columns:repeat(2,1fr)}.atd-legend{margin-left:0}.atd-reset{margin-left:0}.audit-sev-badge{margin-left:0}}
 </style>`

@@ -664,21 +664,22 @@ func renderAuditApprovalControl(c auditCommit, severity string) string {
 	}
 	st := approvalGet(_cfg, c.fullHash)
 	if st.approved {
-		var b strings.Builder
-		b.WriteString("<span class=\"meta-box meta-approved\" title=\"security-impact approval recorded in the approval ledger\">")
-		b.WriteString("<span class=\"meta-label\">approved</span>")
-		b.WriteString("<span class=\"meta-value\">")
+		var tip strings.Builder
+		tip.WriteString("Approved: ")
 		if !st.trueTimestamp.IsZero() {
-			b.WriteString(html.EscapeString(st.trueTimestamp.UTC().Format("2006-01-02 15:04:05 Z07:00")))
+			tip.WriteString(html.EscapeString(st.trueTimestamp.UTC().Format("2006-01-02 15:04:05 Z07:00")))
 		} else {
-			b.WriteString("yes")
+			tip.WriteString("yes")
 		}
-		b.WriteString("</span>")
 		if who := approvalOperatorLabel(st); who != "" {
-			b.WriteString("<span class=\"meta-who\">")
-			b.WriteString(html.EscapeString(who))
-			b.WriteString("</span>")
+			tip.WriteString(" by ")
+			tip.WriteString(html.EscapeString(who))
 		}
+		var b strings.Builder
+		b.WriteString("<span class=\"meta-approved\" title=\"security-impact approval recorded in the approval ledger\n")
+		b.WriteString(tip.String())
+		b.WriteString("\">")
+		b.WriteString("<span class=\"meta-label\">approved</span>")
 		b.WriteString("</span>")
 		return b.String()
 	}
