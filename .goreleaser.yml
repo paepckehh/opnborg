@@ -2,6 +2,10 @@
 # goreleaser v2 configuration
 version: 2
 
+before:
+  hooks:
+    - go mod tidy
+
 builds:
   -
     id: "opnborg"
@@ -30,14 +34,37 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ .Tag }}-next"
+release:
+  draft: false
+  prerelease: auto
+  name_template: "{{ .Tag }}"
 changelog:
   use: github
   sort: asc
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Improvements"
+      regexp: '^.*?(perf|refactor|improve)(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "CI & Build"
+      regexp: '^.*?(ci|build|chore)(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: "Others"
+      order: 999
   filters:
     exclude:
       - '^docs:'
       - '^test:'
       - '^chore:'
+      - '^Bump SemVer'
 nfpms:
   -
     file_name_template: "opnborg_package_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
