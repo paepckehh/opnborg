@@ -25,6 +25,7 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 ## 📸 WebUI - ShowTime
 
 ![OPNBORG Sample Screenshot 01](resources/sc01.png)
+![OPNBORG Sample Screenshot 02](resources/sc02.png)
 
 ---
 
