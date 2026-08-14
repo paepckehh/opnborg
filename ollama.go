@@ -23,12 +23,11 @@ const (
 	// _ollamaTimeout caps how long a single diff summarisation call may wait
 	// for the Ollama daemon to answer before that attempt is abandoned and
 	// retried. A local Ollama daemon running a large model on consumer GPU
-	// or CPU can take well over a minute to produce a structured security
-	// review; the 120 s ceiling gives the model a patient window to answer
-	// while still bounding a wedged server, and pairs with
-	// _ollamaMaxRetries so a single wedged call never blocks the loop for
-	// the full retry budget.
-	_ollamaTimeout = 120 * time.Second
+	// or CPU can take several minutes to produce a response; the 240 s
+	// (4 minute) ceiling gives the model a patient window to answer while
+	// still bounding a wedged server, and pairs with _ollamaMaxRetries so
+	// a single wedged call never blocks the loop for the full retry budget.
+	_ollamaTimeout = 240 * time.Second
 	// _ollamaMaxRetries bounds how many times opnborg retries a single diff
 	// summarisation call when the Ollama daemon times out, returns an error
 	// HTTP status, or delivers an empty response. Each attempt is announced
@@ -94,90 +93,50 @@ const (
 
 // _ollamaSystemPrompt is the persona and output contract sent to the model. It
 // instructs the model to act as an infrastructure / Unix firewall expert and
-// return a strict multi-part commit message: a single short headline line,
-// a blank line, and a structured, on-point security and impact review
-// grounded in OPNsense XML firewall configuration semantics, ending with a
+// return a short, concise commit message: a single short headline line, a
+// blank line, a one-or-two-line summary of what changed and why, and a
 // trailing "tag:" line carrying an automated security-impact classification
 // (low / medium / high / critical, plus an optional "needs-review" flag) so
-// commits can be triaged by risk. The body uses labelled one-liners and
-// tight bullet lists rather than prose paragraphs, covering, in order: the
-// affected appliance(s), the scope of the change per configuration section,
-// the previous-vs-new state, the functional impact on firewall behaviour, a
-// security impact analysis (attack surface, hardening posture, auth/credential
-// exposure, certificate/PKI implications, confidentiality/data-path exposure,
-// blast radius, and named risk patterns such as shadowed rules, asymmetric
-// routing, NAT exposure, WAN admin enablement, default-deny erosion, and
-// orphaned objects), compliance/operational implications (change management,
-// audit trail, HA-sync propagation, rollback), and risks/caveats/ambiguities
-// distinguishing confirmed facts from inferences. The model is told to be
-// concise and factual: no padding, no restating the diff, only what a senior
-// reviewer needs to triage the change. The diff payload is enriched with a
-// commit-level summary, per-file metadata (change kind, byte/line sizes, +/-
-// counts, detected OPNsense XML top-level sections), widened context, and for
-// small files the full resulting content; the prompt tells the model how to
-// read that structure so it can ground its description in concrete change
-// geometry rather than only the raw hunks. The prompt also carries the server
-// name(s) the changeset applies to (extracted from the first path segment of
-// each changed file) as explicit input, so the model can anchor its
-// description to the affected appliance rather than having to infer it from
-// the diff paths.
+// commits can be triaged by risk. The model is told to be brief and factual:
+// no deep analysis, no long structured sections, just a quick summary a
+// senior reviewer needs to triage the change at a glance. The diff payload
+// is enriched with a commit-level summary, per-file metadata (change kind,
+// byte/line sizes, +/- counts, detected OPNsense XML top-level sections),
+// widened context, and for small files the full resulting content; the prompt
+// tells the model how to read that structure so it can ground its summary in
+// concrete change geometry rather than only the raw hunks. The prompt also
+// carries the server name(s) the changeset applies to (extracted from the
+// first path segment of each changed file) as explicit input, so the model
+// can anchor its summary to the affected appliance rather than having to
+// infer it from the diff paths.
 const _ollamaSystemPrompt = `You are a senior infrastructure and Unix firewall engineer with deep expertise in OPNsense and Unifi network appliances. You are reviewing an automated git commit produced by opnborg, a daemon that backs up OPNsense firewall configuration as XML and Unifi controller backups as .unf files.
 
-Your task: read the enriched diff below and author the git commit message for it.
+Your task: read the enriched diff below and author the git commit message for it. Keep it SHORT and concise. Do NOT write a deep, detailed analysis. A quick summary is all that is needed.
 
 The backup store layout puts each appliance's files under a top-level folder named after the server (e.g. "fw01.lan/current.xml" belongs to server fw01.lan). The "Affected server(s):" line below lists the server name(s) derived from the first path segment of every changed file. Use it as explicit input.
 
-The diff is structured. Use every section to ground your description:
+The diff is structured. Use it to ground your summary:
 - "=== COMMIT SUMMARY ===": changed files with change kind (added/modified/deleted/renamed/copied), per-file +insertions/-deletions, commit-wide totals.
 - "=== FILE: <path> ===": a "change:" line, byte/line sizes before/after, per-file insertions/deletions, and when present an "opnsense-xml-sections:" line naming the OPNsense <opnsense> top-level child elements touched (e.g. filter, aliases, interfaces, gateways, nat, ipsec, vpn, cert, users, group, service, package).
-- "--- unified diff ---": the actual hunks with widened context. Reason about the surrounding OPNsense XML structure (parent elements, sibling rules, aliases, interface names) the context reveals.
-- "--- full new content ---": when present, the complete resulting file (small files only). Use it to describe the full new state, not just the patch.
+- "--- unified diff ---": the actual hunks with widened context.
+- "--- full new content ---": when present, the complete resulting file (small files only).
 
 Output contract (obey exactly, no preamble, no markdown fences):
 - Line 1: a short, concise commit headline (imperative mood, <= 72 characters, no trailing period).
 - Line 2: empty.
-- Lines 3+: a structured, on-point security and impact review. Be concise and factual: no padding, no restating the diff, no paragraphs of prose. Use the labelled sections below with tight bullet lists; each bullet one line, naming concrete identifiers (rules, interfaces, ports, protocols, networks, aliases) as they appear in the diff. Skip a section only when the diff does not touch anything it would cover. Cover, in this order, with these exact labels:
-
-  Appliance: <server(s)> — one line framing the change on that appliance.
-
-  Scope:
-  - <section>: <added/modified/removed> <what> — one bullet per changed section, citing opnsense-xml-sections and the hunks.
-
-  Previous -> New:
-  - <section>: <prior behaviour> -> <new behaviour> — concrete before/after per affected section.
-
-  Functional impact:
-  - <traffic/reachability/HA/sync/management-plane/VPN/IPSec/identity> — one bullet per affected concern.
-
-  Security impact:
-  - Attack surface: <exposed ports/services, widened scopes, any-to-any/any-to-self rules> or "none".
-  - Hardening: <relaxed/tightened, removed safeguards, allow-bypass> or "none".
-  - Auth/credentials: <admin/API/key/cert/user/SSH-key changes> or "none".
-  - Cert/PKI: <issued/rotated/revoked/expired/weakened, IPSec/mTLS posture> or "none".
-  - Confidentiality/data-path: <new interception/logging/capture surfaces> or "none".
-  - Blast radius: <local to one interface/zone vs whole perimeter/all VS> — one line.
-  - Named risks: <shadowed rules, asymmetric routing, NAT exposure, WAN admin enablement, default-deny erosion, cleartext, over-broad CIDRs, unused/duplicate aliases, orphaned objects> — list only those present, or "none".
-
-  Compliance/ops:
-  - <change management / audit trail / retention / rollback / HA-sync propagation> — one bullet per applicable concern, or "none".
-
-  Risks/caveats:
-  - <what an operator must verify that the diff alone cannot confirm> — distinguish "confirmed (diff)" from "inferred".
-
-  Ground every claim in the diff. Do not invent facts; mark inferences as inference. When the diff is an OPNsense config.xml rotation, reason about the <opnsense>/<filter>, <aliases>, <interfaces>, <gateways>, <nat>, <ipsec>, <vpn>, <cert>, <users>, <group>, <service>, <package>, <dhcpd>, <dnsmasq>, <unbound>, <cron>, <syslog>, <snmpd> and related subtrees you can infer from the diff and the opnsense-xml-sections metadata. Prefer depth over volume: cover everything that matters, nothing that does not.
-
+- Lines 3+: a BRIEF summary. One to three lines maximum. State what changed and the key security implication in plain language. No structured sections, no bullet lists, no deep analysis. Just a quick, factual summary.
 - Final line: a single "tag:" line that classifies the security impact of the change so commits can be triaged by risk. Format it exactly as:
 
   tag: <severity>[, needs-review]
 
-  Write the tag line as plain text only. Do NOT wrap it or any part of it in markdown formatting — no bold, italic, underscore, or backtick characters. The line must begin with the literal characters "tag:" so an automated grep can find it. Do not add a code fence, a bullet, or any punctuation around it.
+  Write the tag line as plain text only. Do NOT wrap it or any part of it in markdown formatting. The line must begin with the literal characters "tag:" so an automated grep can find it. Do not add a code fence, a bullet, or any punctuation around it.
 
   where <severity> is one of: low, medium, high, critical.
-  - low: routine or no security impact (e.g. alias description edit, logging tweak, cosmetic rename).
-  - medium: changes hardening or exposure in a bounded way (e.g. tightened a rule, rotated a certificate, adjusted an interface).
-  - high: broadens attack surface or weakens hardening (e.g. new any-to-any allow rule, opened a WAN port, disabled a safeguard).
-  - critical: removes a key control or broadly exposes a sensitive service (e.g. deleted a drop rule, enabled WAN admin, removed IPsec, weakened mTLS).
-  The tag severity must be the synthesis of the security impact section above: weigh every confirmed and inferred risk, the blast radius, and whether the change is reversible. Append ", needs-review" when a human should inspect the change before it ships (e.g. high/critical severity, ambiguous intent, any auth/cert/IPsec/firewall-defaults change, or an inference in the analysis that could not be confirmed from the diff). Keep the tag line to a single line, no prose after it.
+  - low: routine or no security impact.
+  - medium: changes hardening or exposure in a bounded way.
+  - high: broadens attack surface or weakens hardening.
+  - critical: removes a key control or broadly exposes a sensitive service.
+  Append ", needs-review" when a human should inspect the change before it ships (high/critical severity, ambiguous intent, any auth/cert/IPsec/firewall-defaults change).
 
 If the diff is empty or unintelligible, return exactly: opnborg auto update`
 
@@ -238,8 +197,11 @@ func extractServersFromStatus(status git.Status) []string {
 
 // ollamaGenerate POSTs the prompt to the configured Ollama model and returns
 // the generated text. It is the single network call site for the feature.
+// Progress is logged at each step (sending, waiting, response received) via
+// displayChan so an operator can follow the flow in the daemon log.
 func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 	endpoint := strings.TrimRight(config.Ollama.URL, "/") + _ollamaGeneratePath
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][SEND] POST %s model=%s prompt=%d bytes", endpoint, config.Ollama.Model, len(prompt))
 	body, err := json.Marshal(ollamaGenerateRequest{
 		Model:  config.Ollama.Model,
 		Prompt: prompt,
@@ -256,14 +218,17 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", _app+"/"+SemVer)
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][WAIT] waiting up to %s for model response", _ollamaTimeout)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("ollama call %s: %w", endpoint, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		displayChan <- fmt.Appendf(nil, "[OLLAMA][ERROR] HTTP %s", resp.Status)
 		return "", fmt.Errorf("ollama %s: HTTP %s", endpoint, resp.Status)
 	}
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][RECV] HTTP %s, reading body", resp.Status)
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("ollama read: %w", err)
@@ -272,6 +237,7 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", fmt.Errorf("ollama decode: %w", err)
 	}
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][DONE] response %d bytes", len(out.Response))
 	return out.Response, nil
 }
 
@@ -288,10 +254,16 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= _ollamaMaxRetries; attempt++ {
+		if attempt > 1 {
+			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] backing off %s then retrying", attempt, _ollamaMaxRetries, _ollamaRetryBackoff)
+			time.Sleep(_ollamaRetryBackoff)
+		}
+		displayChan <- fmt.Appendf(nil, "[OLLAMA][ATTEMPT %d/%d] calling model", attempt, _ollamaMaxRetries)
 		msg, err := ollamaGenerate(config, prompt)
 		if err == nil {
 			msg = strings.TrimSpace(msg)
 			if msg != "" {
+				displayChan <- fmt.Appendf(nil, "[OLLAMA][OK] model responded on attempt %d/%d", attempt, _ollamaMaxRetries)
 				return msg, nil
 			}
 			lastErr = errors.New("ollama returned an empty response")
@@ -300,10 +272,8 @@ func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
 			lastErr = err
 			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error())
 		}
-		if attempt < _ollamaMaxRetries {
-			time.Sleep(_ollamaRetryBackoff)
-		}
 	}
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][FAIL] all %d attempts exhausted, falling back to default message", _ollamaMaxRetries)
 	return "", lastErr
 }
 
@@ -715,11 +685,11 @@ func headFileContent(tree *object.Tree, pth string) (string, error) {
 // is set to _unifiAutobackupSubject verbatim, since those archives are opaque
 // Unifi controller rotations opnborg cannot meaningfully describe. When
 // enabled and the change set is describable, a single REST call asks the
-// model for the full commit message: a short headline, a structured, on-point
-// security and impact review, and a trailing "tag:" severity line. The
-// model's response is returned verbatim (trimmed). On any error or empty
-// response the default message is used as a fallback so a model outage
-// never blocks the backup from being committed.
+// model for the full commit message: a short headline, a brief one-to-three
+// line summary, and a trailing "tag:" severity line. The model's response is
+// returned verbatim (trimmed). On any error or empty response the default
+// message is used as a fallback so a model outage never blocks the backup
+// from being committed. Progress at each step is logged via displayChan.
 func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Worktree) string {
 	if !config.Ollama.Enable {
 		return _commitMsg
@@ -730,20 +700,25 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		return _commitMsg
 	}
 	if hasUnifiAutobackupChange(status) {
+		displayChan <- []byte("[OLLAMA][SKIP] unifi-autobackup changeset, using static subject")
 		return _unifiAutobackupSubject + "\n\n" + _unifiAutobackupTag + "\n"
 	}
 	if onlyUnifiChanges(status) {
+		displayChan <- []byte("[OLLAMA][SKIP] .unf-only changeset, using default message")
 		return _commitMsg
 	}
+	displayChan <- []byte("[OLLAMA][DIFF] building enriched diff for model")
 	diff, err := gitDiffText(repo, wtree)
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][DIFF][FAIL] " + err.Error())
 		return _commitMsg
 	}
 	if strings.TrimSpace(diff) == "" {
+		displayChan <- []byte("[OLLAMA][DIFF] empty diff, using default message")
 		return _commitMsg
 	}
 	servers := extractServersFromStatus(status)
+	displayChan <- fmt.Appendf(nil, "[OLLAMA][PROMPT] servers=%v diff=%d bytes, sending to model", servers, len(diff))
 	msg, err := ollamaGenerateWithRetry(config, ollamaPrompt(servers, diff))
 	if err != nil {
 		displayChan <- []byte("[OLLAMA][FAIL] " + err.Error())
