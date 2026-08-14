@@ -279,32 +279,30 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 // returning the first non-empty trimmed response. Each failed attempt
 // (network/timeout error, non-200 status, JSON decode failure, or an empty
 // model response) is announced on the CLI via displayChan so an operator can
-// see the model server struggling, and the loop retries immediately. The
-// returned string is already trimmed of surrounding whitespace. When every
-// attempt fails the last error is returned so the caller can fall back to
-// the default commit message.
+// see the model server struggling, and the loop pauses for
+// _ollamaRetryBackoff before the next attempt to give a transiently
+// overloaded model server breathing room. The returned string is already
+// trimmed of surrounding whitespace. When every attempt fails the last
+// error is returned so the caller can fall back to the default commit
+// message.
 func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= _ollamaMaxRetries; attempt++ {
 		msg, err := ollamaGenerate(config, prompt)
-		if err != nil {
-			lastErr = err
-			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error()))
-			if attempt < _ollamaMaxRetries {
-				time.Sleep(_ollamaRetryBackoff)
+		if err == nil {
+			msg = strings.TrimSpace(msg)
+			if msg != "" {
+				return msg, nil
 			}
-			continue
-		}
-		msg = strings.TrimSpace(msg)
-		if msg == "" {
 			lastErr = errors.New("ollama returned an empty response")
-			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] empty response from model", attempt, _ollamaMaxRetries))
-			if attempt < _ollamaMaxRetries {
-				time.Sleep(_ollamaRetryBackoff)
-			}
-			continue
+			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] empty response from model", attempt, _ollamaMaxRetries)
+		} else {
+			lastErr = err
+			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error())
 		}
-		return msg, nil
+		if attempt < _ollamaMaxRetries {
+			time.Sleep(_ollamaRetryBackoff)
+		}
 	}
 	return "", lastErr
 }
@@ -481,7 +479,7 @@ func changeKind(st *git.FileStatus) string {
 // magnitude at a glance.
 func countHunkAddsDels(diff string) (int, int) {
 	var ins, del int
-	for _, line := range strings.Split(diff, "\n") {
+	for line := range strings.SplitSeq(diff, "\n") {
 		switch {
 		case strings.HasPrefix(line, "+++"):
 			continue
@@ -568,7 +566,7 @@ func renderFileBlock(stat fileDiffStat, diff, workContent string) string {
 	fmt.Fprintf(&b, "lines: %d -> %d\n", stat.oldLines, stat.newLines)
 	fmt.Fprintf(&b, "insertions: %d, deletions: %d\n", stat.insertions, stat.deletions)
 	if len(stat.sections) > 0 {
-		b.WriteString("opnsense-xml-sections: " + strings.Join(stat.sections, ", ") + "\n")
+		fmt.Fprintf(&b, "opnsense-xml-sections: %s\n", strings.Join(stat.sections, ", "))
 	}
 	b.WriteString("--- unified diff ---\n")
 	b.WriteString(diff)

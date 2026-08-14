@@ -392,6 +392,7 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 		// (success or failure) so the banner disappears once the change
 		// is either committed or fell back to the default message.
 		reviewPending.Store(true)
+		defer reviewPending.Store(false)
 	}
 	if msg := generateCommitMessage(config, repo, wtree); msg != "" {
 		commitMsg = msg
@@ -405,7 +406,6 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 			authorName = name
 		}
 	}
-	reviewPending.Store(false)
 	commit, err := wtree.Commit(commitMsg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  authorName,
