@@ -313,6 +313,11 @@ nav a button{background:var(--card-2);color:var(--fg);border:1px solid var(--bor
 nav a button:hover{border-color:var(--accent);box-shadow:0 0 18px rgba(74,158,255,.35);transform:translateY(-1px);background:rgba(74,158,255,.12)}
 nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.14);box-shadow:0 0 16px rgba(74,158,255,.3);color:var(--accent-2)}
 .semver{color:var(--muted);font-size:.8rem;margin:0;font-variant-numeric:tabular-nums;font-family:var(--mono);padding:.2rem .55rem;border:1px solid var(--border);border-radius:99px;background:var(--card-2);backdrop-filter:var(--glass-2)}
+.review-banner{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;margin-bottom:.6rem;background:rgba(210,153,34,.12);border:1px solid var(--warn);border-radius:var(--radius);box-shadow:0 0 24px rgba(210,153,34,.18);animation:review-pulse 2.4s ease-in-out infinite}
+.review-text{color:var(--warn);font-size:.9rem;font-weight:600;letter-spacing:.02em}
+.review-pulse{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 10px var(--warn);animation:review-blink 1.2s ease-in-out infinite;flex-shrink:0}
+@keyframes review-blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes review-pulse{0%,100%{box-shadow:0 0 24px rgba(210,153,34,.18)}50%{box-shadow:0 0 36px rgba(210,153,34,.3)}}
 .group{margin:1rem 0;padding:1.1rem;background:var(--card);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow),var(--glow);position:relative;overflow:hidden}
 .group::after{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border-strong),transparent)}
 .group-header{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;padding-bottom:.6rem;border-bottom:1px solid var(--border);margin-bottom:.6rem}

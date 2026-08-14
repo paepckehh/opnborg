@@ -386,6 +386,13 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	// so the backup is never left uncommitted.
 	commitMsg := _commitMsg
 	authorName := _authorName
+	if config.Ollama.Enable {
+		// Surface to the WebUI that changes are under AI review and not
+		// yet committed. The flag is cleared after the commit completes
+		// (success or failure) so the banner disappears once the change
+		// is either committed or fell back to the default message.
+		reviewPending.Store(true)
+	}
 	if msg := generateCommitMessage(config, repo, wtree); msg != "" {
 		commitMsg = msg
 		// When Ollama authored the message, replace the static
@@ -398,6 +405,7 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 			authorName = name
 		}
 	}
+	reviewPending.Store(false)
 	commit, err := wtree.Commit(commitMsg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  authorName,

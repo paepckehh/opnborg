@@ -93,6 +93,7 @@ func getStartHTML() string {
 	s.WriteString(_head)
 	s.WriteString(_bodyStart)
 	s.WriteString(_bodyHead)
+	s.WriteString(getReviewBanner())
 	s.WriteString(getNavi())
 	s.WriteString(getAuditTile())
 	s.WriteString(getBackupTile())
@@ -104,6 +105,18 @@ func getStartHTML() string {
 	s.WriteString(_bodyEnd)
 	s.WriteString(_htmlEnd)
 	return s.String()
+}
+
+// getReviewBanner returns a banner shown on the main page when the
+// Ollama-assisted commit review is in progress. It signals to the operator
+// that changes have been detected and are currently being reviewed by the AI
+// model but are not yet committed to the git repo. Returns an empty string
+// when no review is pending.
+func getReviewBanner() string {
+	if !reviewPending.Load() {
+		return _empty
+	}
+	return "<div class=\"review-banner\"><span class=\"review-pulse\"></span><span class=\"review-text\">Changes detected &#8212; AI security review in progress, not yet committed</span></div>" + _lf
 }
 
 // headHTML

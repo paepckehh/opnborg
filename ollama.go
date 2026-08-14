@@ -22,18 +22,25 @@ import (
 const (
 	// _ollamaTimeout caps how long a single diff summarisation call may wait
 	// for the Ollama daemon to answer before that attempt is abandoned and
-	// retried. A local Ollama daemon answers in a few seconds; the 30 s
-	// ceiling guards against a transiently slow or overloaded model server
-	// stalling the backup cadence, and pairs with _ollamaMaxRetries so a
-	// single wedged call never blocks the loop for the full retry budget.
-	_ollamaTimeout = 30 * time.Second
+	// retried. A local Ollama daemon running a large model on consumer GPU
+	// or CPU can take well over a minute to produce a structured security
+	// review; the 120 s ceiling gives the model a patient window to answer
+	// while still bounding a wedged server, and pairs with
+	// _ollamaMaxRetries so a single wedged call never blocks the loop for
+	// the full retry budget.
+	_ollamaTimeout = 120 * time.Second
 	// _ollamaMaxRetries bounds how many times opnborg retries a single diff
 	// summarisation call when the Ollama daemon times out, returns an error
 	// HTTP status, or delivers an empty response. Each attempt is announced
 	// on the CLI via displayChan so an operator can see the model server
 	// struggling. After the final failed attempt opnborg falls back to the
 	// default commit message so the backup is never left uncommitted.
-	_ollamaMaxRetries = 3
+	_ollamaMaxRetries = 5
+	// _ollamaRetryBackoff is the delay between consecutive retry attempts.
+	// It gives a transiently overloaded model server a brief breathing
+	// window before the next call, increasing the chance of success on
+	// the subsequent attempt without stalling the backup cadence.
+	_ollamaRetryBackoff = 2 * time.Second
 	// _ollamaMaxDiffBytes caps the enriched diff payload sent to the model so a
 	// multi-megabyte full-config XML rotation does not overrun the model context
 	// window. The cap is generous because the enriched diff carries per-file
@@ -283,12 +290,18 @@ func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
 		if err != nil {
 			lastErr = err
 			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error()))
+			if attempt < _ollamaMaxRetries {
+				time.Sleep(_ollamaRetryBackoff)
+			}
 			continue
 		}
 		msg = strings.TrimSpace(msg)
 		if msg == "" {
 			lastErr = errors.New("ollama returned an empty response")
 			displayChan <- []byte(fmt.Sprintf("[OLLAMA][RETRY %d/%d] empty response from model", attempt, _ollamaMaxRetries))
+			if attempt < _ollamaMaxRetries {
+				time.Sleep(_ollamaRetryBackoff)
+			}
 			continue
 		}
 		return msg, nil

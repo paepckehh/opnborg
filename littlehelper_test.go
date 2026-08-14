@@ -5629,3 +5629,129 @@ func TestMatchAuditTagLine(t *testing.T) {
 		})
 	}
 }
+
+// TestReviewBannerHiddenWhenIdle verifies the review banner is absent from
+// the main page when no AI commit review is in progress.
+func TestReviewBannerHiddenWhenIdle(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	savedCfg := _cfg
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+		_cfg = savedCfg
+		reviewPending.Store(false)
+	})
+	tg = []OPNGroup{{Name: "TEST", OPN: true, Member: []string{"fw01"}}}
+	hive = []string{_na + "<span class=\"member-meta\">fw01</span>"}
+	sleep = "60"
+	_cfg = &OPNCall{Path: t.TempDir()}
+	_cfg.Git.Enable = true
+	reviewPending.Store(false)
+	got := getStartHTML()
+	if strings.Contains(got, `class="review-banner"`) {
+		t.Errorf("getStartHTML should not render review-banner div when idle")
+	}
+}
+
+// TestReviewBannerShownWhenPending verifies the review banner appears on the
+// main page when an AI commit review is in progress.
+func TestReviewBannerShownWhenPending(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	savedTg := tg
+	savedSleep := sleep
+	savedCfg := _cfg
+	t.Cleanup(func() {
+		hive = savedHive
+		tg = savedTg
+		sleep = savedSleep
+		_cfg = savedCfg
+		reviewPending.Store(false)
+	})
+	tg = []OPNGroup{{Name: "TEST", OPN: true, Member: []string{"fw01"}}}
+	hive = []string{_na + "<span class=\"member-meta\">fw01</span>"}
+	sleep = "60"
+	_cfg = &OPNCall{Path: t.TempDir()}
+	_cfg.Git.Enable = true
+	reviewPending.Store(true)
+	got := getStartHTML()
+	for _, want := range []string{`class="review-banner"`, "review in progress", "not yet committed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getStartHTML missing %q when review pending", want)
+		}
+	}
+	reviewPending.Store(false)
+	got = getStartHTML()
+	if strings.Contains(got, `class="review-banner"`) {
+		t.Errorf("getStartHTML should not render review-banner div after review completes")
+	}
+}
+
+// TestReviewPendingFlagDuringCommit verifies the reviewPending flag is set
+// during the gitCommit cycle when Ollama is enabled and cleared after the
+// commit completes. gitCommit is exercised directly (rather than via
+// gitCheckIn) to avoid the go-git RepackObjects "packfile not found" defect
+// on a second commit+gc cycle.
+func TestReviewPendingFlagDuringCommit(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+		reviewPending.Store(false)
+	})
+	const modelMsg = "Update filter rule\n\nAppliance: fw01\ntag: low"
+	mux := http.NewServeMux()
+	var seenPendingDuringCall bool
+	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		if !reviewPending.Load() {
+			t.Errorf("reviewPending should be true during Ollama call")
+		}
+		seenPendingDuringCall = true
+		_ = json.NewEncoder(w).Encode(ollamaGenerateResponse{Response: modelMsg})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.Ollama.Enable = true
+	config.Ollama.URL = srv.URL
+	config.Ollama.Model = "test-model"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	reviewPending.Store(false)
+	if _, err := gitCommit(config, repo); err != nil {
+		t.Fatalf("gitCommit with Ollama: %v", err)
+	}
+	if !seenPendingDuringCall {
+		t.Fatalf("Ollama endpoint was never called")
+	}
+	if reviewPending.Load() {
+		t.Errorf("reviewPending should be false after commit completes")
+	}
+}
