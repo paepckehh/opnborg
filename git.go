@@ -31,7 +31,7 @@ const (
 	// cycle, so it is ignored alongside the other non-version-controlled
 	// store artifacts. The "approval.db*" glob covers the main database and
 	// every sidecar spelling in a single line.
-	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db*\n"
+	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db*\napproval.db-shm\napproval.db-wal\n"
 	_origin         = "origin"
 	_commitMsg      = "opnborg auto update"
 	_authorName     = "OPNBORG-AUTO-COMMIT"
