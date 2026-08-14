@@ -3368,10 +3368,9 @@ func TestGitCommitSkipsApprovalLedger(t *testing.T) {
 
 	// Subcase 2: a mixed ledger+XML changeset commits the XML but never the
 	// ledger file, which must remain unstaged in the worktree afterwards.
-	// gitCommit is exercised directly (rather than via gitCheckIn) to avoid
-	// the unrelated go-git v5.19.2 RepackObjects "packfile not found" defect
-	// that fires on a second commit+gc cycle; the staging/skip policy under
-	// test lives entirely in gitCommit, not in gitGC.
+	// gitCommit is exercised directly (rather than via gitCheckIn) because the
+	// staging/skip policy under test lives entirely in gitCommit, not in
+	// gitGC.
 	t.Run("mixed-keeps-ledger-unstaged", func(t *testing.T) {
 		store := t.TempDir()
 		config := &OPNCall{Path: store, Email: "test@opnborg"}
@@ -5164,8 +5163,7 @@ func TestApprovalBackfillFromHistory(t *testing.T) {
 }
 
 // commitWithMessage stages the whole worktree and commits with the given
-// message. It is a test helper that bypasses gitCheckIn so no gitGC runs
-// (avoiding the unrelated go-git v5.19.2 RepackObjects defect) and the commit
+// message. It is a test helper that bypasses gitCheckIn so the commit
 // message is authored verbatim rather than via Ollama.
 func commitWithMessage(cfg *OPNCall, msg string) error {
 	repo, err := gitRepo(cfg.Path)
@@ -5694,8 +5692,7 @@ func TestReviewBannerShownWhenPending(t *testing.T) {
 // TestReviewPendingFlagDuringCommit verifies the reviewPending flag is set
 // during the gitCommit cycle when Ollama is enabled and cleared after the
 // commit completes. gitCommit is exercised directly (rather than via
-// gitCheckIn) to avoid the go-git RepackObjects "packfile not found" defect
-// on a second commit+gc cycle.
+// gitCheckIn) to isolate the flag lifecycle from the gc housekeeping.
 func TestReviewPendingFlagDuringCommit(t *testing.T) {
 	ensureDisplayDrained(t)
 	store := t.TempDir()

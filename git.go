@@ -630,6 +630,13 @@ func gitEnsureAggressiveWindow(repo *git.Repository) error {
 // the on-disk backup store stays compact over time without invoking an
 // external git binary. Both steps are no-ops on storages that do not support
 // packing/loose objects (e.g. the in-memory test backend).
+//
+// gitGC is best-effort: every step logs failures to displayChan and continues
+// rather than aborting the tick. A failed repack or prune never crashes the
+// daemon — the next tick will retry the housekeeping on a fresh repo handle.
+// This sidesteps the known go-git v5.19.x RepackObjects "packfile not found"
+// defect that can surface on a second gc cycle when the in-memory pack index
+// is stale relative to the on-disk state after the previous pack rotation.
 func gitGC(repo *git.Repository) error {
 	if err := repo.RepackObjects(&git.RepackConfig{
 		UseRefDeltas: false,
@@ -637,7 +644,8 @@ func gitGC(repo *git.Repository) error {
 		if errors.Is(err, git.ErrPackedObjectsNotSupported) {
 			return nil
 		}
-		return err
+		displayChan <- []byte("[GIT][REPO][GC][REPACK][FAIL] " + err.Error())
+		return nil
 	}
 	if err := repo.Prune(git.PruneOptions{
 		OnlyObjectsOlderThan: time.Now().Add(-_pruneGrace),
@@ -646,7 +654,8 @@ func gitGC(repo *git.Repository) error {
 		if errors.Is(err, git.ErrLooseObjectsNotSupported) {
 			return nil
 		}
-		return err
+		displayChan <- []byte("[GIT][REPO][GC][PRUNE][FAIL] " + err.Error())
+		return nil
 	}
 	return nil
 }
@@ -690,10 +699,7 @@ func gitCheckIn(config *OPNCall) (bool, error) {
 	if !committed {
 		return false, nil
 	}
-	if err := gitGC(repo); err != nil {
-		displayChan <- []byte("[GIT][REPO][GC][FAIL] " + err.Error())
-		return true, err
-	}
+	_ = gitGC(repo)
 	displayChan <- []byte("[GIT][REPO][GC][FINISH]")
 	return true, nil
 }
