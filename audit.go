@@ -355,16 +355,23 @@ func buildAuditCommit(c *object.Commit) (auditCommit, error) {
 	return ac, nil
 }
 
-// commitDiffText returns the unified diff between the commit and its first
-// parent. A root commit (no parent) returns an empty diff. The output is
-// capped at _auditDiffCap bytes; when it overflows the tail is dropped and a
-// truncation marker is appended so the audit page can flag it.
+// commitDiffText returns the unified diff from the commit's first parent to
+// the commit itself (old -> new), so that removed lines carry "-" and added
+// lines carry "+", matching the conventional `git diff parent child`
+// direction. A root commit (no parent) is diffed from an empty tree so the
+// whole initial import is rendered as additions. The output is capped at
+// _auditDiffCap bytes; when it overflows the tail is dropped and a truncation
+// marker is appended so the audit page can flag it.
 func commitDiffText(c *object.Commit) (string, bool, error) {
 	parents := c.ParentHashes
 	if len(parents) == 0 {
-		// Root commit: diff against the empty tree so the whole initial
-		// import is rendered as additions.
-		patch, err := c.Patch(nil)
+		// Root commit: diff from an empty tree to the commit tree so the
+		// whole initial import is rendered as additions.
+		ctree, err := c.Tree()
+		if err != nil {
+			return "", false, err
+		}
+		patch, err := (&object.Tree{}).Patch(ctree)
 		if err != nil {
 			return "", false, err
 		}
@@ -375,7 +382,10 @@ func commitDiffText(c *object.Commit) (string, bool, error) {
 	if perr != nil {
 		return "", false, perr
 	}
-	patch, err := c.Patch(parent)
+	// parent.Patch(c) diffs old -> new, so removed content is "-" and
+	// added content is "+". The former c.Patch(parent) reversed the
+	// direction, showing additions as deletions and vice versa.
+	patch, err := parent.Patch(c)
 	if err != nil {
 		return "", false, err
 	}

@@ -4588,6 +4588,150 @@ func TestGatherAuditCommits(t *testing.T) {
 	}
 }
 
+// TestCommitDiffTextDirection verifies that commitDiffText produces a unified
+// diff in the conventional old->new direction: lines present only in the
+// parent (old) are marked with "-" and lines present only in the commit (new)
+// are marked with "+". The former c.Patch(parent) call reversed the sides,
+// showing additions as deletions and vice versa.
+func TestCommitDiffTextDirection(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := git.PlainOpen(store)
+	if err != nil {
+		t.Fatalf("PlainOpen: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Parent commit with the "old" username.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<revision>\n  <username>OLD@HOST</username>\n</revision>\n"), 0660); err != nil {
+		t.Fatalf("write 1: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add 1: %v", err)
+	}
+	parentHash, err := wtree.Commit("first", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "test", Email: "test@opnborg", When: time.Now().Add(-time.Hour)},
+	})
+	if err != nil {
+		t.Fatalf("commit 1: %v", err)
+	}
+	// Child commit with the "new" username.
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<revision>\n  <username>NEW@HOST</username>\n</revision>\n"), 0660); err != nil {
+		t.Fatalf("write 2: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add 2: %v", err)
+	}
+	childHash, err := wtree.Commit("second", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "test", Email: "test@opnborg", When: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("commit 2: %v", err)
+	}
+	child, err := repo.CommitObject(childHash)
+	if err != nil {
+		t.Fatalf("CommitObject child: %v", err)
+	}
+	_ = parentHash
+	diff, _, err := commitDiffText(child)
+	if err != nil {
+		t.Fatalf("commitDiffText: %v", err)
+	}
+	// The old username line must appear as a deletion ("-OLD@HOST") and
+	// the new username line must appear as an addition ("+NEW@HOST").
+	if !strings.Contains(diff, "-  <username>OLD@HOST</username>") {
+		t.Errorf("diff should contain OLD@HOST as a deletion (-), got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+  <username>NEW@HOST</username>") {
+		t.Errorf("diff should contain NEW@HOST as an addition (+), got:\n%s", diff)
+	}
+	// The "---" header should reference a/ (old) and "+++" should
+	// reference b/ (new), as in a conventional git diff.
+	if !strings.Contains(diff, "--- a/fw01.lan/current.xml") {
+		t.Errorf("diff should contain --- a/ header for old file, got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+++ b/fw01.lan/current.xml") {
+		t.Errorf("diff should contain +++ b/ header for new file, got:\n%s", diff)
+	}
+}
+
+// TestCommitDiffTextRootDirection verifies that a root commit (no parent)
+// produces a diff where all content lines are additions ("+"), not
+// deletions as the old c.Patch(nil) produced.
+func TestCommitDiffTextRootDirection(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := git.PlainOpen(store)
+	if err != nil {
+		t.Fatalf("PlainOpen: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<revision>\n  <username>ROOT@HOST</username>\n</revision>\n"), 0660); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	hash, err := wtree.Commit("root", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "test", Email: "test@opnborg", When: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	root, err := repo.CommitObject(hash)
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	diff, _, err := commitDiffText(root)
+	if err != nil {
+		t.Fatalf("commitDiffText: %v", err)
+	}
+	// Root commit: all content should be additions.
+	if !strings.Contains(diff, "+<revision>") {
+		t.Errorf("root diff should contain +<revision> as addition, got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+  <username>ROOT@HOST</username>") {
+		t.Errorf("root diff should contain +ROOT@HOST as addition, got:\n%s", diff)
+	}
+	// Should NOT appear as a deletion.
+	if strings.Contains(diff, "-<revision>") {
+		t.Errorf("root diff should not contain deletions, got:\n%s", diff)
+	}
+}
+
 // TestRenderAuditCommitsMessage verifies that renderAuditCommits renders the
 // full Ollama commit message (headline + body + tag line) in a single
 // audit-message block, and that plain messages render verbatim. There is no
