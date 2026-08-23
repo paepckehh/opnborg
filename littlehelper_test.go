@@ -5896,3 +5896,587 @@ func TestReviewPendingFlagDuringCommit(t *testing.T) {
 		t.Errorf("reviewPending should be false after commit completes")
 	}
 }
+
+// --- OpenAI-compatible fallback ---------------------------------------------
+
+// TestSetupOpenAIConfig verifies Setup populates the OpenAI config from
+// OPENAI_DESC_URL / OPENAI_DESC_MODEL / OPENAI_DESC_TOKEN. The URL is required
+// for the feature to arm; the model defaults to _openaiDefaultModel when empty;
+// the token is optional.
+func TestSetupOpenAIConfig(t *testing.T) {
+	ensureDisplayDrained(t)
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
+		"OPN_NODAEMON", "OLLAMA_DESC_URL", "OLLAMA_DESC_MODEL",
+		"OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+	withEnv(t, "OPN_APIKEY", "k", true)
+	withEnv(t, "OPN_APISECRET", "s", true)
+	withEnv(t, "OPN_TARGETS", "fw01.lan", true)
+	withEnv(t, "OPN_NODAEMON", "1", true)
+
+	t.Run("disabled when unset", func(t *testing.T) {
+		config, err := Setup()
+		if err != nil {
+			t.Fatalf("Setup: %v", err)
+		}
+		if config.OpenAI.Enable {
+			t.Errorf("OpenAI.Enable should be false when vars unset")
+		}
+	})
+
+	t.Run("enabled when URL set, model defaults", func(t *testing.T) {
+		withEnv(t, "OPENAI_DESC_URL", "http://localhost:8080/v1", true)
+		config, err := Setup()
+		if err != nil {
+			t.Fatalf("Setup: %v", err)
+		}
+		if !config.OpenAI.Enable {
+			t.Errorf("OpenAI.Enable should be true when URL set")
+		}
+		if config.OpenAI.URL != "http://localhost:8080/v1" {
+			t.Errorf("URL = %q", config.OpenAI.URL)
+		}
+		if config.OpenAI.Model != _openaiDefaultModel {
+			t.Errorf("Model should default to %q, got %q", _openaiDefaultModel, config.OpenAI.Model)
+		}
+	})
+
+	t.Run("enabled with explicit model and token", func(t *testing.T) {
+		withEnv(t, "OPENAI_DESC_URL", "http://localhost:8080/v1", true)
+		withEnv(t, "OPENAI_DESC_MODEL", "gpt-oss-120b", true)
+		withEnv(t, "OPENAI_DESC_TOKEN", "secret-token", true)
+		config, err := Setup()
+		if err != nil {
+			t.Fatalf("Setup: %v", err)
+		}
+		if !config.OpenAI.Enable {
+			t.Errorf("OpenAI.Enable should be true when URL set")
+		}
+		if config.OpenAI.Model != "gpt-oss-120b" {
+			t.Errorf("Model = %q, want gpt-oss-120b", config.OpenAI.Model)
+		}
+		if config.OpenAI.Token != "secret-token" {
+			t.Errorf("Token = %q, want secret-token", config.OpenAI.Token)
+		}
+	})
+
+	t.Run("disabled when URL empty", func(t *testing.T) {
+		withEnv(t, "OPENAI_DESC_URL", "", true)
+		withEnv(t, "OPENAI_DESC_MODEL", "gpt-4o", true)
+		config, err := Setup()
+		if err != nil {
+			t.Fatalf("Setup: %v", err)
+		}
+		if config.OpenAI.Enable {
+			t.Errorf("OpenAI.Enable should be false when URL empty")
+		}
+	})
+}
+
+// TestGenerateCommitMessageUsesOpenAIDirect verifies that when only the
+// OpenAI-compatible backend is enabled (Ollama disabled), the model's response
+// is used verbatim as the commit message via the /chat/completions endpoint.
+func TestGenerateCommitMessageUsesOpenAIDirect(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		var req openaiChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		if req.Stream {
+			t.Errorf("request must set stream=false")
+		}
+		if req.Model != "gpt-oss-120b" {
+			t.Errorf("model = %q, want gpt-oss-120b", req.Model)
+		}
+		if len(req.Messages) != 2 {
+			t.Errorf("expected 2 messages, got %d", len(req.Messages))
+		}
+		if req.Messages[0].Role != _openaiSystemRole {
+			t.Errorf("first message role = %q, want %q", req.Messages[0].Role, _openaiSystemRole)
+		}
+		if req.Messages[1].Role != _openaiUserRole {
+			t.Errorf("second message role = %q, want %q", req.Messages[1].Role, _openaiUserRole)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Errorf("Authorization = %q, want Bearer test-token", r.Header.Get("Authorization"))
+		}
+		callCount++
+		_ = json.NewEncoder(w).Encode(openaiChatResponse{
+			Choices: []openaiChatChoice{
+				{Message: openaiChatMessage{Role: _openaiAssistantRole, Content: modelMsg}},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	config.OpenAI.Token = "test-token"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, modelMsg)
+	}
+	if callCount != 1 {
+		t.Errorf("expected exactly one model call, got %d", callCount)
+	}
+}
+
+// TestGenerateCommitMessageOpenAIFallbackFromOllama verifies that when both
+// Ollama and OpenAI are enabled and the Ollama endpoint is unreachable, the
+// OpenAI-compatible backend is used as a fallback.
+func TestGenerateCommitMessageOpenAIFallbackFromOllama(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
+	mux := http.NewServeMux()
+	var openaiCalls int
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		openaiCalls++
+		_ = json.NewEncoder(w).Encode(openaiChatResponse{
+			Choices: []openaiChatChoice{
+				{Message: openaiChatMessage{Role: _openaiAssistantRole, Content: modelMsg}},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	// Ollama pointed at an unreachable port so it fails and falls back.
+	config.Ollama.Enable = true
+	config.Ollama.URL = "http://127.0.0.1:1"
+	config.Ollama.Model = "test-model"
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q (OpenAI fallback)", got, modelMsg)
+	}
+	if openaiCalls != 1 {
+		t.Errorf("expected exactly one OpenAI fallback call, got %d", openaiCalls)
+	}
+}
+
+// TestGenerateCommitMessageOpenAIFallsBackOnError verifies that when only the
+// OpenAI-compatible backend is enabled and the endpoint is unreachable, the
+// default commit message is used so the backup is never left uncommitted.
+func TestGenerateCommitMessageOpenAIFallsBackOnError(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = "http://127.0.0.1:1" // nothing listening
+	config.OpenAI.Model = "gpt-oss-120b"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<x/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<y/>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	if got := generateCommitMessage(config, repo, wtree); got != _commitMsg {
+		t.Errorf("unreachable OpenAI should fall back to default message, got %q", got)
+	}
+}
+
+// TestGenerateCommitMessageOpenAIRetriesOnEmpty verifies that the OpenAI
+// backend retries on an empty response and eventually succeeds when a later
+// attempt returns a non-empty message.
+func TestGenerateCommitMessageOpenAIRetriesOnEmpty(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	const modelMsg = "Tighten WAN inbound filter rule set\n\nAppliance: fw01\nScope: filter\ntag: medium"
+	mux := http.NewServeMux()
+	var callCount int
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount < _ollamaMaxRetries {
+			_ = json.NewEncoder(w).Encode(openaiChatResponse{
+				Choices: []openaiChatChoice{
+					{Message: openaiChatMessage{Role: _openaiAssistantRole, Content: ""}},
+				},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(openaiChatResponse{
+			Choices: []openaiChatChoice{
+				{Message: openaiChatMessage{Role: _openaiAssistantRole, Content: modelMsg}},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	got := generateCommitMessage(config, repo, wtree)
+	if got != modelMsg {
+		t.Errorf("generateCommitMessage = %q, want %q", got, modelMsg)
+	}
+	if callCount != _ollamaMaxRetries {
+		t.Errorf("expected %d model calls, got %d", _ollamaMaxRetries, callCount)
+	}
+}
+
+// TestOpenAIHealthCheckDisabled verifies that when the OpenAI feature is
+// disabled the probe makes no network call and reports all-false with no error.
+func TestOpenAIHealthCheckDisabled(t *testing.T) {
+	config := &OPNCall{}
+	config.OpenAI.Enable = false
+	h := openaiHealthCheck(config)
+	if h.ServerReachable || h.APIReady || h.ModelReady {
+		t.Errorf("disabled probe should be all-false, got %+v", h)
+	}
+	if h.Err != "" {
+		t.Errorf("disabled probe should have no error, got %q", h.Err)
+	}
+}
+
+// TestOpenAIHealthCheckReady verifies that a server answering /models with the
+// configured model in its list reports all three signals true and no error.
+func TestOpenAIHealthCheckReady(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		_ = json.NewEncoder(w).Encode(openaiModelsResponse{
+			Data: []openaiModelsModel{
+				{ID: "gpt-4o"},
+				{ID: "gpt-oss-120b"},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	h := openaiHealthCheck(config)
+	if !h.ServerReachable {
+		t.Errorf("ServerReachable should be true, got %+v", h)
+	}
+	if !h.APIReady {
+		t.Errorf("APIReady should be true, got %+v", h)
+	}
+	if !h.ModelReady {
+		t.Errorf("ModelReady should be true for configured model, got %+v", h)
+	}
+	if h.Err != "" {
+		t.Errorf("Err should be empty when fully ready, got %q", h.Err)
+	}
+}
+
+// TestOpenAIHealthCheckModelMissing verifies that a server answering /models
+// without the configured model reports server + API ready but model not ready.
+func TestOpenAIHealthCheckModelMissing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(openaiModelsResponse{
+			Data: []openaiModelsModel{{ID: "gpt-4o"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	h := openaiHealthCheck(config)
+	if !h.ServerReachable || !h.APIReady {
+		t.Errorf("server + API should be ready, got %+v", h)
+	}
+	if h.ModelReady {
+		t.Errorf("ModelReady should be false when model not listed")
+	}
+	if h.Err == "" || !strings.Contains(h.Err, "gpt-oss-120b") {
+		t.Errorf("Err should name the missing model, got %q", h.Err)
+	}
+}
+
+// TestOpenAIHealthCheckSendsToken verifies that when a token is configured it
+// is sent as the Authorization header on the /models probe.
+func TestOpenAIHealthCheckSendsToken(t *testing.T) {
+	mux := http.NewServeMux()
+	var gotAuth string
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(openaiModelsResponse{
+			Data: []openaiModelsModel{{ID: "gpt-oss-120b"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	config.OpenAI.Token = "my-secret-token"
+	h := openaiHealthCheck(config)
+	if !h.ModelReady {
+		t.Errorf("ModelReady should be true, got %+v", h)
+	}
+	if gotAuth != "Bearer my-secret-token" {
+		t.Errorf("Authorization = %q, want Bearer my-secret-token", gotAuth)
+	}
+}
+
+// TestRenderOpenAIPanelDisabled verifies the panel surfaces the env-var status
+// without performing a probe when the feature is disabled.
+func TestRenderOpenAIPanelDisabled(t *testing.T) {
+	config := &OPNCall{}
+	config.OpenAI.Enable = false
+	config.OpenAI.URL = ""
+	config.OpenAI.Model = ""
+	out := renderOpenAIPanel(config)
+	for _, want := range []string{"OpenAI Commit Messages", "Feature Enabled", "REST API URL", "Model", "API Token"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "Server Reachable") {
+		t.Errorf("disabled panel should not run the probe (no Server Reachable row): %s", out)
+	}
+}
+
+// TestRenderOpenAIPanelEnabled verifies the panel runs the probe and renders
+// the three reachability rows plus an ok probe state when the model is ready.
+func TestRenderOpenAIPanelEnabled(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(openaiModelsResponse{
+			Data: []openaiModelsModel{{ID: "gpt-oss-120b"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	out := renderOpenAIPanel(config)
+	for _, want := range []string{
+		"Feature Enabled", "REST API URL", "Model", "API Token",
+		"Server Reachable", "REST API Ready", "Model Ready", "Probe State", "ok",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "Probe Error") {
+		t.Errorf("ready panel should not show a probe error: %s", out)
+	}
+}
+
+// TestReviewPendingFlagDuringOpenAICommit verifies the reviewPending flag is
+// set during the gitCommit cycle when the OpenAI-compatible backend is used
+// (Ollama disabled) and cleared after the commit completes.
+func TestReviewPendingFlagDuringOpenAICommit(t *testing.T) {
+	ensureDisplayDrained(t)
+	store := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+		reviewPending.Store(false)
+	})
+	const modelMsg = "Update filter rule\n\nAppliance: fw01\ntag: low"
+	mux := http.NewServeMux()
+	var seenPendingDuringCall bool
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		if !reviewPending.Load() {
+			t.Errorf("reviewPending should be true during OpenAI call")
+		}
+		seenPendingDuringCall = true
+		_ = json.NewEncoder(w).Encode(openaiChatResponse{
+			Choices: []openaiChatChoice{
+				{Message: openaiChatMessage{Role: _openaiAssistantRole, Content: modelMsg}},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	fwDir := filepath.Join(store, "fw01.lan")
+	if err := os.MkdirAll(fwDir, 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><old/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := gitCheckIn(config); err != nil {
+		t.Fatalf("initial gitCheckIn: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "current.xml"), []byte("<opnsense><filter><rule new='1'/></filter></opnsense>"), 0660); err != nil {
+		t.Fatalf("write xml v2: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	reviewPending.Store(false)
+	if _, err := gitCommit(config, repo); err != nil {
+		t.Fatalf("gitCommit with OpenAI: %v", err)
+	}
+	if !seenPendingDuringCall {
+		t.Fatalf("OpenAI endpoint was never called")
+	}
+	if reviewPending.Load() {
+		t.Errorf("reviewPending should be false after commit completes")
+	}
+}

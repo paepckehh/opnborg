@@ -71,6 +71,31 @@ const (
 	// unreachable Ollama daemon never stalls the page render. The probe is run
 	// synchronously on each config dashboard GET.
 	_ollamaHealthTimeout = 3 * time.Second
+	// _openaiChatCompletionsPath is the REST endpoint appended to
+	// OPENAI_DESC_URL. The OpenAI-compatible chat completions API accepts a
+	// JSON body with a messages array and returns a choices array carrying the
+	// generated text. It is the OpenAI-compatible equivalent of the Ollama
+	// /api/generate endpoint.
+	_openaiChatCompletionsPath = "/chat/completions"
+	// _openaiModelsPath is the REST endpoint appended to OPENAI_DESC_URL that
+	// lists the models available on the OpenAI-compatible server. The config
+	// dashboard probes it to report server reachability and REST API
+	// readiness. It is the OpenAI-compatible equivalent of the Ollama
+	// /api/tags endpoint.
+	_openaiModelsPath = "/models"
+	// _openaiDefaultModel is the model name used when OPENAI_DESC_MODEL is
+	// unset. It is a widely available default on OpenAI-compatible servers;
+	// operators who need a different model set OPENAI_DESC_MODEL explicitly.
+	_openaiDefaultModel = "gpt-4o-mini"
+	// _openaiSystemRole is the role value for the system message in the
+	// OpenAI chat completions messages array.
+	_openaiSystemRole = "system"
+	// _openaiUserRole is the role value for the user message carrying the
+	// diff payload in the OpenAI chat completions messages array.
+	_openaiUserRole = "user"
+	// _openaiAssistantRole is the role value for the assistant message in
+	// the OpenAI chat completions messages array.
+	_openaiAssistantRole = "assistant"
 	// _unifiBackupExt is the file extension of Unifi autoBackup archives.
 	// Commits whose changed files are all .unf are committed with the default
 	// message without consulting the model: the binary Unifi backup format is
@@ -152,6 +177,36 @@ type ollamaGenerateRequest struct {
 // when stream=false. Only the Response field carries the generated text.
 type ollamaGenerateResponse struct {
 	Response string `json:"response"`
+}
+
+// openaiChatMessage is a single message in the OpenAI chat completions
+// messages array. The system message carries the persona prompt and the
+// user message carries the diff payload.
+type openaiChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// openaiChatRequest is the JSON body POSTed to the OpenAI-compatible
+// /chat/completions REST endpoint. Stream is false so the whole response
+// arrives in one shot, mirroring the Ollama single-call contract.
+type openaiChatRequest struct {
+	Model    string              `json:"model"`
+	Messages []openaiChatMessage `json:"messages"`
+	Stream   bool                `json:"stream"`
+}
+
+// openaiChatChoice is a single completion choice in the OpenAI chat
+// completions response. The message content carries the generated text.
+type openaiChatChoice struct {
+	Message openaiChatMessage `json:"message"`
+}
+
+// openaiChatResponse is the JSON body returned by the OpenAI-compatible
+// /chat/completions endpoint when stream=false. The first choice's message
+// content carries the generated text.
+type openaiChatResponse struct {
+	Choices []openaiChatChoice `json:"choices"`
 }
 
 // ollamaPrompt assembles the full prompt sent to the model: the system persona,
@@ -252,28 +307,112 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 // error is returned so the caller can fall back to the default commit
 // message.
 func ollamaGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
+	return generateWithRetry("OLLAMA", func(attempt int) (string, error) {
+		return ollamaGenerate(config, prompt)
+	})
+}
+
+// openaiGenerate POSTs the prompt to the configured OpenAI-compatible model
+// and returns the generated text. It is the single network call site for the
+// OpenAI-compatible fallback. The prompt is wrapped in a two-message chat
+// (system persona + user diff payload) and sent to the /chat/completions
+// endpoint with stream=false so the whole response arrives in one shot. When
+// a bearer token is configured it is sent as the Authorization header.
+// Progress is logged at each step (sending, waiting, response received) via
+// displayChan so an operator can follow the flow in the daemon log.
+func openaiGenerate(config *OPNCall, prompt string) (string, error) {
+	endpoint := strings.TrimRight(config.OpenAI.URL, "/") + _openaiChatCompletionsPath
+	displayChan <- fmt.Appendf(nil, "[OPENAI][SEND] POST %s model=%s prompt=%d bytes", endpoint, config.OpenAI.Model, len(prompt))
+	body, err := json.Marshal(openaiChatRequest{
+		Model: config.OpenAI.Model,
+		Messages: []openaiChatMessage{
+			{Role: _openaiSystemRole, Content: _ollamaSystemPrompt},
+			{Role: _openaiUserRole, Content: prompt},
+		},
+		Stream: false,
+	})
+	if err != nil {
+		return "", fmt.Errorf("openai marshal: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), _ollamaTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("openai request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", _app+"/"+SemVer)
+	if config.OpenAI.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+config.OpenAI.Token)
+	}
+	displayChan <- fmt.Appendf(nil, "[OPENAI][WAIT] waiting up to %s for model response", _ollamaTimeout)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("openai call %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		displayChan <- fmt.Appendf(nil, "[OPENAI][ERROR] HTTP %s", resp.Status)
+		return "", fmt.Errorf("openai %s: HTTP %s", endpoint, resp.Status)
+	}
+	displayChan <- fmt.Appendf(nil, "[OPENAI][RECV] HTTP %s, reading body", resp.Status)
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("openai read: %w", err)
+	}
+	var out openaiChatResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("openai decode: %w", err)
+	}
+	if len(out.Choices) == 0 {
+		return "", errors.New("openai returned no choices")
+	}
+	text := out.Choices[0].Message.Content
+	displayChan <- fmt.Appendf(nil, "[OPENAI][DONE] response %d bytes", len(text))
+	return text, nil
+}
+
+// openaiGenerateWithRetry calls openaiGenerate up to _ollamaMaxRetries times,
+// returning the first non-empty trimmed response. It mirrors the Ollama retry
+// loop: each failed attempt is announced on the CLI via displayChan, the loop
+// pauses for _ollamaRetryBackoff between attempts, and the returned string is
+// already trimmed. When every attempt fails the last error is returned so the
+// caller can fall back to the default commit message.
+func openaiGenerateWithRetry(config *OPNCall, prompt string) (string, error) {
+	return generateWithRetry("OPENAI", func(attempt int) (string, error) {
+		return openaiGenerate(config, prompt)
+	})
+}
+
+// generateWithRetry is the shared retry loop used by both the Ollama and
+// OpenAI-compatible backends. tag is the log prefix ("OLLAMA" or "OPENAI")
+// used in the displayChan progress lines. call is the single-attempt
+// generation function; its attempt argument is 1-indexed for log messages.
+// The loop returns the first non-empty trimmed response, or the last error
+// when every attempt fails.
+func generateWithRetry(tag string, call func(attempt int) (string, error)) (string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= _ollamaMaxRetries; attempt++ {
 		if attempt > 1 {
-			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] backing off %s then retrying", attempt, _ollamaMaxRetries, _ollamaRetryBackoff)
+			displayChan <- fmt.Appendf(nil, "[%s][RETRY %d/%d] backing off %s then retrying", tag, attempt, _ollamaMaxRetries, _ollamaRetryBackoff)
 			time.Sleep(_ollamaRetryBackoff)
 		}
-		displayChan <- fmt.Appendf(nil, "[OLLAMA][ATTEMPT %d/%d] calling model", attempt, _ollamaMaxRetries)
-		msg, err := ollamaGenerate(config, prompt)
+		displayChan <- fmt.Appendf(nil, "[%s][ATTEMPT %d/%d] calling model", tag, attempt, _ollamaMaxRetries)
+		msg, err := call(attempt)
 		if err == nil {
 			msg = strings.TrimSpace(msg)
 			if msg != "" {
-				displayChan <- fmt.Appendf(nil, "[OLLAMA][OK] model responded on attempt %d/%d", attempt, _ollamaMaxRetries)
+				displayChan <- fmt.Appendf(nil, "[%s][OK] model responded on attempt %d/%d", tag, attempt, _ollamaMaxRetries)
 				return msg, nil
 			}
-			lastErr = errors.New("ollama returned an empty response")
-			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] empty response from model", attempt, _ollamaMaxRetries)
+			lastErr = errors.New(tag + " returned an empty response")
+			displayChan <- fmt.Appendf(nil, "[%s][RETRY %d/%d] empty response from model", tag, attempt, _ollamaMaxRetries)
 		} else {
 			lastErr = err
-			displayChan <- fmt.Appendf(nil, "[OLLAMA][RETRY %d/%d] %s", attempt, _ollamaMaxRetries, err.Error())
+			displayChan <- fmt.Appendf(nil, "[%s][RETRY %d/%d] %s", tag, attempt, _ollamaMaxRetries, err.Error())
 		}
 	}
-	displayChan <- fmt.Appendf(nil, "[OLLAMA][FAIL] all %d attempts exhausted, falling back to default message", _ollamaMaxRetries)
+	displayChan <- fmt.Appendf(nil, "[%s][FAIL] all %d attempts exhausted, falling back to default message", tag, _ollamaMaxRetries)
 	return "", lastErr
 }
 
@@ -368,6 +507,90 @@ func ollamaModelMatch(have, want string) bool {
 		return true
 	}
 	return strings.HasPrefix(have, want+":")
+}
+
+// openaiModelsModel is a single model entry in the OpenAI-compatible
+// /models response. The id field carries the model name.
+type openaiModelsModel struct {
+	ID string `json:"id"`
+}
+
+// openaiModelsResponse is the JSON body returned by the OpenAI-compatible
+// /models endpoint. It lists the models available on the server, which the
+// config dashboard uses to report server reachability and REST API readiness.
+type openaiModelsResponse struct {
+	Data []openaiModelsModel `json:"data"`
+}
+
+// openaiHealth is the result of a config-dashboard probe against the
+// OpenAI-compatible server. It mirrors ollamaHealth: ServerReachable means a
+// TCP/HTTP connection succeeded; APIReady means the server answered /models
+// with a parseable JSON body; ModelReady means the configured model is present
+// in that list. Err carries the first failure reason, if any, for display.
+type openaiHealth struct {
+	ServerReachable bool
+	APIReady        bool
+	ModelReady      bool
+	Err             string
+}
+
+// openaiHealthCheck probes the configured OpenAI-compatible server and reports
+// server reachability, REST API readiness, and whether the configured model is
+// available. It is the OpenAI-compatible counterpart of ollamaHealthCheck and
+// is called from the config dashboard on every render with a short timeout
+// (_ollamaHealthTimeout) so a wedged server never stalls the page. When the
+// OpenAI-compatible feature is not enabled the returned health is all-false
+// with no probe.
+func openaiHealthCheck(config *OPNCall) openaiHealth {
+	var h openaiHealth
+	if !config.OpenAI.Enable {
+		return h
+	}
+	endpoint := strings.TrimRight(config.OpenAI.URL, "/") + _openaiModelsPath
+	ctx, cancel := context.WithTimeout(context.Background(), _ollamaHealthTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		h.Err = fmt.Sprintf("build request: %v", err)
+		return h
+	}
+	req.Header.Set("User-Agent", _app+"/"+SemVer)
+	if config.OpenAI.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+config.OpenAI.Token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.Err = fmt.Sprintf("server unreachable: %v", err)
+		return h
+	}
+	defer resp.Body.Close()
+	h.ServerReachable = true
+	if resp.StatusCode != http.StatusOK {
+		h.Err = fmt.Sprintf("api: HTTP %s", resp.Status)
+		return h
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.Err = fmt.Sprintf("read body: %v", err)
+		return h
+	}
+	var models openaiModelsResponse
+	if err := json.Unmarshal(raw, &models); err != nil {
+		h.Err = fmt.Sprintf("decode /models: %v", err)
+		return h
+	}
+	h.APIReady = true
+	model := strings.TrimSpace(config.OpenAI.Model)
+	for _, m := range models.Data {
+		if m.ID == model {
+			h.ModelReady = true
+			break
+		}
+	}
+	if !h.ModelReady {
+		h.Err = fmt.Sprintf("model %q not in /models (have %d models)", model, len(models.Data))
+	}
+	return h
 }
 
 // onlyUnifiChanges reports whether every changed file in the worktree status
@@ -674,24 +897,27 @@ func headFileContent(tree *object.Tree, pth string) (string, error) {
 }
 
 // generateCommitMessage produces the commit message for an upcoming backup
-// commit. When Ollama-assisted generation is disabled (or the change set is
-// entirely Unifi .unf files) the default message _commitMsg is returned so the
-// commit proceeds without any network round-trip. The security-approval
-// ledger (approval.db and its SQLite WAL sidecars) is never part of a
-// changeset: it is gitignored and gitCommit skips every approval-ledger path
-// at staging time, so it never reaches this function. When the change set
-// touches any file under the Unifi autoBackup store (a path containing
-// "unifi-autobackup") the model generation is skipped and the commit subject
-// is set to _unifiAutobackupSubject verbatim, since those archives are opaque
-// Unifi controller rotations opnborg cannot meaningfully describe. When
-// enabled and the change set is describable, a single REST call asks the
-// model for the full commit message: a short headline, a brief one-to-three
-// line summary, and a trailing "tag:" severity line. The model's response is
-// returned verbatim (trimmed). On any error or empty response the default
+// commit. When neither Ollama nor OpenAI-compatible generation is enabled (or
+// the change set is entirely Unifi .unf files) the default message _commitMsg
+// is returned so the commit proceeds without any network round-trip. The
+// security-approval ledger (approval.db and its SQLite WAL sidecars) is never
+// part of a changeset: it is gitignored and gitCommit skips every
+// approval-ledger path at staging time, so it never reaches this function.
+// When the change set touches any file under the Unifi autoBackup store (a
+// path containing "unifi-autobackup") the model generation is skipped and the
+// commit subject is set to _unifiAutobackupSubject verbatim, since those
+// archives are opaque Unifi controller rotations opnborg cannot meaningfully
+// describe. When enabled and the change set is describable, a single REST
+// call asks the model for the full commit message: a short headline, a brief
+// one-to-three line summary, and a trailing "tag:" severity line. The model's
+// response is returned verbatim (trimmed). When Ollama is enabled it is tried
+// first; on failure it falls back to the OpenAI-compatible backend when that
+// is also configured. When only the OpenAI-compatible backend is enabled it is
+// used directly. On any error or empty response from both backends the default
 // message is used as a fallback so a model outage never blocks the backup
 // from being committed. Progress at each step is logged via displayChan.
 func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Worktree) string {
-	if !config.Ollama.Enable {
+	if !config.Ollama.Enable && !config.OpenAI.Enable {
 		return _commitMsg
 	}
 	status, err := wtree.Status()
@@ -718,13 +944,31 @@ func generateCommitMessage(config *OPNCall, repo *git.Repository, wtree *git.Wor
 		return _commitMsg
 	}
 	servers := extractServersFromStatus(status)
-	displayChan <- fmt.Appendf(nil, "[OLLAMA][PROMPT] servers=%v diff=%d bytes, sending to model", servers, len(diff))
-	msg, err := ollamaGenerateWithRetry(config, ollamaPrompt(servers, diff))
-	if err != nil {
+	prompt := ollamaPrompt(servers, diff)
+	// Try the Ollama backend first when enabled; on failure fall back to the
+	// OpenAI-compatible backend when that is also configured.
+	if config.Ollama.Enable {
+		displayChan <- fmt.Appendf(nil, "[OLLAMA][PROMPT] servers=%v diff=%d bytes, sending to model", servers, len(diff))
+		msg, err := ollamaGenerateWithRetry(config, prompt)
+		if err == nil {
+			displayChan <- []byte("[OLLAMA][OK] commit message generated")
+			return msg
+		}
 		displayChan <- []byte("[OLLAMA][FAIL] " + err.Error())
+		if !config.OpenAI.Enable {
+			return _commitMsg
+		}
+		displayChan <- []byte("[OPENAI][FALLBACK] Ollama failed, falling back to OpenAI-compatible backend")
+	}
+	// OpenAI-compatible backend (used directly when Ollama is disabled, or as
+	// a fallback after Ollama fails).
+	displayChan <- fmt.Appendf(nil, "[OPENAI][PROMPT] servers=%v diff=%d bytes, sending to model", servers, len(diff))
+	msg, err := openaiGenerateWithRetry(config, prompt)
+	if err != nil {
+		displayChan <- []byte("[OPENAI][FAIL] " + err.Error())
 		return _commitMsg
 	}
-	displayChan <- []byte("[OLLAMA][OK] commit message generated")
+	displayChan <- []byte("[OPENAI][OK] commit message generated")
 	return msg
 }
 

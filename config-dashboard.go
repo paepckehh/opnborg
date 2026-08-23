@@ -75,6 +75,7 @@ func renderConfigDashboard(config *OPNCall) string {
 	s.WriteString(renderSyncPanel(config))
 	s.WriteString(renderGitPanel(config))
 	s.WriteString(renderOllamaPanel(config))
+	s.WriteString(renderOpenAIPanel(config))
 	s.WriteString(renderHttpdPanel(config))
 	s.WriteString(renderRSysLogPanel(config))
 	s.WriteString(renderUnifiPanel(config))
@@ -190,7 +191,36 @@ func renderOllamaPanel(c *OPNCall) string {
 	return s.String()
 }
 
-// renderHttpdPanel covers the internal HTTP WebUI listener and TLS settings.
+// renderOpenAIPanel covers the OpenAI-compatible commit message fallback
+// feature: the parsed OPENAI_DESC_URL / OPENAI_DESC_MODEL / OPENAI_DESC_TOKEN
+// env vars and a live probe of the server. The probe (openaiHealthCheck)
+// reports three layered signals so an operator can tell at a glance whether
+// the fallback is wired, the server is reachable, the REST API answers, and
+// the configured model is available. The probe runs on every dashboard
+// render with a short timeout so a wedged server never stalls the page. The
+// token is shown as a set/not-set pill (never the raw value) so an operator
+// can verify it was understood without leaking the secret.
+func renderOpenAIPanel(c *OPNCall) string {
+	var s strings.Builder
+	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OpenAI Commit Messages</div>")
+	writeDashRow(&s, "Feature Enabled", boolPill(c.OpenAI.Enable))
+	writeDashRow(&s, "REST API URL", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
+	writeDashRow(&s, "Model", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
+	writeDashRow(&s, "API Token", secretPill(c.OpenAI.Token))
+	if c.OpenAI.Enable {
+		h := openaiHealthCheck(c)
+		writeDashRow(&s, "Server Reachable", triStatePill(h.ServerReachable))
+		writeDashRow(&s, "REST API Ready", triStatePill(h.APIReady))
+		writeDashRow(&s, "Model Ready", triStatePill(h.ModelReady))
+		if h.Err != "" {
+			writeDashRow(&s, "Probe Error", "<span class=\"dash-err\">"+html.EscapeString(h.Err)+"</span>")
+		} else if h.ModelReady {
+			writeDashRow(&s, "Probe State", "<span class=\"dash-ok\">ok</span>")
+		}
+	}
+	s.WriteString("</div>")
+	return s.String()
+}
 func renderHttpdPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Internal WebUI</div>")

@@ -386,7 +386,7 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	// never left uncommitted.
 	commitMsg := _commitMsg
 	authorName := _authorName
-	if config.Ollama.Enable {
+	if config.Ollama.Enable || config.OpenAI.Enable {
 		// Surface to the WebUI that changes are under AI review and not
 		// yet committed. The flag is cleared after the commit completes
 		// (success or failure) so the banner disappears once the change

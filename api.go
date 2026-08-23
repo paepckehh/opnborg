@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.186"
+const SemVer = "v0.1.187"
 
 // global var
 var (
@@ -77,6 +77,12 @@ type OPNCall struct {
 		Enable bool   // enable Ollama-assisted git commit message generation (requires URL + Model)
 		URL    string // Ollama REST API base URL (e.g. http://localhost:11434); appended with /api/generate
 		Model  string // Ollama model name used to summarise each backup diff (e.g. llama3)
+	}
+	OpenAI struct {
+		Enable bool   // enable OpenAI-compatible commit message generation (fallback when Ollama is unset/unreachable); requires URL
+		URL    string // OpenAI-compatible REST API base URL (e.g. http://localhost:8080/v1); appended with /chat/completions
+		Model  string // OpenAI model name (optional; defaults to _openaiDefaultModel when empty)
+		Token  string // OpenAI API bearer token (optional; sent as Authorization: Bearer <token> when non-empty)
 	}
 	Unifi struct {
 		WebUI   *url.URL
