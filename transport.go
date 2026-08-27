@@ -61,6 +61,13 @@ func getFirmwareVersion(config *OPNCall, server string) string {
 		return "fail"
 	}
 
+	// a non-2xx answer is an auth or api failure page, never valid JSON;
+	// surface the status instead of a misleading JSON-parse failure.
+	if body.StatusCode < 200 || body.StatusCode > 299 {
+		displayChan <- []byte("[FETCH-VERSION][FAIL:HTTP-STATUS] " + targetURL + " " + strconv.Itoa(body.StatusCode))
+		return "fail"
+	}
+
 	// parse json
 	var fw firmwareStatus
 	if err = json.Unmarshal(data, &fw); err != nil {

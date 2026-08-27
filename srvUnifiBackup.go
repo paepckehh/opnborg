@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"time"
 )
 
@@ -140,7 +141,7 @@ func srvUnifiBackup(config *OPNCall) {
 				backupOK = true
 
 				// download backup file
-				res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + config.Unifi.Version + ".unf")
+				res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + url.PathEscape(config.Unifi.Version) + ".unf")
 				if err != nil {
 					backupOK = false
 					notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error()

@@ -3,12 +3,20 @@ package opnborg
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"net"
 	"os"
 )
 
 // getHTTPTLS provides the tcp listener with an hardened tls configuration
 func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
+
+	// refuse a half-configured cert pair instead of silently falling back to
+	// plain-text HTTP (an operator who sets only OPN_HTTPD_CACERT expects TLS,
+	// and a silent downgrade would leak the whole WebUI unencrypted).
+	if (config.Httpd.CAcert != "") != (config.Httpd.CAkey != "") {
+		return nil, errors.New("httpd TLS misconfigured: OPN_HTTPD_CACERT and OPN_HTTPD_CAKEY must be set together")
+	}
 
 	// return plain text listener when not CAcert
 	if config.Httpd.CAcert != "" && config.Httpd.CAkey != "" {

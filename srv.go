@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"html"
 	"strings"
 	"time"
 )
@@ -92,25 +93,27 @@ func srv(config *OPNCall) error {
 	state = "[DISABLED]"
 	if config.Enable {
 		state = "[ENABLED]"
-		// setup hive
-		servers = strings.Split(config.Targets, ",")
-		for _, server := range servers {
+		// setup hive: build a single sanitized worker list first so the hive
+		// status tiles and the worker pass indexes stay aligned. Invalid
+		// entries (empty names, empty tags) are dropped here, not skipped
+		// later; otherwise a targets string like "a,,b" would shift every
+		// status tile and eventually panic on a hive index out of range.
+		servers = nil
+		for _, server := range strings.Split(config.Targets, ",") {
 			s := strings.Split(server, "#")
-			switch len(s) {
-			case 1:
-				if len(s[0]) > 0 {
-					status := "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Member: " + s[0] + " Version: n/a Last Seen: n/a</span></div>"
-					hive = append(hive, status)
-				}
-			case 2:
-				if len(s[0]) > 0 && len(s[1]) > 0 {
-					status := "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Member: " + s[0] + " Version: n/a Last Seen: n/a</span></div><div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + s[1] + "</span></div>"
-					hive = append(hive, status)
-				}
-			default:
-				status := "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">configuration error, please fix configuration line for server: " + server + "</span></div>"
-				hive = append(hive, status)
+			if len(s) == 2 && len(s[1]) == 0 {
+				s = s[:1] // trailing "#": drop the empty tag
 			}
+			if len(s) > 2 || len(s[0]) == 0 {
+				hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">configuration error, please fix configuration line for server: "+html.EscapeString(server)+"</span></div>")
+				displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
+				continue
+			}
+			hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">Member: "+html.EscapeString(s[0])+" Version: n/a Last Seen: n/a</span></div>")
+			if len(s) == 2 {
+				hive[len(hive)-1] += "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(s[1]) + "</span></div>"
+			}
+			servers = append(servers, server)
 		}
 	}
 	displayChan <- []byte("[SERVICE][OPN-BACKUP-AND-MONITORING]" + state)
@@ -153,17 +156,12 @@ func srv(config *OPNCall) error {
 			beginBackupPass()
 			for id, server := range servers {
 				s := strings.Split(server, "#")
-				switch len(s) {
-				case 1:
-					wg.Add(1)
-					go actionOPN(s[0], "", config, id, &wg)
-				case 2:
-					wg.Add(1)
-					go actionOPN(s[0], s[1], config, id, &wg)
-				default:
-					displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
+				tag := ""
+				if len(s) == 2 {
+					tag = s[1]
 				}
-
+				wg.Add(1)
+				go actionOPN(s[0], tag, config, id, &wg)
 			}
 
 			// wait till all worker done
@@ -178,8 +176,10 @@ func srv(config *OPNCall) error {
 		// both branches.
 		if config.Git.Enable && (config.dirty.Load() || config.Git.Upstream != "") {
 			if committed, err := gitCheckIn(config); err != nil {
+				// a failed commit or push must never kill the daemon: the next
+				// tick retries, and the failure is surfaced on the display engine
+				// (and the WebUI dashboard git panel) for the operator.
 				displayChan <- []byte("[GIT][REPO][CHECKIN][FAIL] " + err.Error())
-				return err
 			} else if committed {
 				displayChan <- []byte("[CHANGES-DETECTED][GIT][REPO][CHECKIN][FINISH]")
 			}
@@ -195,7 +195,11 @@ func srv(config *OPNCall) error {
 
 		// exit if not in daemon mode
 		if !config.Daemon {
-			close(displayChan)
+			// release the exit path: the spawned goroutines (httpd, syslog, unifi
+			// watchers) keep running and may still send to displayChan, so the
+			// channel is intentionally not closed; a close here would race with
+			// those sends and panic. The process exit (or the next call to srv in
+			// tests) is the natural end of the display stream.
 			display.Wait()
 			return nil
 		}

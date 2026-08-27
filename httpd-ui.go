@@ -171,7 +171,7 @@ const (
   };
   let since=0, lineCount=0, srvCount=0, chCount=0, erCount=0, seen=new Set(), sawBusy=false, done=false, redirected=false;
   let holdDeadline=0, countdownTimer=null, fakePct=0;
-  const esc=(s)=>s.replace(/[&<>]/g,(c)=>({'&':'&','<':'<','>':'>'}[c]));
+  const esc=(s)=>s.replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   function classify(msg){
     if(/ERROR|FAIL|UNABLE/.test(msg))return'fd-err';
     if(/WARN/.test(msg))return'fd-warn';
@@ -267,7 +267,7 @@ const (
       el.elapsed.textContent=fmtMs(d.elapsed_ms||0);
       if(d.busy)sawBusy=true;
       if(sawBusy&&!d.busy){finish();return;}
-      if(FORCE>0&&d.pass>=FORCE&&!d.busy){finish();return;}
+      if(FORCE>0&&d.armed_for===FORCE&&!d.busy){finish();return;}
     }catch(e){/* transient */}
     setTimeout(poll,POLL_MS);
   }

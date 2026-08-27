@@ -29,6 +29,9 @@ func srvUnifiExport(config *OPNCall) {
 		data, err := c.Export()
 		if err != nil {
 			displayChan <- []byte("[UNIFI][EXPORT][FAIL] " + err.Error())
+			// wait for the next trigger before retrying; without this a
+			// persistent MongoDB failure would busy-loop at full speed.
+			<-updateUnifiExport
 			continue
 		}
 		sum := sha256.Sum256(data)

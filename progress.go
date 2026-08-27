@@ -39,13 +39,14 @@ type progressLine struct {
 
 var (
 	progressMu    sync.Mutex
-	progressRing  = make([]progressLine, 0, _progressCap)
-	progressSeq   uint64 // monotonic per-line sequence (1..N)
+	progressRing  = make([]progressLine, 0, _progressCap+1) // +1: append-then-trim never re-allocates
+	progressSeq   uint64                                    // monotonic per-line sequence (1..N)
 	progressStart time.Time
 
-	backupBusy atomic.Bool
-	passSeq    atomic.Uint64 // incremented at the start of every backup pass
-	forceSeq   atomic.Uint64 // incremented by every /force poke
+	backupBusy     atomic.Bool
+	passSeq        atomic.Uint64 // incremented at the start of every backup pass
+	passArmedForce atomic.Uint64 // forceSeq value observed when the current pass began (0 = plain tick pass)
+	forceSeq       atomic.Uint64 // incremented by every /force poke
 )
 
 // appendProgress captures a single display line into the ring buffer. It is
@@ -63,14 +64,16 @@ func appendProgress(msg []byte) {
 		})
 		return
 	}
-	// ring is full: drop the oldest entry and append the newest. Re-slicing
-	// the backing array [1:] leaves capacity at the tail, so the append does
-	// not re-allocate; the slice simply slides forward within the same array.
-	progressRing = append(progressRing[1:], progressLine{
+	// ring is full: drop the oldest entry and append the newest. The backing
+	// array was pre-sized to _progressCap+1, so this append reuses the spare
+	// slot instead of re-allocating; the copy then restores the capped length.
+	progressRing = append(progressRing, progressLine{
 		Seq: progressSeq,
 		Msg: string(msg),
 		TS:  time.Now().UnixMilli(),
 	})
+	copy(progressRing, progressRing[1:])
+	progressRing = progressRing[:_progressCap]
 }
 
 // beginBackupPass marks the start of a backup pass in the main srv loop. It
@@ -81,6 +84,10 @@ func appendProgress(msg []byte) {
 // Busy==true is guaranteed to see the matching progressStart, never the
 // previous pass's.
 func beginBackupPass() {
+	// A pass armed by /force records the forceSeq value it observed so the
+	// dashboard can match its own forced pass instead of mistaking any timer
+	// tick (passSeq >= 1) for the completion of its request.
+	passArmedForce.Store(forceSeq.Load())
 	progressMu.Lock()
 	progressStart = time.Now()
 	progressMu.Unlock()
@@ -106,6 +113,7 @@ type progressSnapshot struct {
 	Busy     bool           `json:"busy"`
 	Pass     uint64         `json:"pass"`
 	Force    uint64         `json:"force"`
+	ArmedFor uint64         `json:"armed_for"`
 	Elapsed  int64          `json:"elapsed_ms"`
 	Captured int            `json:"captured"`
 	Lines    []progressLine `json:"lines"`
@@ -127,9 +135,10 @@ func getProgressHandler() http.Handler {
 		}
 
 		snap := progressSnapshot{
-			Busy:  backupBusy.Load(),
-			Pass:  passSeq.Load(),
-			Force: forceSeq.Load(),
+			Busy:     backupBusy.Load(),
+			Pass:     passSeq.Load(),
+			Force:    forceSeq.Load(),
+			ArmedFor: passArmedForce.Load(),
 		}
 
 		progressMu.Lock()
