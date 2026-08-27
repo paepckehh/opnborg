@@ -2,6 +2,7 @@ package opnborg
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -21,15 +22,23 @@ import (
 // registered without the addSecurityHeader middleware (matching the /force
 // handler) because they are mutating action endpoints, not page renders.
 
-// getApproveHandler handles a single-commit approval toggle.
+// _auditHashRe validates the full 40-character git commit hash carried by the
+// /approve endpoint so a crafted or truncated value can never be written to
+// the ledger as a false approval.
+var _auditHashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// getApproveHandler handles a single-commit approval toggle. Approval is a
+// mutating action and is therefore POST-only: accepting GET would let an
+// unauthenticated link, link-preview crawler, or <img> tag approve a commit
+// (CSRF) without any operator action.
 func getApproveHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		if q.Method != http.MethodPost && q.Method != http.MethodGet {
+		if q.Method != http.MethodPost {
 			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 			return
 		}
 		hash := strings.TrimSpace(q.URL.Query().Get("hash"))
-		if hash == "" || _cfg == nil {
+		if hash == "" || _cfg == nil || !_auditHashRe.MatchString(hash) {
 			http.Redirect(r, q, auditRedirectTarget(q), http.StatusSeeOther)
 			return
 		}
@@ -44,10 +53,11 @@ func getApproveHandler() http.Handler {
 	return http.HandlerFunc(h)
 }
 
-// getApproveAllHandler handles the bulk approve-all action.
+// getApproveAllHandler handles the bulk approve-all action. Like the single
+// approval it is POST-only for the same CSRF reasons.
 func getApproveAllHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
-		if q.Method != http.MethodPost && q.Method != http.MethodGet {
+		if q.Method != http.MethodPost {
 			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 			return
 		}

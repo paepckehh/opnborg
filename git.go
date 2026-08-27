@@ -373,7 +373,7 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 			continue
 		}
 		if _, err := wtree.Add(p); err != nil {
-			return false, err
+			return false, fmt.Errorf("stage %s: %w", p, err)
 		}
 	}
 	// Choose the commit message. The default is the static _commitMsg string.
@@ -386,11 +386,16 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	// never left uncommitted.
 	commitMsg := _commitMsg
 	authorName := _authorName
-	if config.Ollama.Enable || config.OpenAI.Enable {
+	if (config.Ollama.Enable || config.OpenAI.Enable) && !hasUnifiAutobackupChange(status) && !onlyUnifiChanges(status) {
 		// Surface to the WebUI that changes are under AI review and not
 		// yet committed. The flag is cleared after the commit completes
 		// (success or failure) so the banner disappears once the change
-		// is either committed or fell back to the default message.
+		// is either committed or fell back to the default message. It is
+		// only armed when a model round-trip is actually about to happen:
+		// .unf-only and unifi-autobackup changesets bypass the model
+		// entirely (generateCommitMessage returns a static subject
+		// without calling it), so arming the banner for them would show
+		// a misleading "AI review in progress" state.
 		reviewPending.Store(true)
 		defer reviewPending.Store(false)
 	}
@@ -458,9 +463,9 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 	}
 	// Resolve the current branch (HEAD) so the push carries an explicit refspec
 	// mapping the local branch onto its upstream twin, regardless of any
-	// configured default fetch refspec. A detached HEAD falls back to pushing
-	// HEAD to "refs/heads/master" so an auto-init'd repo with no commits yet on
-	// a named branch still syncs.
+	// configured default fetch refspec. A detached HEAD (which opnborg never
+	// produces, since gitInit always leaves a named branch checked out) is a
+	// misconfiguration and is rejected rather than pushed to a guessed branch.
 	//
 	// A freshly init'd repo with no commits yet has no HEAD. In that state
 	// there is nothing to push, so the sync is treated as a no-op success
@@ -481,14 +486,19 @@ func gitPush(config *OPNCall, repo *git.Repository) error {
 	// keep in sync after a push so the WebUI dashboard can derive the upstream
 	// state without a network round-trip. go-git's Push does not update the
 	// local tracking ref itself (unlike canonical git), so we do it here.
+	// A detached HEAD is never expected from opnborg (gitInit always leaves a
+	// named branch checked out), so treat it as a misconfiguration and fail
+	// loudly rather than guessing "master" and force-writing refs/heads/master
+	// on the upstream.
 	var refspec gitcfg.RefSpec
 	var remoteBranch string
 	if head.Name().IsBranch() {
 		remoteBranch = head.Name().Short()
 		refspec = gitcfg.RefSpec("+refs/heads/" + remoteBranch + ":refs/heads/" + remoteBranch)
 	} else {
-		remoteBranch = "master"
-		refspec = gitcfg.RefSpec("+HEAD:refs/heads/master")
+		msg := "detached HEAD, refusing to guess an upstream branch"
+		recordPush(false, msg)
+		return errors.New("git push: " + msg)
 	}
 	pushedHash := head.Hash()
 	if err := repo.Push(&git.PushOptions{

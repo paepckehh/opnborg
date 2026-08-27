@@ -29,11 +29,15 @@ func writeTransportCompressedPage(page string, r http.ResponseWriter, q *http.Re
 		accept := strings.Join(q.Header["Accept-Encoding"], " ")
 		switch {
 		case strings.Contains(accept, "gzip"):
-			r.Header().Set("Content-Encoding", "gzip")
-			p = compressLevel(p, gzip.NewWriterLevel)
+			if out, ok := compressLevel(p, gzip.NewWriterLevel); ok {
+				p = out
+				r.Header().Set("Content-Encoding", "gzip")
+			}
 		case strings.Contains(accept, "deflate"):
-			r.Header().Set("Content-Encoding", "deflate")
-			p = compressLevel(p, zlib.NewWriterLevel)
+			if out, ok := compressLevel(p, zlib.NewWriterLevel); ok {
+				p = out
+				r.Header().Set("Content-Encoding", "deflate")
+			}
 		}
 		_, err = r.Write(p)
 	} else {
@@ -52,22 +56,24 @@ type levelWriter interface {
 
 // compressLevel encodes data at the maximum standard-library compression level
 // using the supplied writer constructor (gzip.NewWriterLevel or
-// zlib.NewWriterLevel). On any internal error it reports via displayChan and
-// returns the original data unchanged so the caller can still serve the page.
-func compressLevel[W levelWriter](data []byte, newWriter func(io.Writer, int) (W, error)) []byte {
+// zlib.NewWriterLevel). It returns the compressed bytes and a success flag. On
+// any internal error it reports via displayChan and returns the original data
+// unchanged with ok=false so the caller can serve the uncompressed page without
+// a misleading Content-Encoding header.
+func compressLevel[W levelWriter](data []byte, newWriter func(io.Writer, int) (W, error)) ([]byte, bool) {
 	var buf bytes.Buffer
 	w, err := newWriter(&buf, gzip.BestCompression)
 	if err != nil {
 		displayChan <- []byte("[HTTPD][COMPRESS][FAIL] " + err.Error())
-		return data
+		return data, false
 	}
 	if _, err := w.Write(data); err != nil {
 		displayChan <- []byte("[HTTPD][COMPRESS][FAIL] " + err.Error())
-		return data
+		return data, false
 	}
 	if err := w.Close(); err != nil {
 		displayChan <- []byte("[HTTPD][COMPRESS][FAIL] " + err.Error())
-		return data
+		return data, false
 	}
-	return buf.Bytes()
+	return buf.Bytes(), true
 }

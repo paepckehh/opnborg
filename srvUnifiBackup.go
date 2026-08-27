@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -149,33 +150,46 @@ func srvUnifiBackup(config *OPNCall) {
 				// proceed
 				if backupOK {
 
-					// read body
-					unf, err := io.ReadAll(res.Body)
-					_ = res.Body.Close()
-					if err != nil {
+					// validate the download status code: a non-200 response is an
+					// error page (or an empty placeholder), never a valid backup.
+					if res.StatusCode != 200 {
 						backupOK = false
-						notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
+						body, _ := io.ReadAll(res.Body)
+						_ = res.Body.Close()
+						notice = fmt.Sprintf("[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HTTP-STATUS][%d]", res.StatusCode)
 						displayChan <- []byte(notice)
+						displayChan <- body
 					}
 
-					// check file
+					// read body
 					if backupOK {
-						if len(unf) < 1024 {
+						unf, err := io.ReadAll(res.Body)
+						_ = res.Body.Close()
+						if err != nil {
 							backupOK = false
-							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL]"
+							notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-BODY-FAIL] " + err.Error()
 							displayChan <- []byte(notice)
 						}
 
-						// check into store
+						// check file
 						if backupOK {
-							if err := checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf)); err != nil {
+							if len(unf) < 1024 {
 								backupOK = false
-								notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-WRITE-BACKUP-FILE-INTO-STORE] " + err.Error()
+								notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-TO-SMALL]"
 								displayChan <- []byte(notice)
-							} else {
-								// flag git store as dirty only on a successful checkin
-								config.dirty.Store(true)
-								displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
+							}
+
+							// check into store
+							if backupOK {
+								if err := checkIntoStore(config, config.Unifi.WebUI.Hostname(), "unf", unf, ts, sha256.Sum256(unf)); err != nil {
+									backupOK = false
+									notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-WRITE-BACKUP-FILE-INTO-STORE] " + err.Error()
+									displayChan <- []byte(notice)
+								} else {
+									// flag git store as dirty only on a successful checkin
+									config.dirty.Store(true)
+									displayChan <- []byte("[UNIFI][BACKUP][SUCCESSFUL]")
+								}
 							}
 						}
 					}
