@@ -9,8 +9,16 @@ Reference guide for AI agents working in the `opnborg` repository.
 >
 > 1. **Format source code** — run `gofmt -w .` (or `make check`) so the tree
 >    stays gofmt-clean.
-> 2. **Build** — `go build -o opnborg ./cmd/opnborg` must succeed.
-> 3. **Test** — `go test -count=1 ./...` must be ok
+> 2. **Build** — `CGO_ENABLED=0 go build -o opnborg ./cmd/opnborg` must succeed.
+>    **Always run with parallel package builds**: the Go toolchain compiles all
+>    packages concurrently by default — never pass `-p 1` or any flag that
+>    forces single-package builds. The machine has ample cores; serialise a
+>    build only when a toolchain error specifically requires it.
+> 3. **Test** — `go test -count=1 ./...` must be ok. **Always run with
+>    parallel test execution**: let `go test` run every package's test binary
+>    concurrently (the default). Never pass `-p 1` or otherwise force serial
+>    package execution; only narrow the package list (e.g. `go test ./pkg/...`)
+>    to iterate on a single failing package during a fix.
 > 4. **Commit** — `git add . && git commit -m '<message>'`.
 > 5. **Tag** — bump the patch segment only: the result is `v0.1.<N+1>`
 >    (the current release series; the latest tag is `v0.1.185`). Never move,
@@ -31,7 +39,10 @@ Reference guide for AI agents working in the `opnborg` repository.
 
 ## IMPORTANT FOR EVERY SINGLE TASK: NEVER SKIP THIS ACTIONS
 
-- Test every change via build and unit tests
+- Test every change via build and unit tests; always run builds and tests with
+  parallel package execution (`-p <cores>` or the Go toolchain default) — the
+  machine has ample system resources, never serialise (`-p 1`) a build or test
+  pass unless a toolchain error specifically demands it.
 - commit each task into git repo when done
 - **Every committed task must be tagged with a git semver tag**, bumping only
   the **patch** segment, the last segment (e.g. `v0.1.132` → `v0.1.133`).
@@ -41,10 +52,10 @@ Reference guide for AI agents working in the `opnborg` repository.
 ## Build, Run, Check
 
 ```sh
-# Build the whole module (used by CI)
+# Build the whole module (used by CI) — parallel package build
 CGO_ENABLED=0 go build ./...
 
-# Build just the binary (matches Dockerfile/goreleaser)
+# Build just the binary (matches Dockerfile/goreleaser) — parallel package build
 CGO_ENABLED=0 go build -ldflags="-w -s" ./cmd/opnborg
 
 # Run locally from a checked-out repo (after sourcing env config)
@@ -56,8 +67,11 @@ go run paepcke.de/opnborg/cmd/opnborg@main
 # Format / lint / vet (top-level Makefile target)
 make check        # runs gofmt -l ., go vet ./..., go mod tidy -diff
 
-# Run the test suite (race detector enabled)
+# Run the test suite (race detector enabled, parallel package execution)
 make test         # runs go test -race -count=1 ./...
+
+# Run the test suite with explicit parallel package execution (max cores)
+go test -count=1 -p $(nproc) ./...
 
 # Dependency refresh (DESTRUCTIVE - rewrites go.mod/go.sum)
 make deps
@@ -198,6 +212,14 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - `config.dirty` is an `atomic.Bool` -- always `.Store()`/`.Load()`, never `=`.
 - `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
+- **Parallel build & test execution**: every `go build` and `go test` invocation
+  must use parallel package execution. The Go toolchain runs package builds in
+  parallel by default (one goroutine per core) and runs each package's test
+  binary concurrently — never pass `-p 1` or any serialising flag. When
+  iterating on a single failing package, narrow the package list
+  (e.g. `go test ./pkg/...`) instead of serialising the whole run. Use
+  `-p $(nproc)` (or let the toolchain default) to pin the parallelism explicitly
+  when the environment provides more cores than Go detects.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
 
 ## Gotchas

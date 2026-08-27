@@ -1,0 +1,31 @@
+#!/bin/sh
+export CRUSH_DISABLE_METRICS=1
+export DISABLE_METRICS=1
+export DO_NOT_TRACK=1
+export CRUSH_ENABLE_SONICRUSH=1 # /home/me/projects/sonicrush
+#
+source "/etc/nixos/doc/go/go.env"
+#
+provider add aiworker02 --type omlx --base-url "http://10.20.6.242:11434/v1" --api-key "!!Start!!Fake!!" 
+provider add aiworker03 --type omlx --base-url "http://10.20.6.243:11434/v1" --api-key "!!Start!!Fake!!" 
+provider add aiworker04 --type omlx --base-url "http://10.20.6.244:11434/v1" --api-key "!!Start!!Fake!!" 
+#
+permissions allow view ls grep edit write multiedit bash rg jq python python3 fetch curl agentic_fetch allow lsp lsp_replace lsp_replace_symbol 
+#
+lsp add go --command "/run/current-system/sw/bin/gopls" --env "GOTOOLCHAIN" "go1.26.5"
+lsp add typescript --command "/run/current-system/sw/bin/typescript-language-server" --args --stdio
+# lsp add nix --command "/run/current-system/sw/bin/nil"
+#
+option ui compact false
+option ui completions-max-depth 4
+option ui completions-max-items 200
+option ui diff unified
+option ui scrollbar always
+option ui transparent false
+#
+option progress true
+option attribution-trailer-style none
+option attribution-generated-with false
+#
+# source "~/.token.env" 
+# if [ "$GITHUB_TOKEN" =! "" ]; then mcp add github --type http --url "https://api.githubcopilot.com/mcp/" --header Authorization "Bearer $GITHUB_TOKEN" ; fi 
