@@ -2,9 +2,11 @@ package opnborg
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,17 +105,44 @@ var (
 // The storePath argument is the backup store directory; the ledger file is
 // placed at <storePath>/approval.db.
 func approvalDBOpen(storePath string) (*sql.DB, error) {
-	dbPath := filepath.Join(storePath, _approvalDBName)
 	approvalDBMu.Lock()
 	defer approvalDBMu.Unlock()
+	return approvalDBOpenLocked(storePath)
+}
+
+// approvalDBHandle returns the opened ledger handle, opening it on first use
+// against the given store directory. It is safe to call concurrently and
+// never hands out a handle that another goroutine may close and replace: the
+// open-and-reuse decision is made while holding approvalDBMu, so a concurrent
+// reopen (path change or approvalClose) cannot invalidate a handle mid-use.
+func approvalDBHandle(storePath string) (*sql.DB, error) {
+	approvalDBMu.Lock()
+	defer approvalDBMu.Unlock()
+	if approvalDB != nil {
+		if approvalDBAt == filepath.Join(storePath, _approvalDBName) {
+			return approvalDB, nil
+		}
+		_ = approvalDB.Close()
+		approvalDB = nil
+		approvalDBAt = ""
+	}
+	return approvalDBOpenLocked(storePath)
+}
+
+// approvalDBOpenLocked is the core of approvalDBOpen; it assumes
+// approvalDBMu is already held. approvalDBHandle uses it directly so the whole
+// check-open-reuse sequence is one critical section.
+func approvalDBOpenLocked(storePath string) (*sql.DB, error) {
+	dbPath := filepath.Join(storePath, _approvalDBName)
 	if approvalDB != nil {
 		if approvalDBAt == dbPath {
 			return approvalDB, nil
 		}
 		_ = approvalDB.Close()
 		approvalDB = nil
+		approvalDBAt = ""
 	}
-	dsn := "file:" + dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)"
+	dsn := "file:" + url.PathEscape(dbPath) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)"
 	db, err := sql.Open(_approvalDriver, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("approval db open: %w", err)
@@ -126,20 +155,6 @@ func approvalDBOpen(storePath string) (*sql.DB, error) {
 	approvalDB = db
 	approvalDBAt = dbPath
 	return db, nil
-}
-
-// approvalDBHandle returns the opened ledger handle, opening it on first use
-// against the given store directory. It is safe to call concurrently.
-func approvalDBHandle(storePath string) (*sql.DB, error) {
-	dbPath := filepath.Join(storePath, _approvalDBName)
-	approvalDBMu.Lock()
-	h := approvalDB
-	p := approvalDBAt
-	approvalDBMu.Unlock()
-	if h != nil && p == dbPath {
-		return h, nil
-	}
-	return approvalDBOpen(storePath)
 }
 
 // approvalDBExists reports whether the on-disk approval ledger file already
@@ -287,9 +302,18 @@ func approvalApprove(config *OPNCall, fullHash, sourceIP, xForwardedFor, remoteU
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE approval SET approved = 1, true_timestamp = ?, source_ip = ?, x_forwarded_for = ?, remote_user = ? WHERE commit_hash = ?`,
+	res, err := db.Exec(`UPDATE approval SET approved = 1, true_timestamp = ?, source_ip = ?, x_forwarded_for = ?, remote_user = ? WHERE commit_hash = ?`,
 		time.Now().UTC().Format(time.RFC3339), sourceIP, xForwardedFor, remoteUser, fullHash)
-	return err
+	if err != nil {
+		return err
+	}
+	// A 0-row update means the hash was never tracked in the ledger (a
+	// low-severity commit, a typo, or a crafted value). Report it explicitly
+	// so the caller does not log a false "approved" success.
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("commit %s not tracked in the approval ledger", fullHash)
+	}
+	return nil
 }
 
 // approvalApproveAll marks every pending (not-yet-approved) tracked commit as
@@ -322,22 +346,26 @@ func approvalApproveAll(config *OPNCall, sourceIP, xForwardedFor, remoteUser str
 }
 
 // approvalGet returns the approval state for a single commit hash. A missing
-// ledger, a missing row, or any error yields a zero (not-approved) state so
-// the audit page always renders a valid approval box.
-func approvalGet(config *OPNCall, fullHash string) approvalState {
+// row yields a zero (not-approved) state. A ledger open failure or a query
+// error other than "no rows" returns ok=false so the audit page can render a
+// degraded approval box instead of a misleading unapproved one.
+func approvalGet(config *OPNCall, fullHash string) (approvalState, bool) {
 	var st approvalState
 	if config == nil || config.Path == "" {
-		return st
+		return st, false
 	}
 	db, err := approvalDBHandle(config.Path)
 	if err != nil {
-		return st
+		return st, false
 	}
 	var approved int
 	var ts, sourceIP, xff, remoteUser string
 	err = db.QueryRow(`SELECT approved, true_timestamp, source_ip, x_forwarded_for, remote_user FROM approval WHERE commit_hash = ?`, fullHash).Scan(&approved, &ts, &sourceIP, &xff, &remoteUser)
 	if err != nil {
-		return st
+		if errors.Is(err, sql.ErrNoRows) {
+			return st, true
+		}
+		return st, false
 	}
 	st.approved = approved != 0
 	st.sourceIP = sourceIP
@@ -348,7 +376,7 @@ func approvalGet(config *OPNCall, fullHash string) approvalState {
 			st.trueTimestamp = t
 		}
 	}
-	return st
+	return st, true
 }
 
 // approvalPendingCount returns the number of tracked commits not yet

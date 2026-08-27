@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -15,6 +16,13 @@ import (
 
 // global
 const _uniWatch = "unifi-autobackup"
+
+// _unifiWatchSyncMu serialises syncUnifiWatch passes. Two independent triggers
+// can request a sync concurrently: the debounced fsnotify AfterFunc goroutine
+// and the updateUnifiWatch select case in the watcher loop. Running them in
+// parallel would let two passes race on checkIntoStore, the sha256.db dedup
+// log, config.dirty, and the Watch stats fields, so every pass takes the lock.
+var _unifiWatchSyncMu sync.Mutex
 
 // srvUnifiWatch mirrors Unifi controller autoBackup files from a co-located
 // source folder (OPN_UNIFI_WATCH_PATH, typically
@@ -104,10 +112,15 @@ func srvUnifiWatch(config *OPNCall) {
 // and any error reason) on config.Unifi.Watch under unifiWatchMutex so the
 // main WebUI tile and the config-dashboard Unifi panel can surface them.
 func syncUnifiWatch(config *OPNCall) {
+	_unifiWatchSyncMu.Lock()
+	defer _unifiWatchSyncMu.Unlock()
 
-	// refresh marker mtime
+	// refresh marker mtime (recorded under unifiWatchMutex so the WebUI render
+	// path and this goroutine never race on the field)
 	if fi, err := os.Stat(config.Unifi.Watch.Meta); err == nil {
+		unifiWatchMutex.Lock()
 		config.Unifi.Watch.LastTS = fi.ModTime()
+		unifiWatchMutex.Unlock()
 	} else {
 		// marker vanished: the controller may have rotated or removed it; keep
 		// the last known timestamp and surface the condition in the log.

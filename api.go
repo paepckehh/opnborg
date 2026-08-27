@@ -7,7 +7,7 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.188"
+const SemVer = "v0.1.189"
 
 // global var
 var (
@@ -102,7 +102,7 @@ type OPNCall struct {
 			Enable bool      // enable Unifi autoBackup folder watch & sync
 			Path   string    // absolute path to the Unifi autoBackup source folder
 			Meta   string    // absolute path to the autobackup_meta.json marker file
-			LastTS time.Time // mtime of the marker file at the last successful sync
+			LastTS time.Time // mtime of the marker file at the last successful sync (guarded by unifiWatchMutex)
 			// runtime sync stats (guarded by unifiWatchMutex, see status.go)
 			SetupErr     string    // setup-time error reason when the watcher could not be armed (empty when armed OK)
 			LastSyncErr  string    // last runtime sync failure reason (cleared on the next successful sync)

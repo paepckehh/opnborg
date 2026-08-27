@@ -606,7 +606,10 @@ func TestConcurrentHiveStatusMutations(t *testing.T) {
 func TestCompressLevelGZIPRoundtrip(t *testing.T) {
 	ensureDisplayDrained(t)
 	in := bytes.Repeat([]byte("opnborg"), 500) // > MTU
-	out := compressLevel(in, gzip.NewWriterLevel)
+	out, ok := compressLevel(in, gzip.NewWriterLevel)
+	if !ok {
+		t.Fatal("gzip compressLevel reported failure")
+	}
 	if len(out) == 0 {
 		t.Fatal("gzip output empty")
 	}
@@ -629,7 +632,10 @@ func TestCompressLevelGZIPRoundtrip(t *testing.T) {
 func TestCompressLevelDeflateRoundtrip(t *testing.T) {
 	ensureDisplayDrained(t)
 	in := bytes.Repeat([]byte("opnborg"), 500)
-	out := compressLevel(in, zlib.NewWriterLevel)
+	out, ok := compressLevel(in, zlib.NewWriterLevel)
+	if !ok {
+		t.Fatal("deflate compressLevel reported failure")
+	}
 	if len(out) == 0 {
 		t.Fatal("deflate output empty")
 	}
@@ -651,9 +657,12 @@ func TestCompressLevelInvalidLevelReturnsData(t *testing.T) {
 	// An invalid level (out of gzip's supported range) causes the constructor
 	// to fail; compressLevel must then return the input unchanged.
 	in := []byte("payload")
-	got := compressLevel(in, func(w io.Writer, _ int) (*gzip.Writer, error) {
+	got, ok := compressLevel(in, func(w io.Writer, _ int) (*gzip.Writer, error) {
 		return nil, errors.New("boom")
 	})
+	if ok {
+		t.Fatal("expected compressLevel to report failure")
+	}
 	if !bytes.Equal(got, in) {
 		t.Errorf("expected fallback to original data, got %q", got)
 	}
@@ -4751,7 +4760,7 @@ func TestRenderAuditCommitsMessage(t *testing.T) {
 		message: "opnborg auto update",
 		diff:    "",
 	}
-	out := renderAuditCommits([]auditCommit{ollama, plain})
+	out := renderAuditCommits([]auditCommit{ollama, plain}, "24h")
 	for _, want := range []string{
 		`<pre class="audit-message">tighten WAN inbound filter`,
 		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
@@ -5005,7 +5014,7 @@ func TestRenderAuditCommitsPerformer(t *testing.T) {
 		message: "opnborg auto update",
 		diff:    "+++ b/x\n+nothing relevant\n",
 	}
-	out := renderAuditCommits([]auditCommit{withPerformer, withoutPerformer})
+	out := renderAuditCommits([]auditCommit{withPerformer, withoutPerformer}, "24h")
 	if !strings.Contains(out, `<span class="audit-performer-line">change-performed-by: EXAMPLE@NAMEPC</span>`) {
 		t.Errorf("performer line should be highlighted for commit with revision block:\n%s", out)
 	}
@@ -5165,7 +5174,10 @@ func TestApprovalDBRoundTrip(t *testing.T) {
 	hash := "abcdef0123456789abcdef0123456789abcdef01"
 	msg := "opened WAN admin\n\nAppliance: fw01\n...\ntag: high, needs-review"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
-	st := approvalGet(cfg, hash)
+	st, ok := approvalGet(cfg, hash)
+	if !ok {
+		t.Fatalf("approvalGet: ledger unavailable")
+	}
 	if st.approved {
 		t.Fatalf("newly tracked commit should be unapproved")
 	}
@@ -5175,7 +5187,10 @@ func TestApprovalDBRoundTrip(t *testing.T) {
 	if err := approvalApprove(cfg, hash, "10.0.0.9", "10.0.0.9, 192.0.2.1", "alice"); err != nil {
 		t.Fatalf("approvalApprove: %v", err)
 	}
-	st = approvalGet(cfg, hash)
+	st, ok = approvalGet(cfg, hash)
+	if !ok {
+		t.Fatalf("approvalGet: ledger unavailable")
+	}
 	if !st.approved {
 		t.Fatalf("approved commit should report approved=true")
 	}
@@ -5231,7 +5246,10 @@ func TestApprovalTrackIdempotent(t *testing.T) {
 	}
 	// Re-track the same hash (e.g. a re-scan): approval must survive.
 	approvalTrackCommit(cfg, hash, msg, time.Now())
-	st := approvalGet(cfg, hash)
+	st, ok := approvalGet(cfg, hash)
+	if !ok {
+		t.Fatalf("approvalGet: ledger unavailable")
+	}
 	if !st.approved {
 		t.Fatalf("re-tracking should not reset approval state")
 	}
@@ -5424,7 +5442,10 @@ func TestApprovalCommitTrackingViaGit(t *testing.T) {
 		t.Fatalf("CommitObject: %v", err)
 	}
 	approvalTrackCommit(cfg, obj.Hash.String(), obj.Message, obj.Author.When)
-	st := approvalGet(cfg, obj.Hash.String())
+	st, ok := approvalGet(cfg, obj.Hash.String())
+	if !ok {
+		t.Fatalf("approvalGet: ledger unavailable")
+	}
 	if st.approved {
 		t.Fatalf("tracked high-severity commit should start unapproved")
 	}
@@ -5472,7 +5493,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	msg := "broadened WAN inbound\n\ntag: critical, needs-review"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
 	c := auditCommit{hash: hash[:7], fullHash: hash, message: msg}
-	got := renderAuditApprovalControl(c, "critical")
+	got := renderAuditApprovalControl(c, "critical", "24h")
 	if !strings.Contains(got, "btn-approve") || !strings.Contains(got, hash) {
 		t.Errorf("unapproved critical commit should render approve button with hash, got %q", got)
 	}
@@ -5482,7 +5503,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	if err := approvalApprove(cfg, hash, "10.0.0.9", "", "alice"); err != nil {
 		t.Fatalf("approvalApprove: %v", err)
 	}
-	got = renderAuditApprovalControl(c, "critical")
+	got = renderAuditApprovalControl(c, "critical", "24h")
 	if !strings.Contains(got, "meta-approved") {
 		t.Errorf("approved commit should render approved box, got %q", got)
 	}
@@ -5491,7 +5512,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	}
 	// Low-severity commits render no control.
 	low := auditCommit{hash: "low0000", fullHash: "low0000000000000000000000000000000000000", message: "tag: low"}
-	if g := renderAuditApprovalControl(low, "low"); g != "" {
+	if g := renderAuditApprovalControl(low, "low", "24h"); g != "" {
 		t.Errorf("low-severity commit should render no control, got %q", g)
 	}
 }

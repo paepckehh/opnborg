@@ -32,6 +32,9 @@ const (
 // target server matches the opnborg-managed default.
 func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 	srv := strings.Split(config.RSysLog.Server, ":")
+	if len(srv) != 2 || srv[0] == "" || srv[1] == "" {
+		return errors.New("[TARGET-REMOTE-SYSLOG-SERVER][MISSING-HOST:PORT] " + config.RSysLog.Server)
+	}
 	_ = getLogConf(srv) // ensure the configured values compile to a valid object
 	return compareLogConf(server, srv, opn)
 }

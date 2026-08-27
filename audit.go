@@ -3,6 +3,7 @@ package opnborg
 import (
 	"errors"
 	"html"
+	"io"
 	"math"
 	"net/http"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -164,7 +166,6 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 		return "<div class=\"dashboard\"><h2>BorgConfigAUDIT &middot; Git Commit History</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">git management disabled (OPN_GIT_ENABLE unset), no commit history to audit</span></div></div>"
 	}
 	window := _auditRanges[rangeSlug]
-	_auditCurrentRange = rangeSlug
 	label := auditRangeLabel(rangeSlug)
 	since := time.Now().Add(-window)
 	commits, err := gatherAuditCommits(config, since)
@@ -194,7 +195,7 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 		s.WriteString("<div class=\"audit-empty\"><span class=\"dash-muted\">no commits in the selected window</span></div>")
 	} else {
 		s.WriteString(renderAuditThreatDashboard(commits))
-		s.WriteString(renderAuditCommits(commits))
+		s.WriteString(renderAuditCommits(commits, rangeSlug))
 	}
 	s.WriteString("</div>")
 	s.WriteString(_auditFilterScript)
@@ -282,7 +283,12 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 	}
 	head, err := repo.Head()
 	if err != nil {
-		// unborn HEAD: repo exists but has no commits yet.
+		// An unborn HEAD (no commits yet) is the only benign Head() failure.
+		// Surface every other error (corrupt ref, I/O) instead of silently
+		// rendering an empty page.
+		if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, err
+		}
 		return nil, nil
 	}
 	sinceUTC := since.UTC()
@@ -298,6 +304,11 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 	for {
 		c, err := iter.Next()
 		if err != nil {
+			// Only io.EOF ends the log walk; any other error (object store
+			// failure) must surface so the window is not silently truncated.
+			if err != io.EOF {
+				return nil, err
+			}
 			break
 		}
 		if len(commits) >= _auditCap {
@@ -326,8 +337,8 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 // it pulls the file-change stats and the unified diff against the commit's
 // first parent. The diff is capped at _auditDiffCap bytes; an over-long diff
 // is truncated with a visible marker so the operator knows it was clipped.
-// A root commit (no parent) yields an empty diff with files/additions/
-// deletions derived from the commit tree entry count.
+// A root commit (no parent) yields a diff of the whole initial tree
+// rendered as additions.
 func buildAuditCommit(c *object.Commit) (auditCommit, error) {
 	ac := auditCommit{
 		hash:     shortHash(c.Hash.String()),
@@ -358,15 +369,18 @@ func buildAuditCommit(c *object.Commit) (auditCommit, error) {
 // commitDiffText returns the unified diff from the commit's first parent to
 // the commit itself (old -> new), so that removed lines carry "-" and added
 // lines carry "+", matching the conventional `git diff parent child`
-// direction. A root commit (no parent) is diffed from an empty tree so the
-// whole initial import is rendered as additions. The output is capped at
+// direction. A root commit (no parent) is diffed from the real empty tree so
+// the whole initial import is rendered as additions. The output is capped at
 // _auditDiffCap bytes; when it overflows the tail is dropped and a truncation
 // marker is appended so the audit page can flag it.
 func commitDiffText(c *object.Commit) (string, bool, error) {
 	parents := c.ParentHashes
 	if len(parents) == 0 {
 		// Root commit: diff from an empty tree to the commit tree so the
-		// whole initial import is rendered as additions.
+		// whole initial import is rendered as additions. A zero-value
+		// object.Tree is handled safely by go-git's merkletrie (its root
+		// node yields no children), so the canonical empty tree does not
+		// need to be present in the object store.
 		ctree, err := c.Tree()
 		if err != nil {
 			return "", false, err
@@ -829,13 +843,22 @@ func auditBadgeHTML(severity string, needsReview, backup bool) string {
 //     so an operator can see at a glance that the change was reviewed and
 //     signed off. Once approved the approve button is gone entirely.
 //
+// rangeSlug is used in the approve form's redirect so the operator lands back
+// on the same audit range.
+//
 // Commits whose tag is low, none, or a plain Unifi backup rotation render no
 // approval control: they are not tracked in the ledger.
-func renderAuditApprovalControl(c auditCommit, severity string) string {
+func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string) string {
 	if !isSecurityRelevantTag(severity) || c.fullHash == "" {
 		return ""
 	}
-	st := approvalGet(_cfg, c.fullHash)
+	st, ok := approvalGet(_cfg, c.fullHash)
+	if !ok {
+		// The ledger is unavailable or the query failed: render a degraded box
+		// so the operator knows the approval state could not be read rather
+		// than being silently shown as unapproved.
+		return "<span class=\"meta-approved\" title=\"approval state unavailable (ledger read failed)\"><span class=\"meta-label\">approval state unknown</span></span>"
+	}
 	if st.approved {
 		var tip strings.Builder
 		tip.WriteString("Approved: ")
@@ -860,7 +883,7 @@ func renderAuditApprovalControl(c auditCommit, severity string) string {
 	b.WriteString("<form class=\"approve-form\" method=\"post\" action=\"approve?hash=")
 	b.WriteString(html.EscapeString(c.fullHash))
 	b.WriteString("&range=")
-	b.WriteString(html.EscapeString(_auditCurrentRange))
+	b.WriteString(html.EscapeString(rangeSlug))
 	b.WriteString("\">")
 	b.WriteString("<button type=\"submit\" class=\"btn btn-approve\" title=\"mark this security-impacting commit as reviewed and approved\">")
 	b.WriteString("<span class=\"approve-emoji\">\u2705</span> approve")
@@ -888,11 +911,6 @@ func approvalOperatorLabel(st approvalState) string {
 	}
 	return "by " + who
 }
-
-// _auditCurrentRange is the range slug the audit page is currently rendering.
-// It is set by renderAuditPage so the per-commit approve forms redirect back
-// to the same range after the action.
-var _auditCurrentRange = _auditDefaultRange
 
 // renderAuditApproveAllButton renders the "approve all" button floated to the
 // top-right corner of every audit page. The button is a POST form targeting
@@ -970,7 +988,11 @@ func highlightAuditTagLine(body string) string {
 // renderAuditCommits emits the per-commit list HTML. Each commit is a
 // collapsible <details> card carrying the header (hash, author, date, file
 // stats), the commit message, and the syntax-highlighted unified diff.
-func renderAuditCommits(commits []auditCommit) string {
+// rangeSlug is threaded through so the per-commit approve forms redirect back
+// to the same audit range without a shared mutable global (two concurrent
+// audit requests with different ?range= values would otherwise cross-wire
+// each other's forms).
+func renderAuditCommits(commits []auditCommit, rangeSlug string) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"audit-list\" id=\"audit-list\">")
 	for _, c := range commits {
@@ -999,7 +1021,7 @@ func renderAuditCommits(commits []auditCommit) string {
 		s.WriteString("</span> <span class=\"dash-err\">-")
 		s.WriteString(strconv.Itoa(c.deletions))
 		s.WriteString("</span></span>")
-		s.WriteString(renderAuditApprovalControl(c, severity))
+		s.WriteString(renderAuditApprovalControl(c, severity, rangeSlug))
 		s.WriteString("</summary>")
 		// Append a synthetic "change-performed-by:" line after the tag line
 		// when the diff carries an OPNsense revision block, so the admin

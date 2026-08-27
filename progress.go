@@ -76,8 +76,10 @@ func appendProgress(msg []byte) {
 // beginBackupPass marks the start of a backup pass in the main srv loop. It
 // records the wall-clock start (used for the dashboard timer) and bumps
 // passSeq so a dashboard that armed a force can detect when its forced pass
-// has actually started running. progressStart is written under progressMu so
-// the httpd /progress handler reads a consistent value.
+// has actually started running. progressStart and backupBusy are written in
+// the same order (start first, then busy) so a concurrent reader that sees
+// Busy==true is guaranteed to see the matching progressStart, never the
+// previous pass's.
 func beginBackupPass() {
 	progressMu.Lock()
 	progressStart = time.Now()
@@ -86,7 +88,9 @@ func beginBackupPass() {
 	backupBusy.Store(true)
 }
 
-// endBackupPass marks the end of the current backup pass.
+// endBackupPass marks the end of the current backup pass. busy is cleared
+// first so a reader that sees Busy==false does not compute an elapsed time
+// for an already-finished pass.
 func endBackupPass() {
 	backupBusy.Store(false)
 }
