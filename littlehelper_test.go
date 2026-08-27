@@ -31,6 +31,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	git "github.com/go-git/go-git/v5"
 	gitcfg "github.com/go-git/go-git/v5/config"
@@ -3048,12 +3049,13 @@ func TestGetForceHandlerNonBlocking(t *testing.T) {
 // read them, so leaving stale state would cross-contaminate tests.
 func resetProgressState() {
 	progressMu.Lock()
-	progressRing = make([]progressLine, 0, _progressCap)
+	progressRing = make([]progressLine, 0, _progressCap+1)
 	progressSeq = 0
 	progressStart = time.Time{}
 	progressMu.Unlock()
 	backupBusy.Store(false)
 	passSeq.Store(0)
+	passArmedForce.Store(0)
 	forceSeq.Store(0)
 }
 
@@ -6499,5 +6501,179 @@ func TestReviewPendingFlagDuringOpenAICommit(t *testing.T) {
 	}
 	if reviewPending.Load() {
 		t.Errorf("reviewPending should be false after commit completes")
+	}
+}
+
+// --- regression tests for the 2026-08 code-review fixes ---------------------
+
+// TestTruncateUTF8 verifies byte-cap truncation never splits a multi-byte
+// UTF-8 rune (the enriched diff and ledger headlines feed the model and the
+// WebUI, both of which need valid UTF-8).
+func TestTruncateUTF8(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"", 10, ""},
+		{"hello", 10, "hello"},
+		{"hello", 3, "hel"},
+		{"héllo", 3, "hé"}, // é is 2 bytes, cap 3 would split the l
+		{"日本語", 7, "日本"},   // each rune is 3 bytes; 7 would split 日's third byte
+		{"日本語", 2, ""},     // first rune does not fit
+	}
+	for _, c := range cases {
+		got := truncateUTF8(c.in, c.max)
+		if got != c.want {
+			t.Errorf("truncateUTF8(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("truncateUTF8(%q, %d) produced invalid UTF-8: %q", c.in, c.max, got)
+		}
+	}
+}
+
+// TestXmlTopLevelSectionsMultiple verifies every direct child of <opnsense>
+// is reported, not just the first one (the walker previously never decremented
+// its depth on EndElement, so only the first section was ever detected).
+func TestXmlTopLevelSectionsMultiple(t *testing.T) {
+	old := `<opnsense><system><a/></opnsense>`
+	new := `<opnsense><filter><rule/></filter><aliases>x</aliases><interfaces><lan/></interfaces><filter><rule2/></filter></opnsense>`
+	got := xmlTopLevelSections(old, new)
+	want := []string{"system", "filter", "aliases", "interfaces"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("xmlTopLevelSections = %v, want %v", got, want)
+	}
+	// malformed / non-XML input yields nothing
+	if got := xmlTopLevelSections("not xml", "<broken><"); len(got) != 0 {
+		t.Errorf("expected no sections for malformed input, got %v", got)
+	}
+}
+
+// TestCountHunkAddsDelsContentLines verifies that content lines which happen
+// to start with +++ or --- are counted as additions/removals instead of being
+// silently dropped as file headers.
+func TestCountHunkAddsDelsContentLines(t *testing.T) {
+	diff := "+++ /dev/null\n--- /a\n+added\n-removed\n context\n+++content-line\n---content-line\n"
+	ins, del := countHunkAddsDels(diff)
+	if ins != 2 {
+		t.Errorf("ins = %d, want 2 (headers skipped, +++content counted)", ins)
+	}
+	if del != 2 {
+		t.Errorf("del = %d, want 2 (headers skipped, ---content counted)", del)
+	}
+}
+
+// TestProgressHandlerArmedForMatchesForcedPass verifies the /progress snapshot
+// reports the forceSeq value the running pass was armed with, so the browser
+// dashboard can match its own forced pass instead of mistaking a timer tick
+// (passSeq >= 1) for its completion.
+func TestProgressHandlerArmedForMatchesForcedPass(t *testing.T) {
+	resetProgressState()
+	beginBackupPass()
+	defer endBackupPass()
+	if got := passArmedForce.Load(); got != 0 {
+		t.Errorf("plain pass armedFor = %d, want 0 (no force pending)", got)
+	}
+	endBackupPass()
+
+	force := bumpForceSeq()
+	beginBackupPass()
+	defer endBackupPass()
+	if got := passArmedForce.Load(); got != force {
+		t.Errorf("forced pass armedFor = %d, want %d", got, force)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/progress", nil)
+	rr := httptest.NewRecorder()
+	getProgressHandler().ServeHTTP(rr, req)
+	var snap progressSnapshot
+	if err := json.Unmarshal(rr.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("unmarshal: %v\nbody: %s", err, rr.Body.String())
+	}
+	if snap.ArmedFor != force {
+		t.Errorf("snapshot armed_for = %d, want %d", snap.ArmedFor, force)
+	}
+}
+
+// TestAppendProgressNeverReAllocates verifies the full ring keeps the backing
+// array at its pre-sized capacity instead of doubling it on the first
+// overflow append.
+func TestAppendProgressNeverReAllocates(t *testing.T) {
+	resetProgressState()
+	progressMu.Lock()
+	base := cap(progressRing)
+	progressMu.Unlock()
+	for i := range _progressCap + 50 {
+		appendProgress([]byte("line " + strconv.Itoa(i)))
+	}
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	if len(progressRing) != _progressCap {
+		t.Errorf("len = %d, want %d", len(progressRing), _progressCap)
+	}
+	if cap(progressRing) > base {
+		t.Errorf("cap grew from %d to %d; append should reuse the pre-sized array", base, cap(progressRing))
+	}
+}
+
+// TestGroupHeaderEscapesConfigValues verifies config-derived group names,
+// descriptions, and image URLs are HTML-escaped before being embedded into
+// the index page markup.
+func TestGroupHeaderEscapesConfigValues(t *testing.T) {
+	var s strings.Builder
+	writeGroupHeader(&s, OPNGroup{Name: `Na<img>`, Desc: `d<x> onerror="alert(1)"`, ImgURL: ""})
+	if !strings.Contains(s.String(), `Na&lt;img&gt;`) {
+		t.Errorf("name not escaped: %s", s.String())
+	}
+	if !strings.Contains(s.String(), `d&lt;x&gt;`) {
+		t.Errorf("desc not escaped: %s", s.String())
+	}
+
+	s.Reset()
+	writeGroupHeader(&s, OPNGroup{Name: "g", Desc: `t"><script>`, ImgURL: `http://x/y"><script>`})
+	if strings.Contains(s.String(), `<script>`) {
+		t.Errorf("img header not escaped: %s", s.String())
+	}
+}
+
+// TestGetHTTPTLSRejectsHalfConfiguredCertPair verifies the listener refuses to
+// bind plain-text HTTP when only one of OPN_HTTPD_CACERT / OPN_HTTPD_CAKEY is
+// set (a silent downgrade would leak the whole WebUI unencrypted).
+func TestGetHTTPTLSRejectsHalfConfiguredCertPair(t *testing.T) {
+	cfg := &OPNCall{}
+	cfg.Httpd.Server = "127.0.0.1:0"
+	cfg.Httpd.CAcert = "/tmp/does-not-matter.pem"
+	if _, err := getHTTPTLS(cfg); err == nil {
+		t.Fatal("expected an error when only CACERT is set")
+	}
+	cfg.Httpd.CAcert = ""
+	cfg.Httpd.CAkey = "/tmp/does-not-matter.key"
+	if _, err := getHTTPTLS(cfg); err == nil {
+		t.Fatal("expected an error when only CAKEY is set")
+	}
+}
+
+// TestGetFirmwareVersionHTTPStatus verifies a non-2xx firmware-status answer
+// is reported as an HTTP failure instead of being fed to the JSON parser.
+func TestGetFirmwareVersionHTTPStatus(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie("nope"); err != nil {
+			// emulate an auth error page, which is HTML, not JSON
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("<html>401</html>"))
+		}
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := u.Host
+	ensureDisplayDrained(t)
+	config := &OPNCall{}
+	if got := getFirmwareVersion(config, host); got != "fail" {
+		t.Errorf("getFirmwareVersion on 401 = %q, want fail", got)
 	}
 }

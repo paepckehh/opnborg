@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -177,7 +178,14 @@ func gatherGitRepo(config *OPNCall, d *dashboardStats) {
 	if err == nil {
 		defer iter.Close()
 		for {
-			if _, err := iter.Next(); err != nil {
+			_, err := iter.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				// corrupt object mid-walk: keep whatever was counted and
+				// record the failure instead of silently undercounting.
+				d.gitError = "commit walk: " + err.Error()
 				break
 			}
 			d.gitCommits++
@@ -189,12 +197,11 @@ func gatherGitRepo(config *OPNCall, d *dashboardStats) {
 	// dirty worktree entry count
 	if wtree, err := repo.Worktree(); err == nil {
 		if status, err := wtree.Status(); err == nil {
-			for file, s := range status {
+			for _, s := range status {
 				if s.Staging == git.Unmodified && s.Worktree == git.Unmodified {
 					continue
 				}
 				d.gitDirty++
-				_ = file
 			}
 		}
 	}

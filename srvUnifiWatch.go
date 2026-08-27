@@ -64,7 +64,6 @@ func srvUnifiWatch(config *OPNCall) {
 	// create/write events in quick succession) into a single sync pass.
 	const debounce = 2 * time.Second
 	var timer *time.Timer
-
 	// loop forever
 	for {
 		select {
@@ -77,18 +76,16 @@ func srvUnifiWatch(config *OPNCall) {
 				!strings.HasSuffix(filepath.Base(ev.Name), "autobackup_meta.json") {
 				continue
 			}
-			// (re)arm the debounce timer
+			// (re)arm the debounce timer. The timer callback runs the sync
+			// itself so an event burst triggers exactly one pass; the pending
+			// updateUnifiWatch poke is drained by the select below and only
+			// matters for the /force path.
 			if timer != nil {
 				timer.Stop()
 			}
 			timer = time.AfterFunc(debounce, func() {
 				syncUnifiWatch(config)
 				setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
-				// allow the main loop to poke the next sync cycle on /force
-				select {
-				case updateUnifiWatch <- true:
-				default:
-				}
 			})
 		case err, ok := <-watcher.Errors:
 			if !ok {

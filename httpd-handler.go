@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"html"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,7 +13,6 @@ const (
 	_utf8  = "text/html;charset=utf-8"
 	_txt   = "text/plain"
 	_ctype = "Content-Type"
-	_title = "title"
 	_app   = " [ -= OPNBORG =- ] "
 )
 
@@ -122,7 +122,6 @@ func getReviewBanner() string {
 // headHTML
 func headHTML(r http.ResponseWriter) http.ResponseWriter {
 	r.Header().Set(_ctype, _utf8)
-	r.Header().Set(_title, _app)
 	return r
 }
 
@@ -207,7 +206,7 @@ func getUnifiWatch() string {
 	s.WriteString("<b>UNIFI AUTOBACKUP WATCH</b>")
 	if unifiWatchPath != "" {
 		s.WriteString("<span class=\"group-desc\">")
-		s.WriteString(unifiWatchPath)
+		s.WriteString(html.EscapeString(unifiWatchPath))
 		s.WriteString("</span>")
 	}
 	s.WriteString("</div>")
@@ -235,26 +234,29 @@ func getUnifiWatch() string {
 // When no image URL is configured but a description is, the description is
 // shown as a subheading beneath the group name. Otherwise only the name is shown.
 func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
+	name := html.EscapeString(grp.Name)
+	desc := html.EscapeString(grp.Desc)
+	imgURL := html.EscapeString(grp.ImgURL)
 	s.WriteString("<div class=\"group-header\">")
 	if grp.ImgURL != "" {
 		s.WriteString("<img class=\"group-img\" alt=\"")
-		s.WriteString(grp.Name)
+		s.WriteString(name)
 		s.WriteString("\"")
 		if grp.Desc != "" {
 			s.WriteString(" title=\"")
-			s.WriteString(grp.Desc)
+			s.WriteString(desc)
 			s.WriteString("\"")
 		}
 		s.WriteString(" src=\"")
-		s.WriteString(grp.ImgURL)
+		s.WriteString(imgURL)
 		s.WriteString("\">")
 	} else {
 		s.WriteString("<b>")
-		s.WriteString(grp.Name)
+		s.WriteString(name)
 		s.WriteString("</b>")
 		if grp.Desc != "" {
 			s.WriteString("<span class=\"group-desc\">")
-			s.WriteString(grp.Desc)
+			s.WriteString(desc)
 			s.WriteString("</span>")
 		}
 	}
@@ -320,8 +322,7 @@ func getNavi() string {
 			continue
 		}
 		s.WriteString("<a href=\"")
-		s.WriteString(l.url.String())
-		s.WriteString(l.suffix)
+		s.WriteString(html.EscapeString(l.url.String() + l.suffix))
 		s.WriteString("\" ")
 		s.WriteString(_nwin)
 		s.WriteString("><button>")

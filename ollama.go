@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -674,9 +675,11 @@ func countHunkAddsDels(diff string) (int, int) {
 	var ins, del int
 	for line := range strings.SplitSeq(diff, "\n") {
 		switch {
-		case strings.HasPrefix(line, "+++"):
+		// only skip the exact unified-diff file headers, not content lines
+		// that genuinely start with +++ or ---
+		case line == "+++" || strings.HasPrefix(line, "+++ "):
 			continue
-		case strings.HasPrefix(line, "---"):
+		case line == "---" || strings.HasPrefix(line, "--- "):
 			continue
 		case strings.HasPrefix(line, "+"):
 			ins++
@@ -707,6 +710,9 @@ func xmlTopLevelSections(old, new string) []string {
 			}
 			start, ok := tok.(xml.StartElement)
 			if !ok {
+				if _, isEnd := tok.(xml.EndElement); isEnd {
+					depth--
+				}
 				continue
 			}
 			depth++
@@ -870,12 +876,27 @@ func gitDiffText(repo *git.Repository, wtree *git.Worktree) (string, error) {
 	}
 	out := buf.String()
 	if len(out) > _ollamaMaxDiffBytes {
-		out = out[:_ollamaMaxDiffBytes] + "\n--- DIFF TRUNCATED ---\n"
+		out = truncateUTF8(out, _ollamaMaxDiffBytes) + "\n--- DIFF TRUNCATED ---\n"
 	}
 	if out == "" {
 		return "", nil
 	}
 	return renderCommitSummary(stats, totalIns, totalDel) + out, nil
+}
+
+// truncateUTF8 cuts s to at most max bytes without splitting a multi-byte
+// UTF-8 rune at the cut point, so the result is always valid UTF-8. The diff
+// payload is fed to the model and rendered in the WebUI, both of which expect
+// well-formed text even when OPNsense XML comments carry non-ASCII characters.
+func truncateUTF8(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	n := max
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // headFileContent returns the textual content of the file at pth in the HEAD

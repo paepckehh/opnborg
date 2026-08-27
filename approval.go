@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -215,7 +216,7 @@ func approvalBackfillFromHistory(config *OPNCall) {
 		}
 		approvalTrackCommit(config, c.Hash.String(), msg, c.Author.When)
 	}
-	displayChan <- []byte("[APPROVAL][BACKFILL][FINISH] scanned " + fmt.Sprintf("%d", n) + " commits")
+	displayChan <- []byte("[APPROVAL][BACKFILL][FINISH] scanned " + strconv.Itoa(n) + " commits")
 }
 
 // approvalClose closes the ledger. Used only by tests to release the file
@@ -280,10 +281,7 @@ func commitHeadline(msg string) string {
 	for line := range strings.SplitSeq(msg, "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
-			if len(line) > 160 {
-				return line[:160]
-			}
-			return line
+			return truncateUTF8(line, 160)
 		}
 	}
 	return ""
