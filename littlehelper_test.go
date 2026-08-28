@@ -7180,6 +7180,13 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "OPN_AUTH_HASH") || !strings.Contains(rec.Body.String(), "OPN_AUTH_SALT") {
 		t.Errorf("generator page must explain the two env vars")
 	}
+	// GET must always include the prominent warning that values are display-only
+	if !strings.Contains(rec.Body.String(), "auth-gen-warning") {
+		t.Errorf("generator page must include the display-only warning box")
+	}
+	if !strings.Contains(rec.Body.String(), "restart the daemon") {
+		t.Errorf("generator page must mention that a daemon restart is required")
+	}
 	// GET must include the password quality bar and offline JS checker
 	if !strings.Contains(rec.Body.String(), "auth-pw-bar-fill") {
 		t.Errorf("generator page must include the password quality bar")
@@ -7202,6 +7209,10 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	body := rec2.Body.String()
 	if !strings.Contains(body, "OPN_AUTH_HASH=") {
 		t.Errorf("generator must render the OPN_AUTH_HASH env line")
+	}
+	// POST result must also carry the warning
+	if !strings.Contains(body, "auth-gen-warning") {
+		t.Errorf("generator result page must include the display-only warning box")
 	}
 	// POST with a 5-char password must succeed (minimum is 5, not 8)
 	rec5 := httptest.NewRecorder()
@@ -7229,6 +7240,45 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	}
 }
 
+func TestAuthHashGeneratorArmedCredentials(t *testing.T) {
+	resetAuthState(t)
+	// Arm credentials as if OPN_AUTH_HASH / OPN_AUTH_SALT were set
+	armTestAuth(t, "existing-password-123")
+	// GET must NOT return 403 — the generator is always available now
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/auth-hash", nil)
+	getAuthHashHandler().ServeHTTP(rec, q)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("generator GET must render even when credentials are armed, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	// Must include the armed-specific notice
+	if !strings.Contains(body, "auth-gen-notice") {
+		t.Errorf("generator page must show armed notice when credentials are configured")
+	}
+	if !strings.Contains(body, "currently armed") {
+		t.Errorf("generator page must mention that credentials are currently armed")
+	}
+	// POST must also succeed — no 403
+	rec2 := httptest.NewRecorder()
+	q2 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=new-password-999&password2=new-password-999"))
+	q2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getAuthHashHandler().ServeHTTP(rec2, q2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("generator POST must succeed even when credentials are armed, got %d", rec2.Code)
+	}
+	body2 := rec2.Body.String()
+	if !strings.Contains(body2, "OPN_AUTH_HASH=") {
+		t.Errorf("generator must render the OPN_AUTH_HASH env line when armed")
+	}
+	if !strings.Contains(body2, "auth-gen-warning") {
+		t.Errorf("generator result must include the display-only warning box")
+	}
+	if !strings.Contains(body2, "will not") && !strings.Contains(body2, "will <strong>not</strong>") {
+		t.Errorf("generator result must warn that values will not replace existing credentials without restart")
+	}
+}
+
 func TestSanitizeAuthNext(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"", ""},
@@ -7250,6 +7300,31 @@ func TestRenderAuthPanel(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("renderAuthPanel missing %q: %s", want, got)
 		}
+	}
+	// The generator button must always be present, even when credentials
+	// are not armed
+	if !strings.Contains(got, "auth-hash") {
+		t.Errorf("renderAuthPanel must always include the generator link")
+	}
+}
+
+func TestRenderAuthPanelArmed(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "test-password-123")
+	got := renderAuthPanel(&OPNCall{})
+	// The generator button must still be present when credentials are armed
+	if !strings.Contains(got, "auth-hash") {
+		t.Errorf("renderAuthPanel must include the generator link even when armed")
+	}
+	if !strings.Contains(got, "Create Authentication Env Vars") {
+		t.Errorf("renderAuthPanel must show the generator button even when armed")
+	}
+	if !strings.Contains(got, "armed") {
+		t.Errorf("renderAuthPanel must show the armed status")
+	}
+	// Must mention that a restart is required to apply new credentials
+	if !strings.Contains(got, "restart the daemon") {
+		t.Errorf("renderAuthPanel must mention restart when armed")
 	}
 }
 

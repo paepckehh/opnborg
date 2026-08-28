@@ -139,41 +139,38 @@ func getAuthStateHandler() http.Handler {
 	return http.HandlerFunc(h)
 }
 
-// getAuthHashHandler renders the credential-generator bootstrap page. It is
-// only armed while NO valid credentials are configured; once OPN_AUTH_HASH
-// / OPN_AUTH_SALT are live the endpoint refuses to run so it cannot be used
-// to replace an existing operator password.
+// getAuthHashHandler renders the credential-generator page. The generator
+// is always available — even when credentials are already armed — so an
+// operator can generate a fresh password/salt pair at any time. The page
+// makes it absolutely clear that the displayed values must be set as
+// environment variables and the daemon must be restarted to apply them.
 func getAuthHashHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
 		r = headHTML(r)
-		if !authCredentialsEnabled() {
-			switch q.Method {
-			case http.MethodGet:
-				writeTransportCompressedPage(getAuthHashHTML("", "", ""), r, q, false)
-			case http.MethodPost:
-				if err := q.ParseForm(); err != nil {
-					http.Error(r, "Error: Bad Request (400)", http.StatusBadRequest)
-					return
-				}
-				pw := q.FormValue("password")
-				pw2 := q.FormValue("password2")
-				if pw == "" || len(pw) < 5 {
-					writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 5 characters)"), r, q, false)
-					return
-				}
-				if pw != pw2 {
-					writeTransportCompressedPage(getAuthHashHTML("", "", "passwords do not match"), r, q, false)
-					return
-				}
-				hashEnv, saltEnv := generateAuthCredentials(pw)
-				writeTransportCompressedPage(getAuthHashHTML(hashEnv, saltEnv, ""), r, q, false)
-			default:
-				http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
+		armed := authCredentialsEnabled()
+		switch q.Method {
+		case http.MethodGet:
+			writeTransportCompressedPage(getAuthHashHTML("", "", "", armed), r, q, false)
+		case http.MethodPost:
+			if err := q.ParseForm(); err != nil {
+				http.Error(r, "Error: Bad Request (400)", http.StatusBadRequest)
+				return
 			}
-			return
+			pw := q.FormValue("password")
+			pw2 := q.FormValue("password2")
+			if pw == "" || len(pw) < 5 {
+				writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 5 characters)", armed), r, q, false)
+				return
+			}
+			if pw != pw2 {
+				writeTransportCompressedPage(getAuthHashHTML("", "", "passwords do not match", armed), r, q, false)
+				return
+			}
+			hashEnv, saltEnv := generateAuthCredentials(pw)
+			writeTransportCompressedPage(getAuthHashHTML(hashEnv, saltEnv, "", armed), r, q, false)
+		default:
+			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 		}
-		// credentials armed: generator permanently closed
-		http.Error(r, "Error: Forbidden (403): credentials already configured, regenerate on a fresh instance (unset OPN_AUTH_HASH first)", http.StatusForbidden)
 	}
 	return http.HandlerFunc(h)
 }
@@ -266,12 +263,17 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>`
 
-// getAuthHashHTML renders the bootstrap credential generator page. When
+// getAuthHashHTML renders the credential generator page. When
 // hashEnv/saltEnv are non-empty the page shows the two env lines to copy;
 // otherwise it shows the password form with a live password quality bar.
 // The quality checker is pure client-side JS (offline, local-only) — it
 // shows progress but never enforces a minimum beyond 5 characters.
-func getAuthHashHTML(hashEnv, saltEnv, errText string) string {
+//
+// The armed parameter indicates whether credentials are already configured.
+// When armed, a prominent warning box is shown so the operator knows the
+// generated values will only take effect after replacing the existing env
+// vars and restarting the daemon.
+func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 	var s strings.Builder
 	s.WriteString(_htmlStart)
 	s.WriteString(_headStatic)
@@ -280,16 +282,36 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string) string {
 	s.WriteString("<nav><a href=\"./\"><button>[ &larr; Hive Index ]</button></a><a href=\"config\"><button>[ Config Dashboard ]</button></a></nav>")
 	s.WriteString("<div class=\"dashboard auth-gen\">")
 	s.WriteString("<h2>Authentication &middot; Credential Generator</h2>")
+	s.WriteString("<div class=\"auth-gen-warning\">" +
+		"<strong>&#9888; These are freshly generated display-only values &#9888;</strong><br>" +
+		"opnborg does <strong>not</strong> store or apply them automatically. " +
+		"You must manually copy both environment variables into your opnborg environment " +
+		"(e.g. your <code>.env</code> file or systemd unit) and <strong>restart the daemon</strong> " +
+		"for the new credentials to take effect. Until then the current configuration remains active." +
+		"</div>")
 	if errText != "" {
 		s.WriteString("<div class=\"auth-gen-err\">" + html.EscapeString(errText) + "</div>")
 	}
 	if hashEnv != "" {
+		if armed {
+			s.WriteString("<div class=\"auth-gen-notice\">" +
+				"<strong>Note:</strong> Credentials are currently armed. The values below will <strong>not</strong> " +
+				"replace the existing password until you update <code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> " +
+				"in your environment and restart opnborg. After the restart the old password will no longer work." +
+				"</div>")
+		}
 		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=4, keylen=64). " +
 			"Add both environment variables to your opnborg environment (e.g. your <code>.env</code> file or systemd unit) and restart the daemon to arm admin mode:</p>")
 		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthHash + "=</span><code class=\"auth-env-code\">" + html.EscapeString(hashEnv) + "</code></div>")
 		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthSalt + "=</span><code class=\"auth-env-code\">" + html.EscapeString(saltEnv) + "</code></div>")
 		s.WriteString("<p class=\"cfg-intro\">Keep both values secret. After the restart the nav-bar [ Authenticate ] button unlocks admin mode with the password you entered above.</p>")
 	} else {
+		if armed {
+			s.WriteString("<div class=\"auth-gen-notice\">" +
+				"Credentials are currently armed. Generating a new pair will produce replacement values; " +
+				"the old password continues to work until you apply the new env vars and restart." +
+				"</div>")
+		}
 		s.WriteString("<p class=\"cfg-intro\">Enter the admin password you want to use. opnborg derives the two environment variables " +
 			"<code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> for you (Argon2id, time=8, memory=64 MiB, threads=4, keylen=64). " +
 			"The password itself is never stored; only the derived hash is displayed once for you to copy into the environment, then restart opnborg.</p>")

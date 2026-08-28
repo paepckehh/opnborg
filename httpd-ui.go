@@ -452,6 +452,8 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .auth-pw-match.match-no{color:var(--err)}
 .auth-gen-field-label{font-size:.72rem;color:var(--muted);margin-bottom:.15rem;letter-spacing:.02em}
 .auth-panel-actions{margin:.55rem 0 .25rem 0}
+.auth-gen-warning{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.5);border-radius:6px;padding:.6rem .7rem;margin:.5rem 0;color:var(--warn);font-size:.8rem;line-height:1.4}
+.auth-gen-notice{background:rgba(63,185,80,.08);border:1px solid var(--border);border-radius:6px;padding:.5rem .6rem;margin:.5rem 0;font-size:.78rem;color:var(--muted);line-height:1.4}
 @keyframes auth-rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes auth-tick{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .audit-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}

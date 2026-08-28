@@ -637,8 +637,10 @@ func renderRawEnvValue(name, val string) string {
 // OPN_AUTH_HASH / OPN_AUTH_SALT credentials are armed, and a button that
 // opens the credential generator so the operator can create the two env
 // vars for a chosen password (Argon2id, time=8, memory=64 MiB, threads=4,
-// keylen=64). The password itself is never stored; opnborg only displays
-// the derived env values once for the operator to copy into the daemon
+// keylen=64). The generator is always available — even when credentials
+// are already armed — so an operator can generate a fresh pair at any
+// time. The password itself is never stored; opnborg only displays the
+// derived env values once for the operator to copy into the daemon
 // environment and restart.
 func renderAuthPanel(c *OPNCall) string {
 	var s strings.Builder
@@ -654,9 +656,14 @@ func renderAuthPanel(c *OPNCall) string {
 		writeDashRow(&s, "Login", "<span class=\"dash-ok\">armed</span> (nav-bar [ Authenticate ] button)")
 	} else {
 		writeDashRow(&s, "Login", "<span class=\"dash-muted\">not armed</span>")
-		s.WriteString("<div class=\"auth-panel-actions\">")
-		s.WriteString("<a href=\"auth-hash\" class=\"btn btn-force\">[ Create Authentication Env Vars ]</a>")
-		s.WriteString("</div>")
+	}
+	s.WriteString("<div class=\"auth-panel-actions\">")
+	s.WriteString("<a href=\"auth-hash\" class=\"btn btn-force\">[ Create Authentication Env Vars ]</a>")
+	s.WriteString("</div>")
+	if authCredentialsEnabled() {
+		s.WriteString("<p class=\"cfg-intro\">Generate a new password/salt pair to replace the current credentials. " +
+			"Copy both derived values into the opnborg environment and restart the daemon to apply them.</p>")
+	} else {
 		s.WriteString("<p class=\"cfg-intro\">Enter your admin password on the generator page; opnborg derives " +
 			"<code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> for you. Copy both into the opnborg environment and restart the daemon to arm admin mode.</p>")
 	}
