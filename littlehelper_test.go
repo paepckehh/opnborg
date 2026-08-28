@@ -7263,3 +7263,20 @@ func TestAuthInfoDialogContent(t *testing.T) {
 		t.Errorf("armed info dialog must not link to the credential setup page: %q", gotArmed)
 	}
 }
+
+// TestAuthDialogBackdropHiddenCSS verifies the CSS rules that override the
+// HTML hidden attribute on auth overlay elements. Without these rules
+// (display:flex on .auth-dialog-backdrop etc.), the hidden attribute is
+// ignored and the modal blocks the entire page on load — the root cause of
+// the "info box blocks the application" bug.
+func TestAuthDialogBackdropHiddenCSS(t *testing.T) {
+	for _, want := range []string{
+		".auth-dialog-backdrop[hidden]{display:none}",
+		".auth-checking[hidden]{display:none}",
+		".auth-wait[hidden]{display:none}",
+	} {
+		if !strings.Contains(_css, want) {
+			t.Errorf("CSS missing hidden-override rule %q", want)
+		}
+	}
+}
