@@ -6935,6 +6935,20 @@ func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
 	if !strings.Contains(got, "monitoring mode only") {
 		t.Errorf("locked button must carry the monitoring-mode hint: %q", got)
 	}
+	// without credentials: clicking must point at the config dashboard setup
+	// section, and the login dialog must NOT be invoked
+	if !strings.Contains(got, "window.location.href='config'") {
+		t.Errorf("locked click without credentials must point to the config page: %q", got)
+	}
+	if strings.Contains(got, "openAuthDialog") {
+		t.Errorf("locked click without credentials must not open the login dialog: %q", got)
+	}
+	// with armed credentials the same locked button opens the login dialog
+	armTestAuth(t, "pw-123456")
+	gotArmed := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+	if !strings.Contains(gotArmed, "openAuthDialog") {
+		t.Errorf("locked click with armed credentials must open the login dialog: %q", gotArmed)
+	}
 	adminEnabled.Store(true)
 	got2 := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
 	if !strings.Contains(got2, "<a href=") {
@@ -7093,5 +7107,95 @@ func TestRenderAuthPanel(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("renderAuthPanel missing %q: %s", want, got)
 		}
+	}
+}
+
+func TestNoAuthPossibleWithoutCredentials(t *testing.T) {
+	resetAuthState(t)
+	// no env vars: login must be impossible and the login dialog must not
+	// be rendered into the header at all
+	got := getBodyHead(nil)
+	if strings.Contains(got, "auth-dialog-backdrop") {
+		t.Errorf("login dialog must not be rendered when no credentials are configured: %q", got)
+	}
+	if !strings.Contains(got, "auth-setup") {
+		t.Errorf("Authenticate button must fall back to the setup link: %q", got)
+	}
+	if _, _, err := authCheckPassword("anything"); err == nil {
+		t.Errorf("login must fail without configured credentials")
+	}
+}
+
+func TestAuthInitInvalidContentDisablesLogin(t *testing.T) {
+	resetAuthState(t)
+	os.Unsetenv("OPN_AUTH_HASH")
+	os.Unsetenv("OPN_AUTH_SALT")
+	t.Cleanup(func() {
+		os.Unsetenv("OPN_AUTH_HASH")
+		os.Unsetenv("OPN_AUTH_SALT")
+	})
+	cases := []struct{ name, hash, salt string }{
+		{"both empty", "", ""},
+		{"empty hash", "", "AAAAAAAAAAAAAAAAAAAAAA=="},
+		{"empty salt", "AAAA$AAAA", ""},
+		{"no separator", "AAAAAA==", "AAAAAAAAAAAAAAAAAAAAAA=="},
+		{"hash too short", "AAAA$AAAA", "AAAAAAAAAAAAAAAAAAAAAA=="},
+		{"hash not base64", strings.Repeat("A$", 2) + "!!!not-base64!!!$!!!", "AAAAAAAAAAAAAAAAAAAAAA=="},
+		{"salt not base64", "AAAA$AAAA", "!!!not-base64!!!"},
+	}
+	for _, tc := range cases {
+		os.Setenv("OPN_AUTH_HASH", tc.hash)
+		os.Setenv("OPN_AUTH_SALT", tc.salt)
+		authInit()
+		if authCredentialsEnabled() {
+			t.Errorf("%s: invalid credential content must keep authentication disabled", tc.name)
+		}
+		if adminEnabled.Load() {
+			t.Errorf("%s: admin mode must stay locked", tc.name)
+		}
+	}
+	// whitespace-only values behave like empty
+	os.Setenv("OPN_AUTH_HASH", "   ")
+	os.Setenv("OPN_AUTH_SALT", "  ")
+	authInit()
+	if authCredentialsEnabled() {
+		t.Errorf("whitespace-only credentials must keep authentication disabled")
+	}
+}
+
+func TestGetBodyHeadNoDialogWhenUnarmed(t *testing.T) {
+	resetAuthState(t)
+	got := getBodyHead(nil)
+	if strings.Contains(got, "auth-dialog-backdrop") {
+		t.Errorf("login dialog must not render without credentials: %q", got)
+	}
+	// armed: dialog present
+	armTestAuth(t, "pw-123456")
+	gotArmed := getBodyHead(nil)
+	if !strings.Contains(gotArmed, "auth-dialog-backdrop") {
+		t.Errorf("login dialog must render with armed credentials: %q", gotArmed)
+	}
+	// armed + authenticated: no dialog, logout instead
+	auth.mu.Lock()
+	for token := range auth.sessions {
+		auth.sessions[token] = time.Now().Add(time.Hour)
+	}
+	auth.mu.Unlock()
+	q := httptest.NewRequest("GET", "http://x/", nil)
+	token, _, _ := authCheckPassword("pw-123456")
+	auth.mu.Lock()
+	auth.lockUntil = time.Time{}
+	auth.mu.Unlock()
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	gotAdmin := getBodyHead(q)
+	if strings.Contains(gotAdmin, "auth-dialog-backdrop") {
+		t.Errorf("authenticated header must not render the login dialog: %q", gotAdmin)
+	}
+	if !strings.Contains(gotAdmin, ">ADMIN<") {
+		t.Errorf("authenticated header must show ADMIN: %q", gotAdmin)
 	}
 }

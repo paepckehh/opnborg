@@ -254,10 +254,12 @@ func getBodyHead(q *http.Request) string {
 	default:
 		authBtn = "<a href=\"auth-hash\"><button type=\"button\" class=\"auth-nav-btn auth-setup\" title=\"no credentials configured: create OPN_AUTH_HASH / OPN_AUTH_SALT\">[ Authenticate ]</button></a>"
 	}
-	// the dialog markup is needed whenever the modal can be opened from
-	// this page (greyed-out download buttons call openAuthDialog as well).
+	// the dialog markup is only rendered when the login flow is actually
+	// reachable: with no (or invalid) OPN_AUTH_* credentials there is nothing
+	// to authenticate against, so every locked button points at the config
+	// dashboard's authentication setup section instead.
 	dialog := ""
-	if !isAdmin {
+	if !isAdmin && armed {
 		dialog = authDialog("")
 	}
 

@@ -78,7 +78,10 @@ func getIndexHandler() http.Handler {
 		switch q.Method {
 		case "GET":
 			if fail := q.URL.Query().Get("auth"); fail == "locked" {
-				_, _ = r.Write([]byte("<script>document.addEventListener('DOMContentLoaded',function(){openAuthDialog('monitoring mode: config download locked, please authenticate first')})</script>"))
+				// when credentials are armed the login dialog exists and is
+				// opened; without credentials login is impossible, so the
+				// operator is pointed at the config dashboard's setup section.
+				_, _ = r.Write([]byte("<script>document.addEventListener('DOMContentLoaded',function(){var d=document.getElementById('auth-dialog');if(d){openAuthDialog('monitoring mode: config download locked, please authenticate first')}else{window.location.href='config'}}))</script>"))
 			}
 			writeTransportCompressedPage(getStartHTML(q), r, q, true)
 		default:

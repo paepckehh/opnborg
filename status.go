@@ -172,16 +172,23 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 // _btnDownloadLockedTitle is the hover tooltip shown on greyed-out config
 // download buttons in monitoring mode.
 const (
-	_btnDownloadLockedTitle = "opnborg is currently in monitoring mode only, please authenticate first"
+	_btnDownloadLockedTitle = "opnborg is currently in monitoring mode only: config downloads are locked, set up authentication in the config dashboard (Authentication tile)"
 )
 
 // renderDownloadButton renders one config-file download button. In monitoring
 // mode (the default startup mode, no admin session) the button is greyed out:
-// hovering or clicking surfaces the monitoring-mode hint telling the operator
-// to authenticate first. In admin mode the regular download link is rendered.
+//   - when admin credentials are armed, clicking opens the login dialog, or
+//   - when no (or invalid) OPN_AUTH_* credentials are configured, clicking
+//     points the operator at the config dashboard authentication setup
+//     section (login is not possible at all in that state).
+//
+// In admin mode the regular download link is rendered.
 func renderDownloadButton(href, label string) string {
 	if adminEnabled.Load() {
 		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
 	}
-	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"openAuthDialog('monitoring mode only: config download locked, please authenticate first')\"><button disabled class=\"btn-dl-locked\">" + label + "</button></span>"
+	if authCredentialsEnabled() {
+		return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"openAuthDialog('monitoring mode only: config download locked, please authenticate first')\"><button disabled class=\"btn-dl-locked\">" + label + "</button></span>"
+	}
+	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"window.location.href='config'\"><button disabled class=\"btn-dl-locked\">" + label + "</button></span>"
 }
