@@ -193,7 +193,7 @@ func renderOllamaPanel(c *OPNCall) string {
 }
 
 // renderOpenAIPanel covers the OpenAI-compatible commit message fallback
-// feature: the parsed OPENAI_DESC_URL / OPENAI_DESC_MODEL / OPENAI_DESC_TOKEN
+// feature: the parsed OPENAPI_DESC_URL / OPENAPI_DESC_MODEL / OPENAPI_DESC_TOKEN
 // env vars and a live probe of the server. The probe (openaiHealthCheck)
 // reports three layered signals so an operator can tell at a glance whether
 // the fallback is wired, the server is reachable, the REST API answers, and
@@ -209,9 +209,9 @@ func renderOpenAIPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OpenAI Commit Messages</div>")
 	writeDashRow(&s, "Feature Enabled", boolPill(c.OpenAI.Enable))
-	writeDashRow(&s, "<code>OPENAI_DESC_URL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
-	writeDashRow(&s, "<code>OPENAI_DESC_MODEL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
-	writeDashRow(&s, "<code>OPENAI_DESC_TOKEN</code>", secretPill(c.OpenAI.Token))
+	writeDashRow(&s, "<code>OPENAPI_DESC_URL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
+	writeDashRow(&s, "<code>OPENAPI_DESC_MODEL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
+	writeDashRow(&s, "<code>OPENAPI_DESC_TOKEN</code>", secretPill(c.OpenAI.Token))
 	if c.OpenAI.Enable {
 		h := openaiHealthCheck(c)
 		writeDashRow(&s, "Server Reachable", triStatePill(h.ServerReachable))

@@ -5923,7 +5923,7 @@ func TestReviewPendingFlagDuringCommit(t *testing.T) {
 // --- OpenAI-compatible fallback ---------------------------------------------
 
 // TestSetupOpenAIConfig verifies Setup populates the OpenAI config from
-// OPENAI_DESC_URL / OPENAI_DESC_MODEL / OPENAI_DESC_TOKEN. The URL is required
+// OPENAPI_DESC_URL / OPENAPI_DESC_MODEL / OPENAPI_DESC_TOKEN. The URL is required
 // for the feature to arm; the model defaults to _openaiDefaultModel when empty;
 // the token is optional.
 func TestSetupOpenAIConfig(t *testing.T) {
@@ -5931,7 +5931,7 @@ func TestSetupOpenAIConfig(t *testing.T) {
 	for _, k := range []string{
 		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS",
 		"OPN_NODAEMON", "OLLAMA_DESC_URL", "OLLAMA_DESC_MODEL",
-		"OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN",
+		"OPENAPI_DESC_URL", "OPENAPI_DESC_MODEL", "OPENAPI_DESC_TOKEN",
 	} {
 		old, had := os.LookupEnv(k)
 		_ = os.Unsetenv(k)
@@ -5959,7 +5959,7 @@ func TestSetupOpenAIConfig(t *testing.T) {
 	})
 
 	t.Run("enabled when URL set, model defaults", func(t *testing.T) {
-		withEnv(t, "OPENAI_DESC_URL", "http://localhost:8080/v1", true)
+		withEnv(t, "OPENAPI_DESC_URL", "http://localhost:8080/v1", true)
 		config, err := Setup()
 		if err != nil {
 			t.Fatalf("Setup: %v", err)
@@ -5976,9 +5976,9 @@ func TestSetupOpenAIConfig(t *testing.T) {
 	})
 
 	t.Run("enabled with explicit model and token", func(t *testing.T) {
-		withEnv(t, "OPENAI_DESC_URL", "http://localhost:8080/v1", true)
-		withEnv(t, "OPENAI_DESC_MODEL", "gpt-oss-120b", true)
-		withEnv(t, "OPENAI_DESC_TOKEN", "secret-token", true)
+		withEnv(t, "OPENAPI_DESC_URL", "http://localhost:8080/v1", true)
+		withEnv(t, "OPENAPI_DESC_MODEL", "gpt-oss-120b", true)
+		withEnv(t, "OPENAPI_DESC_TOKEN", "secret-token", true)
 		config, err := Setup()
 		if err != nil {
 			t.Fatalf("Setup: %v", err)
@@ -5995,8 +5995,8 @@ func TestSetupOpenAIConfig(t *testing.T) {
 	})
 
 	t.Run("disabled when URL empty", func(t *testing.T) {
-		withEnv(t, "OPENAI_DESC_URL", "", true)
-		withEnv(t, "OPENAI_DESC_MODEL", "gpt-4o", true)
+		withEnv(t, "OPENAPI_DESC_URL", "", true)
+		withEnv(t, "OPENAPI_DESC_MODEL", "gpt-4o", true)
 		config, err := Setup()
 		if err != nil {
 			t.Fatalf("Setup: %v", err)
@@ -6397,7 +6397,7 @@ func TestRenderOpenAIPanelDisabled(t *testing.T) {
 	config.OpenAI.URL = ""
 	config.OpenAI.Model = ""
 	out := renderOpenAIPanel(config)
-	for _, want := range []string{"OpenAI Commit Messages", "Feature Enabled", "OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN"} {
+	for _, want := range []string{"OpenAI Commit Messages", "Feature Enabled", "OPENAPI_DESC_URL", "OPENAPI_DESC_MODEL", "OPENAPI_DESC_TOKEN"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel missing %q: %s", want, out)
 		}
@@ -6425,7 +6425,7 @@ func TestRenderOpenAIPanelEnabled(t *testing.T) {
 	config.OpenAI.Model = "gpt-oss-120b"
 	out := renderOpenAIPanel(config)
 	for _, want := range []string{
-		"Feature Enabled", "OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN",
+		"Feature Enabled", "OPENAPI_DESC_URL", "OPENAPI_DESC_MODEL", "OPENAPI_DESC_TOKEN",
 		"Server Reachable", "REST API Ready", "Model Ready", "Probe State", "ok",
 		"Probe Endpoint", "HTTP Status", "Models Found", "Available Models",
 	} {
@@ -6461,7 +6461,7 @@ func TestRenderOpenAIPanelDebugInfo(t *testing.T) {
 	config.OpenAI.Model = "gpt-oss-120b"
 	out := renderOpenAIPanel(config)
 	// Must show the env var names as labels
-	for _, want := range []string{"OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN"} {
+	for _, want := range []string{"OPENAPI_DESC_URL", "OPENAPI_DESC_MODEL", "OPENAPI_DESC_TOKEN"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel must show env var name %q: %s", want, out)
 		}

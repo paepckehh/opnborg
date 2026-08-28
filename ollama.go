@@ -73,20 +73,20 @@ const (
 	// synchronously on each config dashboard GET.
 	_ollamaHealthTimeout = 3 * time.Second
 	// _openaiChatCompletionsPath is the REST endpoint appended to
-	// OPENAI_DESC_URL. The OpenAI-compatible chat completions API accepts a
+	// OPENAPI_DESC_URL. The OpenAI-compatible chat completions API accepts a
 	// JSON body with a messages array and returns a choices array carrying the
 	// generated text. It is the OpenAI-compatible equivalent of the Ollama
 	// /api/generate endpoint.
 	_openaiChatCompletionsPath = "/chat/completions"
-	// _openaiModelsPath is the REST endpoint appended to OPENAI_DESC_URL that
+	// _openaiModelsPath is the REST endpoint appended to OPENAPI_DESC_URL that
 	// lists the models available on the OpenAI-compatible server. The config
 	// dashboard probes it to report server reachability and REST API
 	// readiness. It is the OpenAI-compatible equivalent of the Ollama
 	// /api/tags endpoint.
 	_openaiModelsPath = "/models"
-	// _openaiDefaultModel is the model name used when OPENAI_DESC_MODEL is
+	// _openaiDefaultModel is the model name used when OPENAPI_DESC_MODEL is
 	// unset. It is a widely available default on OpenAI-compatible servers;
-	// operators who need a different model set OPENAI_DESC_MODEL explicitly.
+	// operators who need a different model set OPENAPI_DESC_MODEL explicitly.
 	_openaiDefaultModel = "gpt-4o-mini"
 	// _openaiSystemRole is the role value for the system message in the
 	// OpenAI chat completions messages array.

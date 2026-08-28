@@ -317,6 +317,19 @@ required or invoked).
 | `OPN_GIT_UPSTREAM` | _empty_ | Upstream SSH git URL to sync with (e.g. `git@github.com:user/repo.git`); empty disables push |
 | `OPN_GIT_SSH_KEY` | _empty_ | Path to the PEM-encoded SSH private key used for upstream auth (required when `OPN_GIT_UPSTREAM` is set) |
 | `OPN_GIT_SSH_HOSTKEY` | _empty_ | Optional `SHA256:<base64>` fingerprint of the upstream SSH host key; when set, push refuses any host whose key does not match (unset = skip host-key verification) |
+
+OpenAI (local) compatible
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPENAPI_DESC_URL` | _empty_ | OpenAI-compatible REST API base URL (e.g. `http://192.168.6.222:11434/v1`); required to arm the feature, endpoints `/chat/completions` and `/models` are appended |
+| `OPENAPI_DESC_MODEL` | `gpt-4o-mini` | Model name used to summarise each backup diff into a commit message that classifies the security impact of the change (same `tag: <severity>` contract as the Ollama backend) |
+| `OPENAPI_DESC_TOKEN` | _empty_ | API bearer token sent as `Authorization: Bearer <token>`; optional for local servers that do not require auth |
+
+Ollama (local) compatible
+
+| Variable | Default | Description |
+| --- | --- | --- |
 | `OLLAMA_DESC_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages (with a `tag: <severity>[, needs-review]` security-impact line) when set together with `OLLAMA_DESC_MODEL` |
 | `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message that classifies the security impact of the change; enables the feature when set together with `OLLAMA_DESC_URL` |
 

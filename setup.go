@@ -168,13 +168,13 @@ func Setup() (*OPNCall, error) {
 	// _openaiDefaultModel when empty; the token is optional (some
 	// OpenAI-compatible servers, e.g. a local vLLM/Ollama /v1 shim, do not
 	// require authentication); the URL is required for the feature to arm.
-	config.OpenAI.URL = strings.TrimSpace(os.Getenv("OPENAI_DESC_URL"))
-	config.OpenAI.Model = strings.TrimSpace(os.Getenv("OPENAI_DESC_MODEL"))
-	config.OpenAI.Token = strings.TrimSpace(os.Getenv("OPENAI_DESC_TOKEN"))
+	config.OpenAI.URL = strings.TrimSpace(os.Getenv("OPENAPI_DESC_URL"))
+	config.OpenAI.Model = strings.TrimSpace(os.Getenv("OPENAPI_DESC_MODEL"))
+	config.OpenAI.Token = strings.TrimSpace(os.Getenv("OPENAPI_DESC_TOKEN"))
 	config.OpenAI.Enable = config.OpenAI.URL != ""
 	if config.OpenAI.Enable {
 		if _, err := url.Parse(config.OpenAI.URL); err != nil {
-			return nil, fmt.Errorf("env variable 'OPENAI_DESC_URL' parse error: %w", err)
+			return nil, fmt.Errorf("env variable 'OPENAPI_DESC_URL' parse error: %w", err)
 		}
 		if config.OpenAI.Model == "" {
 			config.OpenAI.Model = _openaiDefaultModel

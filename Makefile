@@ -27,6 +27,9 @@ run: update build
 	OPN_APIKEY="..." \
 	OPN_APISECRET="..." \
 	OPN_HTTPD_SERVER="0.0.0.0:8080" \
+	OPENAPI_DESC_URL="http://192.168.2.222:11434/v1" \
+        OPENAPI_DESC_MODEL="gpt-oss-120b-MXFP4-Q8" \
+        OPENAPI_DESC_TOKEN="FakeIT!!"\
 	./$(PROJECT)
 
 deps:
