@@ -114,8 +114,8 @@ func getAuthHashHandler() http.Handler {
 				}
 				pw := q.FormValue("password")
 				pw2 := q.FormValue("password2")
-				if pw == "" || len(pw) < 8 {
-					writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 8 characters)"), r, q, false)
+				if pw == "" || len(pw) < 5 {
+					writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 5 characters)"), r, q, false)
 					return
 				}
 				if pw != pw2 {
@@ -194,9 +194,67 @@ func boolJSON(b bool) string {
 	return "false"
 }
 
+// _pwQualityJS is a pure client-side, offline, local-only password quality
+// checker. It shows a live quality bar (very-weak → weak → fair → good →
+// strong) as the operator types, but never enforces a minimum beyond the 5
+// character floor enforced by the server-side handler and the HTML
+// minlength attribute. No network calls, no dictionaries fetched, no
+// external dependencies — everything is computed in the browser from the
+// typed string alone.
+const _pwQualityJS = `<script>
+function pwScore(pw){
+  if(pw.length===0) return {cls:'pw-empty',label:'enter a password (minimum 5 characters)'};
+  var s=0;
+  if(pw.length>=5) s+=1;
+  if(pw.length>=8) s+=1;
+  if(pw.length>=12) s+=1;
+  if(pw.length>=16) s+=1;
+  var lower=pw.match(/[a-z]/),upper=pw.match(/[A-Z]/),digit=pw.match(/[0-9]/),special=pw.match(/[^a-zA-Z0-9]/);
+  var variety=(lower?1:0)+(upper?1:0)+(digit?1:0)+(special?1:0);
+  if(variety>=2) s+=1;
+  if(variety>=3) s+=1;
+  if(variety>=4) s+=1;
+  var repeats=0;
+  for(var i=0;i<pw.length-1;i++){if(pw[i]===pw[i+1])repeats++;}
+  if(repeats>2&&pw.length<10) s-=1;
+  if(pw.length<5) return {cls:'pw-very-weak',label:'too short (minimum 5 characters required)'};
+  if(s<=2) return {cls:'pw-very-weak',label:'very weak password'};
+  if(s<=4) return {cls:'pw-weak',label:'weak password'};
+  if(s<=6) return {cls:'pw-fair',label:'fair password'};
+  if(s<=8) return {cls:'pw-good',label:'good password'};
+  return {cls:'pw-strong',label:'strong password'};
+}
+function updatePwQuality(){
+  var pw=document.getElementById('pw1').value;
+  var bar=document.getElementById('pw-bar');
+  var lbl=document.getElementById('pw-label');
+  var r=pwScore(pw);
+  bar.className='auth-pw-bar-fill '+r.cls;
+  lbl.textContent=r.label;
+  updatePwMatch();
+}
+function updatePwMatch(){
+  var p1=document.getElementById('pw1').value;
+  var p2=document.getElementById('pw2').value;
+  var m=document.getElementById('pw-match');
+  if(p2.length===0){m.textContent='';m.className='auth-pw-match';return;}
+  if(p1===p2){m.textContent='passwords match';m.className='auth-pw-match match-yes';}
+  else{m.textContent='passwords do not match';m.className='auth-pw-match match-no';}
+}
+document.addEventListener('DOMContentLoaded',function(){
+  var f=document.getElementById('auth-gen-form');
+  if(f)f.addEventListener('submit',function(e){
+    var p1=document.getElementById('pw1').value;
+    if(p1.length<5){e.preventDefault();var lbl=document.getElementById('pw-label');lbl.textContent='too short (minimum 5 characters required)';var bar=document.getElementById('pw-bar');bar.className='auth-pw-bar-fill pw-very-weak';}
+  });
+});
+</script>`
+
 // getAuthHashHTML renders the bootstrap credential generator page. When
 // hashEnv/saltEnv are non-empty the page shows the two env lines to copy;
-// otherwise it shows the password form (or an error message).
+// otherwise it shows the password form with a live password quality bar.
+// The quality checker is pure client-side JS (offline, local-only) — it
+// shows progress but never enforces a minimum beyond 5 characters.
 func getAuthHashHTML(hashEnv, saltEnv, errText string) string {
 	var s strings.Builder
 	s.WriteString(_htmlStart)
@@ -219,11 +277,19 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string) string {
 		s.WriteString("<p class=\"cfg-intro\">Enter the admin password you want to use. opnborg derives the two environment variables " +
 			"<code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> for you (Argon2id, time=8, memory=64 MiB, threads=4, keylen=64). " +
 			"The password itself is never stored; only the derived hash is displayed once for you to copy into the environment, then restart opnborg.</p>")
-		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"auth-hash\">")
-		s.WriteString("<input class=\"auth-input\" type=\"password\" name=\"password\" placeholder=\"admin password\" minlength=\"8\" required autocomplete=\"new-password\">")
-		s.WriteString("<input class=\"auth-gen-form-pw2\" type=\"password\" name=\"password2\" placeholder=\"repeat password\" minlength=\"8\" required autocomplete=\"new-password\">")
-		s.WriteString("<button type=\"submit\" class=\"btn btn-force\">[ Generate Env Vars ]</button>")
+		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"auth-hash\" id=\"auth-gen-form\">")
+		s.WriteString("<div class=\"auth-gen-field-label\">Password</div>")
+		s.WriteString("<input class=\"auth-input\" type=\"password\" name=\"password\" id=\"pw1\" placeholder=\"admin password\" minlength=\"5\" required autocomplete=\"new-password\" oninput=\"updatePwQuality()\">")
+		s.WriteString("<div class=\"auth-pw-strength\">")
+		s.WriteString("<div class=\"auth-pw-bar-track\"><div class=\"auth-pw-bar-fill pw-empty\" id=\"pw-bar\"></div></div>")
+		s.WriteString("<div class=\"auth-pw-label\" id=\"pw-label\">enter a password (minimum 5 characters)</div>")
+		s.WriteString("</div>")
+		s.WriteString("<div class=\"auth-gen-field-label\">Repeat Password</div>")
+		s.WriteString("<input class=\"auth-input auth-gen-form-pw2\" type=\"password\" name=\"password2\" id=\"pw2\" placeholder=\"repeat password\" minlength=\"5\" required autocomplete=\"new-password\" oninput=\"updatePwMatch()\">")
+		s.WriteString("<div class=\"auth-pw-match\" id=\"pw-match\"></div>")
+		s.WriteString("<button type=\"submit\" class=\"btn btn-force\" id=\"pw-submit\">[ Generate Env Vars ]</button>")
 		s.WriteString("</form>")
+		s.WriteString(_pwQualityJS)
 	}
 	s.WriteString("</div>")
 	s.WriteString(_bodyFooter)

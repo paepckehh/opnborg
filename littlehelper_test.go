@@ -7148,6 +7148,20 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "OPN_AUTH_HASH") || !strings.Contains(rec.Body.String(), "OPN_AUTH_SALT") {
 		t.Errorf("generator page must explain the two env vars")
 	}
+	// GET must include the password quality bar and offline JS checker
+	if !strings.Contains(rec.Body.String(), "auth-pw-bar-fill") {
+		t.Errorf("generator page must include the password quality bar")
+	}
+	if !strings.Contains(rec.Body.String(), "pwScore") {
+		t.Errorf("generator page must include the offline password quality checker JS")
+	}
+	if !strings.Contains(rec.Body.String(), "minimum 5 characters") {
+		t.Errorf("generator page must mention the 5 character minimum")
+	}
+	// GET must use equal-looking password fields (both use auth-input class)
+	if strings.Count(rec.Body.String(), "class=\"auth-input\"") < 1 {
+		t.Errorf("generator page must use auth-input class for password fields")
+	}
 	// POST returns derived env values
 	rec2 := httptest.NewRecorder()
 	q2 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=super-secret-9&password2=super-secret-9"))
@@ -7156,6 +7170,22 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	body := rec2.Body.String()
 	if !strings.Contains(body, "OPN_AUTH_HASH=") {
 		t.Errorf("generator must render the OPN_AUTH_HASH env line")
+	}
+	// POST with a 5-char password must succeed (minimum is 5, not 8)
+	rec5 := httptest.NewRecorder()
+	q5 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=abc12&password2=abc12"))
+	q5.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getAuthHashHandler().ServeHTTP(rec5, q5)
+	if !strings.Contains(rec5.Body.String(), "OPN_AUTH_HASH=") {
+		t.Errorf("5-char password must be accepted (minimum is 5)")
+	}
+	// POST with a 4-char password must fail with the too-short error
+	rec4 := httptest.NewRecorder()
+	q4 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=ab12&password2=ab12"))
+	q4.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getAuthHashHandler().ServeHTTP(rec4, q4)
+	if !strings.Contains(rec4.Body.String(), "too short") {
+		t.Errorf("4-char password must be rejected with too-short error")
 	}
 	// mismatched passwords surface an error
 	rec3 := httptest.NewRecorder()
