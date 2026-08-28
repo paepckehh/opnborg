@@ -38,8 +38,8 @@ func startWeb(c *OPNCall) {
 
 	// handler
 	mux.Handle("/", addSecurityHeader(getIndexHandler()))
-	mux.Handle("/config", addSecurityHeader(requireAdmin(getConfigDashboardHandler())))
-	mux.Handle("/audit", addSecurityHeader(requireAdmin(getAuditHandler())))
+	mux.Handle("/config", addSecurityHeader(getConfigDashboardHandler()))
+	mux.Handle("/audit", addSecurityHeader(getAuditHandler()))
 	mux.Handle("/progress", addSecurityHeader(getProgressHandler()))
 	mux.Handle("/files/", addSecurityHeader(requireAdminFiles(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path))))))
 	mux.Handle("/force", requireAdmin(getForceHandler()))

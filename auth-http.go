@@ -22,19 +22,21 @@ import (
 //     to overwrite an existing operator password.
 //   - GET /auth/state exposes the mode + remaining lock for JS polling.
 //
-// requireAdmin is the middleware that gates every sensitive route: when
-// credentials are armed and the request carries no live admin session, the
-// request is redirected to the audit page (for page-render routes) or to
-// the config dashboard (for the /files/ static route) with ?auth=locked so
-// the operator is told to authenticate first. When no credentials are
-// configured the middleware is a pass-through so the monitoring-only view
-// remains usable without login.
+// requireAdmin gates mutating action endpoints (/force, /approve,
+// /approve-all) and the /files/ static file server: when credentials are
+// armed and the request carries no live admin session, the request is
+// redirected to the index with ?auth=locked so the operator is told to
+// authenticate first. Page-render routes (/, /config, /audit, /progress)
+// are NOT gated: they are always viewable; sensitive sub-features (diffs,
+// download buttons, approve controls) are greyed out in the render path
+// when no admin session is present. When no credentials are configured
+// the middleware is a pass-through.
 
-// requireAdmin wraps a handler so only authenticated admin sessions reach it.
-// When credentials are armed and the request lacks a live admin session the
-// client is redirected to the audit page with ?auth=locked. When credentials
-// are not configured the middleware is a pass-through (monitoring-only mode
-// has no login to enforce).
+// requireAdmin wraps a mutating action handler so only authenticated admin
+// sessions reach it. When credentials are armed and the request lacks a
+// live admin session the client is redirected to the index with
+// ?auth=locked. When credentials are not configured the middleware is a
+// pass-through (monitoring-only mode has no login to enforce).
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !authCredentialsEnabled() {
@@ -45,7 +47,7 @@ func requireAdmin(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		http.Redirect(w, r, "audit?auth=locked", http.StatusSeeOther)
+		http.Redirect(w, r, "./?auth=locked", http.StatusSeeOther)
 	})
 }
 

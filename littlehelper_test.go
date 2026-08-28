@@ -7052,9 +7052,9 @@ func TestRequireAdminBlocksUnauthenticated(t *testing.T) {
 	resetAuthState(t)
 	armTestAuth(t, "pw-123456")
 	adminEnabled.Store(false)
-	// monitoring mode: requireAdmin redirects to audit?auth=locked
+	// monitoring mode: requireAdmin redirects to ./?auth=locked
 	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	q := httptest.NewRequest("GET", "http://x/force", nil)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -7063,8 +7063,8 @@ func TestRequireAdminBlocksUnauthenticated(t *testing.T) {
 		t.Fatalf("requireAdmin must redirect unauthenticated request, got %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if !strings.Contains(loc, "audit") || !strings.Contains(loc, "auth=locked") {
-		t.Errorf("requireAdmin must redirect to audit?auth=locked, got %q", loc)
+	if !strings.Contains(loc, "auth=locked") {
+		t.Errorf("requireAdmin must redirect with auth=locked, got %q", loc)
 	}
 }
 
@@ -7079,7 +7079,7 @@ func TestRequireAdminAllowsAuthenticated(t *testing.T) {
 		t.Fatalf("adminEnabled must be true after successful login")
 	}
 	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	q := httptest.NewRequest("GET", "http://x/force", nil)
 	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
 	called := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -7099,7 +7099,7 @@ func TestRequireAdminPassThroughWithoutCredentials(t *testing.T) {
 	resetAuthState(t)
 	// no credentials: requireAdmin is a pass-through (monitoring-only mode)
 	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	q := httptest.NewRequest("GET", "http://x/force", nil)
 	called := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
