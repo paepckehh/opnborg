@@ -528,11 +528,18 @@ type openaiModelsResponse struct {
 // TCP/HTTP connection succeeded; APIReady means the server answered /models
 // with a parseable JSON body; ModelReady means the configured model is present
 // in that list. Err carries the first failure reason, if any, for display.
+// The debug fields (Endpoint, HTTPStatus, ModelCount, AvailableModels) give
+// the operator actionable detail when a probe fails or the configured model
+// is not found.
 type openaiHealth struct {
 	ServerReachable bool
 	APIReady        bool
 	ModelReady      bool
 	Err             string
+	Endpoint        string
+	HTTPStatus      string
+	ModelCount      int
+	AvailableModels []string
 }
 
 // openaiHealthCheck probes the configured OpenAI-compatible server and reports
@@ -547,10 +554,10 @@ func openaiHealthCheck(config *OPNCall) openaiHealth {
 	if !config.OpenAI.Enable {
 		return h
 	}
-	endpoint := strings.TrimRight(config.OpenAI.URL, "/") + _openaiModelsPath
+	h.Endpoint = strings.TrimRight(config.OpenAI.URL, "/") + _openaiModelsPath
 	ctx, cancel := context.WithTimeout(context.Background(), _ollamaHealthTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.Endpoint, nil)
 	if err != nil {
 		h.Err = fmt.Sprintf("build request: %v", err)
 		return h
@@ -566,6 +573,7 @@ func openaiHealthCheck(config *OPNCall) openaiHealth {
 	}
 	defer resp.Body.Close()
 	h.ServerReachable = true
+	h.HTTPStatus = resp.Status
 	if resp.StatusCode != http.StatusOK {
 		h.Err = fmt.Sprintf("api: HTTP %s", resp.Status)
 		return h
@@ -581,6 +589,10 @@ func openaiHealthCheck(config *OPNCall) openaiHealth {
 		return h
 	}
 	h.APIReady = true
+	h.ModelCount = len(models.Data)
+	for _, m := range models.Data {
+		h.AvailableModels = append(h.AvailableModels, m.ID)
+	}
 	model := strings.TrimSpace(config.OpenAI.Model)
 	for _, m := range models.Data {
 		if m.ID == model {

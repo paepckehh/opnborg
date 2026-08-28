@@ -200,19 +200,35 @@ func renderOllamaPanel(c *OPNCall) string {
 // the configured model is available. The probe runs on every dashboard
 // render with a short timeout so a wedged server never stalls the page. The
 // token is shown as a set/not-set pill (never the raw value) so an operator
-// can verify it was understood without leaking the secret.
+// can verify it was understood without leaking the secret. When the feature
+// is enabled the panel also shows the probe endpoint URL, the HTTP status
+// code, the number of models found, and a truncated list of available model
+// names so an operator can spot a mismatch (e.g. a typo in the model name or
+// a server that loaded a different model set).
 func renderOpenAIPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OpenAI Commit Messages</div>")
 	writeDashRow(&s, "Feature Enabled", boolPill(c.OpenAI.Enable))
-	writeDashRow(&s, "REST API URL", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
-	writeDashRow(&s, "Model", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
-	writeDashRow(&s, "API Token", secretPill(c.OpenAI.Token))
+	writeDashRow(&s, "<code>OPENAI_DESC_URL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
+	writeDashRow(&s, "<code>OPENAI_DESC_MODEL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
+	writeDashRow(&s, "<code>OPENAI_DESC_TOKEN</code>", secretPill(c.OpenAI.Token))
 	if c.OpenAI.Enable {
 		h := openaiHealthCheck(c)
 		writeDashRow(&s, "Server Reachable", triStatePill(h.ServerReachable))
 		writeDashRow(&s, "REST API Ready", triStatePill(h.APIReady))
 		writeDashRow(&s, "Model Ready", triStatePill(h.ModelReady))
+		if h.Endpoint != "" {
+			writeDashRow(&s, "Probe Endpoint", "<code>"+html.EscapeString(h.Endpoint)+"</code>")
+		}
+		if h.HTTPStatus != "" {
+			writeDashRow(&s, "HTTP Status", "<code>"+html.EscapeString(h.HTTPStatus)+"</code>")
+		}
+		if h.APIReady {
+			writeDashRow(&s, "Models Found", strconv.Itoa(h.ModelCount))
+			if len(h.AvailableModels) > 0 {
+				writeDashRowBelow(&s, "Available Models", renderModelList(h.AvailableModels))
+			}
+		}
 		if h.Err != "" {
 			writeDashRow(&s, "Probe Error", "<span class=\"dash-err\">"+html.EscapeString(h.Err)+"</span>")
 		} else if h.ModelReady {
@@ -221,6 +237,29 @@ func renderOpenAIPanel(c *OPNCall) string {
 	}
 	s.WriteString("</div>")
 	return s.String()
+}
+
+// renderModelList renders a slice of model IDs as inline chips, capped at
+// 20 entries so a server with hundreds of models does not blow up the
+// dashboard. A "+N more" suffix is appended when truncated.
+func renderModelList(models []string) string {
+	max := 20
+	var b strings.Builder
+	for i, m := range models {
+		if i >= max {
+			b.WriteString("<span class=\"dash-muted\">+")
+			b.WriteString(strconv.Itoa(len(models) - max))
+			b.WriteString(" more</span>")
+			break
+		}
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString("<span class=\"target-chip\">")
+		b.WriteString(html.EscapeString(m))
+		b.WriteString("</span>")
+	}
+	return b.String()
 }
 func renderHttpdPanel(c *OPNCall) string {
 	var s strings.Builder

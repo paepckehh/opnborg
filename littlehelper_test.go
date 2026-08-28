@@ -6397,7 +6397,7 @@ func TestRenderOpenAIPanelDisabled(t *testing.T) {
 	config.OpenAI.URL = ""
 	config.OpenAI.Model = ""
 	out := renderOpenAIPanel(config)
-	for _, want := range []string{"OpenAI Commit Messages", "Feature Enabled", "REST API URL", "Model", "API Token"} {
+	for _, want := range []string{"OpenAI Commit Messages", "Feature Enabled", "OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel missing %q: %s", want, out)
 		}
@@ -6425,8 +6425,9 @@ func TestRenderOpenAIPanelEnabled(t *testing.T) {
 	config.OpenAI.Model = "gpt-oss-120b"
 	out := renderOpenAIPanel(config)
 	for _, want := range []string{
-		"Feature Enabled", "REST API URL", "Model", "API Token",
+		"Feature Enabled", "OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN",
 		"Server Reachable", "REST API Ready", "Model Ready", "Probe State", "ok",
+		"Probe Endpoint", "HTTP Status", "Models Found", "Available Models",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel missing %q: %s", want, out)
@@ -6434,6 +6435,77 @@ func TestRenderOpenAIPanelEnabled(t *testing.T) {
 	}
 	if strings.Contains(out, "Probe Error") {
 		t.Errorf("ready panel should not show a probe error: %s", out)
+	}
+}
+
+// TestRenderOpenAIPanelDebugInfo verifies the panel shows the probe endpoint
+// URL, the HTTP status code, the model count, and the available model names
+// when the server is reachable and the API is ready.
+func TestRenderOpenAIPanelDebugInfo(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(openaiModelsResponse{
+			Data: []openaiModelsModel{
+				{ID: "gpt-4o"},
+				{ID: "gpt-oss-120b"},
+				{ID: "llama3"},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	out := renderOpenAIPanel(config)
+	// Must show the env var names as labels
+	for _, want := range []string{"OPENAI_DESC_URL", "OPENAI_DESC_MODEL", "OPENAI_DESC_TOKEN"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel must show env var name %q: %s", want, out)
+		}
+	}
+	// Must show the probe endpoint
+	if !strings.Contains(out, "/models") {
+		t.Errorf("panel must show probe endpoint path: %s", out)
+	}
+	// Must show the HTTP status (200 OK from test server)
+	if !strings.Contains(out, "200 OK") {
+		t.Errorf("panel must show HTTP status 200 OK: %s", out)
+	}
+	// Must show the model count (3 models)
+	if !strings.Contains(out, "Models Found") {
+		t.Errorf("panel must show Models Found row: %s", out)
+	}
+	// Must list the available model names
+	for _, want := range []string{"gpt-4o", "gpt-oss-120b", "llama3"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel must list available model %q: %s", want, out)
+		}
+	}
+}
+
+// TestRenderOpenAIPanelHTTPError verifies the panel shows the HTTP status code
+// when the server responds with a non-200 status.
+func TestRenderOpenAIPanelHTTPError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	config := &OPNCall{}
+	config.OpenAI.Enable = true
+	config.OpenAI.URL = srv.URL
+	config.OpenAI.Model = "gpt-oss-120b"
+	out := renderOpenAIPanel(config)
+	if !strings.Contains(out, "500") {
+		t.Errorf("panel must show HTTP 500 status: %s", out)
+	}
+	if !strings.Contains(out, "Probe Error") {
+		t.Errorf("panel must show probe error for non-200: %s", out)
 	}
 }
 
