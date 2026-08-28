@@ -14,7 +14,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    execution (the default); never pass `-p 1`. To iterate on a single failing
 >    package, narrow the package list (e.g. `go test ./pkg/...`).
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.195`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.197`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -83,8 +83,8 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 ### HTTP WebUI (`srvHttpd.go`, `httpd-handler.go`, `httpd-ui.go`, `httpd-transport.go`, `progress.go`, `auth.go`, `auth-http.go`)
 
-- **Routes**: `/` (index), `/config` (config dashboard), `/audit` (BorgAUDIT commit-history page), `/progress` (forced-backup progress), `/files/` (static file server rooted at `config.Path`, admin session required), `/force` (manual trigger), `/approve` (single-commit approval toggle), `/approve-all` (bulk approve), `/auth/login` (admin login POST), `/auth/logout` (session revoke POST), `/auth/state` (mode + lock JSON polled by nav-bar JS), `/auth-hash` (credential generator bootstrap page), `/favicon.ico`.
-- **Middleware**: page-render routes (`/`, `/config`, `/audit`, `/progress`, `/files/`) are wrapped with `addSecurityHeader`. `/files/` is additionally wrapped with `requireAdminFiles` (`auth-http.go`): monitoring-mode requests are redirected to `?auth=locked` when credentials are armed, or to the config dashboard when login is impossible. `/force`, `/approve`, and `/approve-all` are wrapped with `requireAdmin`: monitoring-mode POSTs are redirected to `audit?auth=locked` so an unauthenticated client cannot trigger actions by POSTing directly.
+- **Routes**: `/` (index), `/config` (config dashboard), `/audit` (BorgAUDIT commit-history page), `/progress` (forced-backup progress), `/files/` (static file server rooted at `config.Path`), `/force` (manual trigger), `/approve` (single-commit approval toggle), `/approve-all` (bulk approve), `/auth/login` (admin login POST), `/auth/logout` (session revoke POST), `/auth/state` (mode + lock JSON polled by nav-bar JS), `/auth-hash` (credential generator bootstrap page), `/favicon.ico`.
+- **Middleware**: page-render routes (`/`, `/config`, `/audit`, `/progress`, `/files/`) are wrapped with `addSecurityHeader`. No auth middleware is applied to any route — admin login is purely optional, never enforced. `/force`, `/approve`, and `/approve-all` are POST-only action endpoints with no auth gate.
 - Index handler renders HTML built from inlined SVG/HTML constants in `httpd-ui.go`. `_head`, `_forceRedirect` are assembled at `Setup()` time from `OPN_HTTPD_COLOR_FG` / `OPN_HTTPD_COLOR_BG`. Status strings (`_ok`, `_fail`, `_na`, `_degraded`, `_unifi`) are inline animated SVGs; `status.go` mutates `hive` / `unifiStatus` / `unifiWatchStatus` under their respective mutexes.
 - The `/force` handler pokes `updateOPN` / `updateUnifiBackup` / `updateUnifiExport` / `updateUnifiWatch` channels with non-blocking selects (buffer-1 channels): if a pass is already pending it drops the duplicate. It also bumps `forceSeq` (`progress.go`) so the animated progress dashboard knows a fresh forced pass is armed.
 - **Forced-backup progress dashboard** (`progress.go`): every display-engine line is tee'd into a fixed-size ring buffer (`_progressCap`, 512 lines) guarded by `progressMu`. The `/progress` handler streams captured lines as JSON; the page redirects back to the hive view once the forced pass ends. `forceSeq` / `passSeq` / `busy` are lock-free `atomic` counters.
@@ -96,11 +96,11 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 The WebUI **always starts in monitoring-only view mode** — a login is never required, and the `[ Authenticate ]` nav-bar button is purely an optional entry point.
 
-- **Monitoring mode** (green `MONITORING` badge): full dashboard readable; config-file download buttons and BorgAUDIT approval actions are greyed out.
-- **Admin mode** (red/yellow `ADMIN` badge): per-browser-session state unlocked by submitting the admin password via the nav-bar dialog; enables config downloads and approve / approve-all actions.
+- **Monitoring mode** (green `MONITORING` badge): full dashboard readable; config-file downloads and BorgAUDIT approval actions are always available (admin login is never enforced). The only monitoring-mode gate is the audit page's diff details: in monitoring mode the unified-diff block is replaced with a greyed-out placeholder that shows a "please logon" info dialog on click; in admin mode the full diff is shown.
+- **Admin mode** (red/yellow `ADMIN` badge): per-browser-session state unlocked by submitting the admin password via the nav-bar dialog; enables audit diff details.
 - **Startup validation** (`authInit`, called from `Setup()`): login is armed only when `OPN_AUTH_HASH` + `OPN_AUTH_SALT` are both present, non-empty, non-whitespace, and valid — the hash must carry the `$` separator with both key halves decoding to exactly 64 bytes (keylen), and the salt must base64-decode to >= 8 raw bytes. Invalid content keeps auth fully disabled (`[AUTH][DISABLED]`), the login dialog is never rendered, and `authCheckPassword` refuses every attempt.
-- **Locked-button behavior**: in monitoring mode, greyed-out buttons either open the login dialog (credentials armed) or navigate to the config dashboard's Authentication setup section (login impossible).
-- **Sessions**: successful login mints a 32-byte random token as an HttpOnly SameSite=Strict cookie (`opnborg_auth`, TTL 12 h sliding). `authIsAdmin(q)` is the single render-path gate; the `/files/` gate enforces it server-side.
+- **Audit diff gating**: in monitoring mode the audit page hides the unified-diff details behind a greyed-out placeholder that shows the auth info dialog on click ("please authenticate"). In admin mode the full diff is rendered. This is the only feature gated behind admin login.
+- **Sessions**: successful login mints a 32-byte random token as an HttpOnly SameSite=Strict cookie (`opnborg_auth`, TTL 12 h sliding). `authIsAdmin(q)` gates the audit diff rendering only.
 - **Global lockout**: failed logins bump a process-global counter shared across ALL sessions — 10 s after the 1st failure, doubling with each further failure (10s, 20s, 40s, ...). Resets on successful login, daemon restart, or 6 h of inactivity; countdown shown live in nav bar (polled from `/auth/state`).
 - **Credential generator** (`/auth-hash`): enter a password; opnborg derives `OPN_AUTH_HASH` (format `<base64-key>$<base64-key>`) and `OPN_AUTH_SALT` (16 raw random bytes) with Argon2id (time=8, memory=64 MiB, keylen=64). The password is never stored or logged; the endpoint refuses with 403 once valid credentials are armed.
 - Verification is constant-time (`subtle.ConstantTimeCompare`); all state transitions logged to `displayChan` with `[AUTH]` tags.
@@ -117,7 +117,7 @@ A single on-disk SQLite database (`approval.db`, co-located with `config.Path`) 
 - `approvalDB` is a package-global `*sql.DB` opened from `gitInit` (`git.go`) after repo init, and lazily from the httpd. `approvalBackfillFromHistory` walks the existing commit log on a fresh store.
 - `approvalTrackCommit` is called from `gitCommit` after every commit (idempotent insert). `syncAuditCommitsToLedger` reconciles the ledger with the audit page.
 - The `.gitignore` carries `approval.db*` (plus explicit `-wal` / `-shm` entries); `gitEnsureIgnore` reconciles this on every startup, and `gitCommit` skips any path containing `approval.db`.
-- `POST /approve?hash=<hash>&range=<range>` and `POST /approve-all?range=<range>` toggle approval state and redirect to the audit page. Both require a live admin-mode session (`requireAdmin` wrapper); in monitoring mode the buttons render as locked hints.
+- `POST /approve?hash=<hash>&range=<range>` and `POST /approve-all?range=<range>` toggle approval state and redirect to the audit page. Both are POST-only; no auth gate is applied (admin login is optional, never enforced).
 
 ### OPNsense API endpoints (`transport.go`)
 

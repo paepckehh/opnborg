@@ -169,23 +169,8 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + totalBox + lastFileBox + errBox + tagBox
 }
 
-// _btnDownloadLockedTitle is the hover tooltip shown on greyed-out config
-// download buttons in monitoring mode.
-const (
-	_btnDownloadLockedTitle = "opnborg is currently in monitoring mode only: config downloads are locked, set up authentication in the config dashboard (Authentication tile)"
-)
-
-// renderDownloadButton renders one config-file download button. In monitoring
-// mode (the default startup mode, no admin session) the button is greyed out:
-//   - when admin credentials are armed, clicking opens the login dialog, or
-//   - when no (or invalid) OPN_AUTH_* credentials are configured, clicking
-//     points the operator at the config dashboard authentication setup
-//     section (login is not possible at all in that state).
-//
-// In admin mode the regular download link is rendered.
+// renderDownloadButton renders one config-file download button. Downloads are
+// always available — admin login is optional, never enforced.
 func renderDownloadButton(href, label string) string {
-	if adminEnabled.Load() {
-		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
-	}
-	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"showAuthInfoDialog('config download locked in monitoring mode')\"><span class=\"btn-dl-locked\">" + label + "</span></span>"
+	return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
 }

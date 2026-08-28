@@ -478,6 +478,9 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .audit-diff[open]>summary.audit-diff-head{color:var(--accent-2);border-bottom:1px solid var(--border)}
 .audit-diff-head{padding:.35rem .8rem;background:rgba(0,0,0,.28);color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em}
 .audit-diff-empty{padding:.5rem .8rem}
+.audit-diff-locked{cursor:pointer;opacity:.5;filter:grayscale(.7);border:1px solid var(--border);border-radius:var(--radius-sm);transition:border-color .2s,color .2s,opacity .2s}
+.audit-diff-locked:hover{border-color:var(--warn);color:var(--warn);opacity:.8}
+.audit-diff-locked-msg{padding:.55rem .8rem;font-size:.75rem;color:var(--muted);font-family:var(--mono)}
 .audit-diff-body{margin:0;padding:.55rem .8rem;background:#0b0f14;font-family:var(--mono);font-size:.75rem;line-height:1.45;white-space:pre;overflow-x:auto;tab-size:2;border:1px solid var(--border);border-radius:0 0 var(--radius-sm) var(--radius-sm)}
 .audit-diff-body code{font-family:inherit;font-size:inherit;background:transparent}
 .diff-file{color:#79c0ff;font-weight:600;display:block}

@@ -6926,43 +6926,24 @@ func authCheckPasswordWithCredentials(t *testing.T, password string) (string, ti
 	return authCheckPassword(password)
 }
 
-func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
+func TestDownloadButtonAlwaysActive(t *testing.T) {
 	resetAuthState(t)
+	// downloads are never enforced — admin login is optional
 	got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
-	if !strings.Contains(got, "btn-dl-locked") {
-		t.Errorf("monitoring mode must grey out download buttons: %q", got)
+	if !strings.Contains(got, "<a href=") {
+		t.Errorf("download button must always be an active link: %q", got)
 	}
-	if !strings.Contains(got, "monitoring mode only") {
-		t.Errorf("locked button must carry the monitoring-mode hint: %q", got)
+	if strings.Contains(got, "dl-locked") {
+		t.Errorf("download button must never be locked: %q", got)
 	}
-	// regression guard: a disabled <button> swallows click events, so the
-	// onclick navigation on the wrapping span would never fire. The locked
-	// control must be a clickable element itself, never a disabled button.
-	if strings.Contains(got, "<button disabled") {
-		t.Errorf("locked control must not use a disabled <button> (click events would be swallowed): %q", got)
+	if strings.Contains(got, "showAuthInfoDialog") {
+		t.Errorf("download button must not carry auth gating: %q", got)
 	}
-	// without credentials: clicking must show the auth info dialog (which
-	// explains how to set up credentials), not the login dialog directly
-	if !strings.Contains(got, "showAuthInfoDialog") {
-		t.Errorf("locked click without credentials must show the info dialog: %q", got)
-	}
-	if strings.Contains(got, "openAuthDialog") {
-		t.Errorf("locked click without credentials must not open the login dialog directly: %q", got)
-	}
-	// with armed credentials the same locked button still shows the info
-	// dialog (which offers a direct "Authenticate Now" button)
-	armTestAuth(t, "pw-123456")
-	gotArmed := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
-	if !strings.Contains(gotArmed, "showAuthInfoDialog") {
-		t.Errorf("locked click with armed credentials must show the info dialog: %q", gotArmed)
-	}
-	if strings.Contains(gotArmed, "<button disabled") {
-		t.Errorf("locked control must not use a disabled <button>: %q", gotArmed)
-	}
+	// same in admin mode
 	adminEnabled.Store(true)
 	got2 := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
 	if !strings.Contains(got2, "<a href=") {
-		t.Errorf("admin mode must render the active download link: %q", got2)
+		t.Errorf("admin mode download button must be an active link: %q", got2)
 	}
 }
 
@@ -6981,129 +6962,53 @@ func TestStartHTMLIncludesAuthNavUI(t *testing.T) {
 	}
 }
 
-func TestAuditApprovalLockedInMonitoringMode(t *testing.T) {
+func TestAuditDiffLockedInMonitoringMode(t *testing.T) {
 	resetAuthState(t)
-	savedCfg := _cfg
-	t.Cleanup(func() { _cfg = savedCfg })
-	_cfg = &OPNCall{Git: struct {
-		Enable     bool
-		Upstream   string
-		SSHKey     string
-		SSHHostKey string
-	}{Enable: true}}
-	c := auditCommit{fullHash: "0123456789abcdef0123456789abcdef01234567"}
-	got := renderAuditApprovalControl(c, "critical", "24h", false)
-	if !strings.Contains(got, "auth required") {
-		t.Errorf("monitoring mode must render the locked approve hint: %q", got)
+	commits := []auditCommit{{
+		hash:    "abcdef0",
+		author:  "test",
+		when:    time.Now(),
+		message: "test commit\ntag: medium\n",
+		diff:    "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n-old\n+new\n",
+	}}
+	// monitoring mode: diff details are hidden, click shows auth info
+	out := renderAuditCommits(commits, "24h", false)
+	if !strings.Contains(out, "audit-diff-locked") {
+		t.Errorf("monitoring mode must render locked diff placeholder: %q", out)
 	}
-	if !strings.Contains(got, "showAuthInfoDialog") {
-		t.Errorf("locked approve must show the info dialog on click: %q", got)
+	if !strings.Contains(out, "showAuthInfoDialog") {
+		t.Errorf("locked diff must show auth info dialog on click: %q", out)
 	}
-	gotAll := renderAuditApproveAllButton("24h", false)
-	if !strings.Contains(gotAll, "auth required") {
-		t.Errorf("monitoring mode must lock approve-all: %q", gotAll)
+	if strings.Contains(out, "audit-diff-body") {
+		t.Errorf("monitoring mode must not render the diff body: %q", out)
 	}
-	if !strings.Contains(gotAll, "showAuthInfoDialog") {
-		t.Errorf("locked approve-all must show the info dialog on click: %q", gotAll)
+	// admin mode: full diff is shown
+	outAdmin := renderAuditCommits(commits, "24h", true)
+	if !strings.Contains(outAdmin, "audit-diff-body") {
+		t.Errorf("admin mode must render the full diff body: %q", outAdmin)
+	}
+	if strings.Contains(outAdmin, "audit-diff-locked") {
+		t.Errorf("admin mode must not render locked diff placeholder: %q", outAdmin)
 	}
 }
 
-func TestFilesHandlerRequiresAdmin(t *testing.T) {
+func TestFilesHandlerNoAuthGate(t *testing.T) {
 	resetAuthState(t)
+	// files endpoint is never auth-gated — admin login is optional
 	rec := httptest.NewRecorder()
 	q := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
-	requireAdminFiles(http.NotFoundHandler()).ServeHTTP(rec, q)
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("monitoring-mode file access must redirect, got %d", rec.Code)
-	}
-	// with a live session the request passes through to the next handler
-	token, _, err := authCheckPasswordWithCredentials(t, "pw-123456")
-	if err != nil {
-		t.Fatalf("login failed: %v", err)
-	}
-	rec2 := httptest.NewRecorder()
-	q2 := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
-	q2.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	requireAdminFiles(inner).ServeHTTP(rec2, q2)
-	if rec2.Code != http.StatusOK {
-		t.Errorf("admin session must pass the file gate, got %d", rec2.Code)
-	}
-}
-
-func TestRequireAdminBlocksUnauthenticated(t *testing.T) {
-	resetAuthState(t)
-	// monitoring mode: any POST to /approve or /approve-all must be
-	// redirected before the inner handler runs
-	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567", nil)
-	called := false
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
-	requireAdmin(inner).ServeHTTP(rec, q)
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("monitoring-mode approve must redirect, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
-		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
-	}
-	if called {
-		t.Error("inner handler must NOT be called in monitoring mode")
-	}
-}
-
-func TestRequireAdminAllowsAuthenticated(t *testing.T) {
-	resetAuthState(t)
-	armTestAuth(t, "pw-123456")
-	token, _, err := authCheckPasswordWithCredentials(t, "pw-123456")
-	if err != nil {
-		t.Fatalf("login failed: %v", err)
-	}
-	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567", nil)
-	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
-	called := false
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})
-	requireAdmin(inner).ServeHTTP(rec, q)
+	inner.ServeHTTP(rec, q)
 	if rec.Code != http.StatusOK {
-		t.Errorf("admin session must pass the gate, got %d", rec.Code)
-	}
-	if !called {
-		t.Error("inner handler must be called in admin mode")
+		t.Errorf("file access must not be auth-gated, got %d", rec.Code)
 	}
 }
 
-func TestApproveHandlerRequiresAdmin(t *testing.T) {
-	resetAuthState(t)
-	// monitoring mode: direct POST to /approve must be blocked
-	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567&range=24h", nil)
-	requireAdmin(getApproveHandler()).ServeHTTP(rec, q)
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("monitoring-mode approve must redirect, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
-		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
-	}
-}
-
-func TestApproveAllHandlerRequiresAdmin(t *testing.T) {
-	resetAuthState(t)
-	// monitoring mode: direct POST to /approve-all must be blocked
-	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("POST", "http://x/approve-all?range=24h", nil)
-	requireAdmin(getApproveAllHandler()).ServeHTTP(rec, q)
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("monitoring-mode approve-all must redirect, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
-		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
-	}
-}
+// TestRequireAdminBlocksUnauthenticated and TestRequireAdminAllowsAuthenticated
+// were removed: the requireAdmin/requireAdminFiles middleware was deleted
+// because admin login is now purely optional and never enforced.
 
 func TestLoginHandlerFlow(t *testing.T) {
 	resetAuthState(t)

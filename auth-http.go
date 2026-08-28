@@ -135,33 +135,6 @@ func getAuthHashHandler() http.Handler {
 	return http.HandlerFunc(h)
 }
 
-// requireAdminFiles guards the /files/ static server: config downloads are
-// an admin-mode capability. Monitoring-mode clients are bounced back to the
-// hive index with an explanatory query flag so the UI can surface the reason.
-func requireAdminFiles(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
-		if !authIsAdmin(q) {
-			http.Redirect(w, q, "./?auth=locked", http.StatusSeeOther)
-			return
-		}
-		next.ServeHTTP(w, q)
-	})
-}
-
-// requireAdmin guards mutating action endpoints (approve, approve-all, force)
-// so an unauthenticated client cannot bypass the greyed-out UI buttons by
-// POSTing directly to the endpoint. Monitoring-mode clients are redirected
-// to the audit page with an auth=locked flag so the UI surfaces the reason.
-func requireAdmin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
-		if !authIsAdmin(q) {
-			http.Redirect(w, q, "audit?auth=locked", http.StatusSeeOther)
-			return
-		}
-		next.ServeHTTP(w, q)
-	})
-}
-
 // sanitizeAuthNext constrains the post-login redirect target to a small
 // allow-list of relative pages so an open-redirect cannot smuggle operators
 // off the WebUI (or onto //evil.example style scheme-relative URLs).

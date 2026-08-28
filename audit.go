@@ -853,11 +853,6 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 	if !isSecurityRelevantTag(severity) || c.fullHash == "" {
 		return ""
 	}
-	// monitoring mode: approval actions require an authenticated admin-mode
-	// session; surface a locked hint instead of the active button.
-	if !admin {
-		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\" onclick=\"showAuthInfoDialog('commit approval locked in monitoring mode')\"><span class=\"meta-label\">approve &#128274; (auth required)</span></span>"
-	}
 	st, ok := approvalGet(_cfg, c.fullHash)
 	if !ok {
 		// The ledger is unavailable or the query failed: render a degraded box
@@ -928,11 +923,6 @@ func approvalOperatorLabel(st approvalState) string {
 func renderAuditApproveAllButton(rangeSlug string, admin bool) string {
 	if _cfg == nil || !_cfg.Git.Enable {
 		return ""
-	}
-	// monitoring mode: approval actions require an authenticated admin-mode
-	// session; render the disabled locked hint instead of the active form.
-	if !admin {
-		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\" onclick=\"showAuthInfoDialog('approve-all locked in monitoring mode')\"><span class=\"meta-label\">approve all &#128274; (auth required)</span></span>"
 	}
 	pending := approvalPendingCount(_cfg)
 	var b strings.Builder
@@ -1048,6 +1038,8 @@ func renderAuditCommits(commits []auditCommit, rangeSlug string, admin bool) str
 		s.WriteString("</pre>")
 		if c.diff == "" {
 			s.WriteString("<div class=\"audit-diff-empty\"><span class=\"dash-muted\">no diff (root commit or binary-only changes)</span></div>")
+		} else if !admin {
+			s.WriteString("<div class=\"audit-diff-locked\" title=\"detailed diff hidden in monitoring mode: authenticate to view source diff\" onclick=\"showAuthInfoDialog('diff details locked in monitoring mode, please authenticate')\"><span class=\"audit-diff-head\">unified diff &#128274; (auth required)</span><div class=\"audit-diff-locked-msg\">source diff details are hidden in monitoring mode &#8212; authenticate to view the full unified diff</div></div>")
 		} else {
 			s.WriteString("<details class=\"audit-diff\"><summary class=\"audit-diff-head\">unified diff")
 			if c.truncated {
