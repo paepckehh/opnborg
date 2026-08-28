@@ -6926,24 +6926,40 @@ func authCheckPasswordWithCredentials(t *testing.T, password string) (string, ti
 	return authCheckPassword(password)
 }
 
-func TestDownloadButtonAlwaysActive(t *testing.T) {
+func TestDownloadButtonGatedByAuthMode(t *testing.T) {
 	resetAuthState(t)
-	// downloads are never enforced — admin login is optional
+	// no credentials configured: downloads are active (monitoring-only mode
+	// has no login to enforce)
 	got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
 	if !strings.Contains(got, "<a href=") {
-		t.Errorf("download button must always be an active link: %q", got)
+		t.Errorf("download button must be an active link when no credentials configured: %q", got)
 	}
 	if strings.Contains(got, "dl-locked") {
-		t.Errorf("download button must never be locked: %q", got)
+		t.Errorf("download button must not be locked without credentials: %q", got)
 	}
-	if strings.Contains(got, "showAuthInfoDialog") {
-		t.Errorf("download button must not carry auth gating: %q", got)
+
+	// credentials armed, monitoring mode: locked
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+	got = renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+	if strings.Contains(got, "<a href=") {
+		t.Errorf("download button must not be an active link in monitoring mode with credentials armed: %q", got)
 	}
-	// same in admin mode
+	if !strings.Contains(got, "dl-locked") {
+		t.Errorf("download button must be locked in monitoring mode: %q", got)
+	}
+	if !strings.Contains(got, "showAuthInfoDialog") {
+		t.Errorf("locked download button must open auth info dialog: %q", got)
+	}
+
+	// admin mode: active link
 	adminEnabled.Store(true)
 	got2 := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
 	if !strings.Contains(got2, "<a href=") {
 		t.Errorf("admin mode download button must be an active link: %q", got2)
+	}
+	if strings.Contains(got2, "dl-locked") {
+		t.Errorf("admin mode download button must not be locked: %q", got2)
 	}
 }
 
@@ -6992,23 +7008,127 @@ func TestAuditDiffLockedInMonitoringMode(t *testing.T) {
 	}
 }
 
-func TestFilesHandlerNoAuthGate(t *testing.T) {
+func TestFilesHandlerAdminGate(t *testing.T) {
 	resetAuthState(t)
-	// files endpoint is never auth-gated — admin login is optional
+	// no credentials configured: files endpoint is a pass-through (monitoring-only)
 	rec := httptest.NewRecorder()
 	q := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	inner.ServeHTTP(rec, q)
+	requireAdminFiles(inner).ServeHTTP(rec, q)
 	if rec.Code != http.StatusOK {
-		t.Errorf("file access must not be auth-gated, got %d", rec.Code)
+		t.Errorf("files endpoint must be accessible without credentials configured, got %d", rec.Code)
+	}
+
+	// credentials armed, monitoring mode: redirect to config?auth=locked
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+	rec2 := httptest.NewRecorder()
+	requireAdminFiles(inner).ServeHTTP(rec2, q)
+	if rec2.Code != http.StatusSeeOther {
+		t.Errorf("files endpoint must redirect in monitoring mode with credentials armed, got %d", rec2.Code)
+	}
+	loc := rec2.Header().Get("Location")
+	if !strings.Contains(loc, "config") || !strings.Contains(loc, "auth=locked") {
+		t.Errorf("files redirect must go to config?auth=locked, got %q", loc)
+	}
+
+	// admin mode: pass-through
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	rec3 := httptest.NewRecorder()
+	q3 := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+	q3.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	requireAdminFiles(inner).ServeHTTP(rec3, q3)
+	if rec3.Code != http.StatusOK {
+		t.Errorf("files endpoint must be accessible in admin mode, got %d", rec3.Code)
 	}
 }
 
-// TestRequireAdminBlocksUnauthenticated and TestRequireAdminAllowsAuthenticated
-// were removed: the requireAdmin/requireAdminFiles middleware was deleted
-// because admin login is now purely optional and never enforced.
+func TestRequireAdminBlocksUnauthenticated(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+	// monitoring mode: requireAdmin redirects to audit?auth=locked
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	requireAdmin(inner).ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("requireAdmin must redirect unauthenticated request, got %d", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "audit") || !strings.Contains(loc, "auth=locked") {
+		t.Errorf("requireAdmin must redirect to audit?auth=locked, got %q", loc)
+	}
+}
+
+func TestRequireAdminAllowsAuthenticated(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	if !adminEnabled.Load() {
+		t.Fatalf("adminEnabled must be true after successful login")
+	}
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	requireAdmin(inner).ServeHTTP(rec, q)
+	if !called {
+		t.Errorf("requireAdmin must pass through an authenticated request")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("authenticated request must get 200, got %d", rec.Code)
+	}
+}
+
+func TestRequireAdminPassThroughWithoutCredentials(t *testing.T) {
+	resetAuthState(t)
+	// no credentials: requireAdmin is a pass-through (monitoring-only mode)
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/audit", nil)
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	requireAdmin(inner).ServeHTTP(rec, q)
+	if !called {
+		t.Errorf("requireAdmin must pass through when no credentials are configured")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("request must get 200 without credentials, got %d", rec.Code)
+	}
+}
+
+func TestLogoutClearsAdminEnabled(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	if !adminEnabled.Load() {
+		t.Fatalf("adminEnabled must be true after login")
+	}
+	authLogout(token)
+	if adminEnabled.Load() {
+		t.Errorf("adminEnabled must be false after logout when no sessions remain")
+	}
+}
 
 func TestLoginHandlerFlow(t *testing.T) {
 	resetAuthState(t)

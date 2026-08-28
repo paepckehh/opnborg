@@ -169,8 +169,17 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + totalBox + lastFileBox + errBox + tagBox
 }
 
-// renderDownloadButton renders one config-file download button. Downloads are
-// always available — admin login is optional, never enforced.
+// renderDownloadButton renders one config-file download button. When
+// credentials are armed and no admin session is live (monitoring mode) the
+// button is rendered as a locked control that opens the auth info dialog
+// explaining how to authenticate. In admin mode (or when no credentials are
+// configured) the button is an active download link.
 func renderDownloadButton(href, label string) string {
+	if adminEnabled.Load() {
+		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
+	}
+	if authCredentialsEnabled() {
+		return "<button class=\"dl-locked\" title=\"config downloads are locked in monitoring mode &#8212; authenticate to unlock\" onclick=\"showAuthInfoDialog('config file downloads are locked in monitoring mode, please authenticate')\">" + label + " &#128274;</button>"
+	}
 	return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
 }

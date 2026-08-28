@@ -22,9 +22,50 @@ import (
 //     to overwrite an existing operator password.
 //   - GET /auth/state exposes the mode + remaining lock for JS polling.
 //
-// The /files/ static handler is wrapped with requireAdminFiles so config
-// downloads (current.xml / archive) are admin-only; page renders grey the
-// download buttons out in monitoring mode.
+// requireAdmin is the middleware that gates every sensitive route: when
+// credentials are armed and the request carries no live admin session, the
+// request is redirected to the audit page (for page-render routes) or to
+// the config dashboard (for the /files/ static route) with ?auth=locked so
+// the operator is told to authenticate first. When no credentials are
+// configured the middleware is a pass-through so the monitoring-only view
+// remains usable without login.
+
+// requireAdmin wraps a handler so only authenticated admin sessions reach it.
+// When credentials are armed and the request lacks a live admin session the
+// client is redirected to the audit page with ?auth=locked. When credentials
+// are not configured the middleware is a pass-through (monitoring-only mode
+// has no login to enforce).
+func requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authCredentialsEnabled() {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if authIsAdmin(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.Redirect(w, r, "audit?auth=locked", http.StatusSeeOther)
+	})
+}
+
+// requireAdminFiles wraps the /files/ static file server so config-file
+// downloads (current.xml / archive) are admin-only when credentials are
+// armed. When credentials are not configured the middleware is a
+// pass-through.
+func requireAdminFiles(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authCredentialsEnabled() {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if authIsAdmin(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.Redirect(w, r, "config?auth=locked", http.StatusSeeOther)
+	})
+}
 
 // getLoginHandler processes password submissions.
 func getLoginHandler() http.Handler {

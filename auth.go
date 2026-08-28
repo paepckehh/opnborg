@@ -201,6 +201,7 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 	_, _ = rand.Read(tokenRaw)
 	token = base64.RawURLEncoding.EncodeToString(tokenRaw)
 	auth.sessions[token] = time.Now().Add(_authSessionTTL)
+	adminEnabled.Store(true)
 	displayChan <- []byte("[AUTH][LOGIN][OK] admin mode session unlocked (ttl " + _authSessionTTL.String() + ")")
 	return token, 0, nil
 }
@@ -237,15 +238,23 @@ func authRemainingLock() (time.Duration, int) {
 	return remain, auth.fails
 }
 
-// authLogout revokes the session carried by the given token.
+// authLogout revokes the session carried by the given token. When no
+// sessions remain the atomic adminEnabled flag is cleared so the render
+// path (greyed-out download buttons) reflects the monitoring-only state.
 func authLogout(token string) {
 	auth.mu.Lock()
-	defer auth.mu.Unlock()
 	delete(auth.sessions, token)
+	remaining := len(auth.sessions)
+	auth.mu.Unlock()
+	if remaining == 0 {
+		adminEnabled.Store(false)
+	}
 }
 
 // authSessionAdmin reports whether the request's session cookie carries a
-// live admin-mode session and refreshes the sliding expiry window.
+// live admin-mode session and refreshes the sliding expiry window. It also
+// mirrors the result into the atomic adminEnabled flag so the render path
+// (greyed-out download buttons) can read it without a request handle.
 func authSessionAdmin(token string) bool {
 	if token == "" {
 		return false
