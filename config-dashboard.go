@@ -209,9 +209,9 @@ func renderOpenAIPanel(c *OPNCall) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">OpenAI Commit Messages</div>")
 	writeDashRow(&s, "Feature Enabled", boolPill(c.OpenAI.Enable))
-	writeDashRow(&s, "<code>OPENAPI_DESC_URL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
-	writeDashRow(&s, "<code>OPENAPI_DESC_MODEL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
-	writeDashRow(&s, "<code>OPENAPI_DESC_TOKEN</code>", secretPill(c.OpenAI.Token))
+	writeDashRowHTML(&s, "<code>OPENAPI_DESC_URL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.URL)))
+	writeDashRowHTML(&s, "<code>OPENAPI_DESC_MODEL</code>", maskIfEmpty(html.EscapeString(c.OpenAI.Model)))
+	writeDashRowHTML(&s, "<code>OPENAPI_DESC_TOKEN</code>", secretPill(c.OpenAI.Token))
 	if c.OpenAI.Enable {
 		h := openaiHealthCheck(c)
 		writeDashRow(&s, "Server Reachable", triStatePill(h.ServerReachable))
@@ -370,6 +370,17 @@ func renderMonitoringPanel(c *OPNCall) string {
 func writeDashRow(s *strings.Builder, label, value string) {
 	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">")
 	s.WriteString(html.EscapeString(label))
+	s.WriteString("</span><span class=\"dash-value\">")
+	s.WriteString(value)
+	s.WriteString("</span></div>")
+}
+
+// writeDashRowHTML emits a single label/value row whose label is trusted,
+// code-authored HTML (e.g. a <code> env-var name) and must NOT be escaped.
+// The value is written verbatim, exactly like writeDashRow.
+func writeDashRowHTML(s *strings.Builder, label, value string) {
+	s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">")
+	s.WriteString(label)
 	s.WriteString("</span><span class=\"dash-value\">")
 	s.WriteString(value)
 	s.WriteString("</span></div>")

@@ -6402,6 +6402,14 @@ func TestRenderOpenAIPanelDisabled(t *testing.T) {
 			t.Errorf("panel missing %q: %s", want, out)
 		}
 	}
+	for _, want := range []string{"<code>OPENAPI_DESC_URL</code>", "<code>OPENAPI_DESC_MODEL</code>", "<code>OPENAPI_DESC_TOKEN</code>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel must render env var name %q as HTML, not escaped: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "&lt;code&gt;") {
+		t.Errorf("panel labels must not be HTML-escaped: %s", out)
+	}
 	if strings.Contains(out, "Server Reachable") {
 		t.Errorf("disabled panel should not run the probe (no Server Reachable row): %s", out)
 	}
