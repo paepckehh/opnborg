@@ -187,8 +187,5 @@ func renderDownloadButton(href, label string) string {
 	if adminEnabled.Load() {
 		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
 	}
-	if authCredentialsEnabled() {
-		return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"openAuthDialog('monitoring mode only: config download locked, please authenticate first')\"><span class=\"btn-dl-locked\">" + label + "</span></span>"
-	}
-	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"window.location.href='config'\"><span class=\"btn-dl-locked\">" + label + "</span></span>"
+	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"showAuthInfoDialog('config download locked in monitoring mode')\"><span class=\"btn-dl-locked\">" + label + "</span></span>"
 }

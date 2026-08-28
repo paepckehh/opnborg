@@ -856,7 +856,7 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 	// monitoring mode: approval actions require an authenticated admin-mode
 	// session; surface a locked hint instead of the active button.
 	if !admin {
-		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\"><span class=\"meta-label\">approve &#128274; (auth required)</span></span>"
+		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\" onclick=\"showAuthInfoDialog('commit approval locked in monitoring mode')\"><span class=\"meta-label\">approve &#128274; (auth required)</span></span>"
 	}
 	st, ok := approvalGet(_cfg, c.fullHash)
 	if !ok {
@@ -932,7 +932,7 @@ func renderAuditApproveAllButton(rangeSlug string, admin bool) string {
 	// monitoring mode: approval actions require an authenticated admin-mode
 	// session; render the disabled locked hint instead of the active form.
 	if !admin {
-		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\"><span class=\"meta-label\">approve all &#128274; (auth required)</span></span>"
+		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\" onclick=\"showAuthInfoDialog('approve-all locked in monitoring mode')\"><span class=\"meta-label\">approve all &#128274; (auth required)</span></span>"
 	}
 	pending := approvalPendingCount(_cfg)
 	var b strings.Builder

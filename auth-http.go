@@ -342,6 +342,12 @@ func getBodyHead(q *http.Request) string {
 	if !isAdmin && armed {
 		dialog = authDialog("")
 	}
+	// the info dialog is always available in monitoring mode so every
+	// greyed-out control can explain why it is locked and how to proceed.
+	infoDialog := ""
+	if !isAdmin {
+		infoDialog = authInfoDialog(armed)
+	}
 
 	var s strings.Builder
 	s.WriteString("<header class=\"app-header\"><h1>" + _app + "</h1>")
@@ -351,6 +357,7 @@ func getBodyHead(q *http.Request) string {
 	s.WriteString("<div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ " + SemVer + " ]</a></div>")
 	s.WriteString("</div></header>" + _lf)
 	s.WriteString(dialog)
+	s.WriteString(infoDialog)
 	return s.String()
 }
 
@@ -381,6 +388,42 @@ func authDialog(failHint string) string {
 </div>` + _lf
 }
 
+// authInfoDialog renders a modal dialog that explains why an action is
+// locked in monitoring mode and how to unlock it. The content adapts to
+// the current authentication state:
+//   - when auth credentials are armed, the dialog explains how to login
+//     via the nav bar [ Authenticate ] button, and offers a button that
+//     opens the login dialog directly;
+//   - when no credentials are configured, the dialog explains what admin
+//     mode is, how to generate and configure OPN_AUTH_HASH / OPN_AUTH_SALT,
+//     and links to the /auth-hash credential generator.
+func authInfoDialog(armed bool) string {
+	var body string
+	if armed {
+		body = `<div class="auth-info-step"><span class="auth-info-num">1</span><span>Click the <strong>[ Authenticate ]</strong> button in the top-right nav bar.</span></div>
+<div class="auth-info-step"><span class="auth-info-num">2</span><span>Enter your admin password in the dialog that opens.</span></div>
+<div class="auth-info-step"><span class="auth-info-num">3</span><span>After successful authentication, monitoring mode switches to <strong>admin mode</strong> and this action will be unlocked.</span></div>`
+	} else {
+		body = `<div class="auth-info-step"><span class="auth-info-num">1</span><span>Generate credentials: visit the <a href="auth-hash">/auth-hash</a> page to create an admin password and derive the <code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> values.</span></div>
+<div class="auth-info-step"><span class="auth-info-num">2</span><span>Set environment variables: configure <code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> in your opnborg environment (e.g. in your <code>.env</code> file).</span></div>
+<div class="auth-info-step"><span class="auth-info-num">3</span><span>Restart opnborg to apply the new configuration. The nav bar will then show the <strong>[ Authenticate ]</strong> login button.</span></div>`
+	}
+	actionBtn := ""
+	if armed {
+		actionBtn = `<button type="button" class="btn btn-force auth-info-action" onclick="closeAuthInfoDialog();openAuthDialog('')">[ Authenticate Now ]</button>`
+	} else {
+		actionBtn = `<a href="auth-hash"><button type="button" class="btn btn-force auth-info-action">[ Go to Auth Setup ]</button></a>`
+	}
+	return `<div class="auth-dialog-backdrop" id="auth-info-dialog" hidden>
+<div class="auth-dialog auth-info-dialog">
+<div class="auth-dialog-title">Action Locked: Monitoring Mode</div>
+<div class="auth-info-msg" id="auth-info-msg" hidden></div>
+<div class="auth-info-steps">` + body + `</div>
+<div class="auth-info-actions">` + actionBtn + `<button type="button" class="btn auth-cancel" onclick="closeAuthInfoDialog()">[ Close ]</button></div>
+</div>
+</div>` + _lf
+}
+
 // _authJS is the small browser helper shipped with every page that carries
 // the nav-bar auth UI. It opens/closes the login dialog, shows the clock
 // standby animation while the Argon2id derivation round-trips, and polls
@@ -389,6 +432,8 @@ func authDialog(failHint string) string {
 const _authJS = `<script>
 function openAuthDialog(msg){var d=document.getElementById('auth-dialog');if(!d)return;d.hidden=false;var e=document.getElementById('auth-err');if(msg&&e){e.textContent=msg;e.hidden=false;}var p=document.getElementById('auth-password');if(p)p.focus();}
 function closeAuthDialog(){var d=document.getElementById('auth-dialog');if(d)d.hidden=true;stopAuthPoll();}
+function showAuthInfoDialog(msg){var d=document.getElementById('auth-info-dialog');if(!d)return;d.hidden=false;var m=document.getElementById('auth-info-msg');if(msg&&m){m.textContent=msg;m.hidden=false;}else if(m){m.hidden=true;}}
+function closeAuthInfoDialog(){var d=document.getElementById('auth-info-dialog');if(d)d.hidden=true;}
 function stopAuthPoll(){if(window._authPoll){clearInterval(window._authPoll);window._authPoll=null;}}
 function authCheckStart(){
  var chk=document.getElementById('auth-checking');var f=document.getElementById('auth-form');
@@ -412,7 +457,7 @@ document.addEventListener('DOMContentLoaded',function(){
  if(f)f.addEventListener('submit',function(){authCheckStart();});
  var q=new URLSearchParams(window.location.search);
  if(q.get('auth')==='fail'){var w=parseInt(q.get('wait')||'0',10);openAuthDialog(w>0?('login locked for '+w+'s (shared wait for all sessions), attempt #'+(q.get('f')||'?')):'invalid password, please try again');}
- if(q.get('auth')==='locked'){openAuthDialog('monitoring mode: action locked, please authenticate first');}
+ if(q.get('auth')==='locked'){showAuthInfoDialog('monitoring mode: action locked, please authenticate first');}
  stopAuthPoll();window._authPoll=setInterval(authPollLock,1000);authPollLock();
 });
 </script>`

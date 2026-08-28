@@ -6941,19 +6941,20 @@ func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
 	if strings.Contains(got, "<button disabled") {
 		t.Errorf("locked control must not use a disabled <button> (click events would be swallowed): %q", got)
 	}
-	// without credentials: clicking must point at the config dashboard setup
-	// section, and the login dialog must NOT be invoked
-	if !strings.Contains(got, "window.location.href='config'") {
-		t.Errorf("locked click without credentials must point to the config page: %q", got)
+	// without credentials: clicking must show the auth info dialog (which
+	// explains how to set up credentials), not the login dialog directly
+	if !strings.Contains(got, "showAuthInfoDialog") {
+		t.Errorf("locked click without credentials must show the info dialog: %q", got)
 	}
 	if strings.Contains(got, "openAuthDialog") {
-		t.Errorf("locked click without credentials must not open the login dialog: %q", got)
+		t.Errorf("locked click without credentials must not open the login dialog directly: %q", got)
 	}
-	// with armed credentials the same locked button opens the login dialog
+	// with armed credentials the same locked button still shows the info
+	// dialog (which offers a direct "Authenticate Now" button)
 	armTestAuth(t, "pw-123456")
 	gotArmed := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
-	if !strings.Contains(gotArmed, "openAuthDialog") {
-		t.Errorf("locked click with armed credentials must open the login dialog: %q", gotArmed)
+	if !strings.Contains(gotArmed, "showAuthInfoDialog") {
+		t.Errorf("locked click with armed credentials must show the info dialog: %q", gotArmed)
 	}
 	if strings.Contains(gotArmed, "<button disabled") {
 		t.Errorf("locked control must not use a disabled <button>: %q", gotArmed)
@@ -6995,9 +6996,15 @@ func TestAuditApprovalLockedInMonitoringMode(t *testing.T) {
 	if !strings.Contains(got, "auth required") {
 		t.Errorf("monitoring mode must render the locked approve hint: %q", got)
 	}
+	if !strings.Contains(got, "showAuthInfoDialog") {
+		t.Errorf("locked approve must show the info dialog on click: %q", got)
+	}
 	gotAll := renderAuditApproveAllButton("24h", false)
 	if !strings.Contains(gotAll, "auth required") {
 		t.Errorf("monitoring mode must lock approve-all: %q", gotAll)
+	}
+	if !strings.Contains(gotAll, "showAuthInfoDialog") {
+		t.Errorf("locked approve-all must show the info dialog on click: %q", gotAll)
 	}
 }
 
@@ -7224,10 +7231,14 @@ func TestRenderAuthPanel(t *testing.T) {
 func TestNoAuthPossibleWithoutCredentials(t *testing.T) {
 	resetAuthState(t)
 	// no env vars: login must be impossible and the login dialog must not
-	// be rendered into the header at all
+	// be rendered into the header at all (the info dialog IS present so
+	// locked controls can explain the situation)
 	got := getBodyHead(nil)
-	if strings.Contains(got, "auth-dialog-backdrop") {
+	if strings.Contains(got, `id="auth-dialog"`) {
 		t.Errorf("login dialog must not be rendered when no credentials are configured: %q", got)
+	}
+	if !strings.Contains(got, `id="auth-info-dialog"`) {
+		t.Errorf("info dialog must be rendered in monitoring mode even without credentials: %q", got)
 	}
 	if !strings.Contains(got, "auth-setup") {
 		t.Errorf("Authenticate button must fall back to the setup link: %q", got)
@@ -7277,16 +7288,23 @@ func TestAuthInitInvalidContentDisablesLogin(t *testing.T) {
 func TestGetBodyHeadNoDialogWhenUnarmed(t *testing.T) {
 	resetAuthState(t)
 	got := getBodyHead(nil)
-	if strings.Contains(got, "auth-dialog-backdrop") {
+	// without credentials: no login dialog, but the info dialog IS present
+	if strings.Contains(got, `id="auth-dialog"`) {
 		t.Errorf("login dialog must not render without credentials: %q", got)
 	}
-	// armed: dialog present
+	if !strings.Contains(got, `id="auth-info-dialog"`) {
+		t.Errorf("info dialog must render in monitoring mode: %q", got)
+	}
+	// armed: both login dialog and info dialog present
 	armTestAuth(t, "pw-123456")
 	gotArmed := getBodyHead(nil)
-	if !strings.Contains(gotArmed, "auth-dialog-backdrop") {
+	if !strings.Contains(gotArmed, `id="auth-dialog"`) {
 		t.Errorf("login dialog must render with armed credentials: %q", gotArmed)
 	}
-	// armed + authenticated: no dialog, logout instead
+	if !strings.Contains(gotArmed, `id="auth-info-dialog"`) {
+		t.Errorf("info dialog must render with armed credentials: %q", gotArmed)
+	}
+	// armed + authenticated: no dialogs at all, logout instead
 	auth.mu.Lock()
 	for token := range auth.sessions {
 		auth.sessions[token] = time.Now().Add(time.Hour)
@@ -7303,10 +7321,40 @@ func TestGetBodyHeadNoDialogWhenUnarmed(t *testing.T) {
 	}
 	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
 	gotAdmin := getBodyHead(q)
-	if strings.Contains(gotAdmin, "auth-dialog-backdrop") {
+	if strings.Contains(gotAdmin, `id="auth-dialog"`) {
 		t.Errorf("authenticated header must not render the login dialog: %q", gotAdmin)
+	}
+	if strings.Contains(gotAdmin, `id="auth-info-dialog"`) {
+		t.Errorf("authenticated header must not render the info dialog: %q", gotAdmin)
 	}
 	if !strings.Contains(gotAdmin, ">ADMIN<") {
 		t.Errorf("authenticated header must show ADMIN: %q", gotAdmin)
+	}
+}
+
+// TestAuthInfoDialogContent verifies the info dialog adapts its content to
+// the current authentication state: credential setup instructions when
+// unarmed, login instructions when armed.
+func TestAuthInfoDialogContent(t *testing.T) {
+	resetAuthState(t)
+	// without credentials: dialog explains how to set up auth
+	got := authInfoDialog(false)
+	for _, want := range []string{"auth-info-dialog", "auth-hash", "OPN_AUTH_HASH", "OPN_AUTH_SALT", "Go to Auth Setup"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("unarmed info dialog missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "Authenticate Now") {
+		t.Errorf("unarmed info dialog must not offer the login button: %q", got)
+	}
+	// with armed credentials: dialog explains how to login via nav bar
+	gotArmed := authInfoDialog(true)
+	for _, want := range []string{"auth-info-dialog", "Authenticate Now", "nav bar", "admin mode"} {
+		if !strings.Contains(gotArmed, want) {
+			t.Errorf("armed info dialog missing %q: %q", want, gotArmed)
+		}
+	}
+	if strings.Contains(gotArmed, "auth-hash") {
+		t.Errorf("armed info dialog must not link to the credential setup page: %q", gotArmed)
 	}
 }
