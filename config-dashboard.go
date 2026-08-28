@@ -686,7 +686,7 @@ func renderRawEnvValue(name, val string) string {
 // It shows the current WebUI mode (monitoring vs admin), whether the
 // OPN_AUTH_HASH / OPN_AUTH_SALT credentials are armed, and a button that
 // opens the credential generator so the operator can create the two env
-// vars for a chosen password (Argon2id, time=8, memory=64 MiB, threads=4,
+// vars for a chosen password (Argon2id, time=8, memory=64 MiB, threads=1,
 // keylen=64). The generator is always available — even when credentials
 // are already armed — so an operator can generate a fresh pair at any
 // time. The password itself is never stored; opnborg only displays the
@@ -701,7 +701,7 @@ func renderAuthPanel(c *OPNCall) string {
 	}
 	writeDashRow(&s, "Current Mode", mode)
 	writeDashRow(&s, "Credentials", secretPillOpnAuth())
-	writeDashRow(&s, "KDF", "Argon2id &middot; time=8 &middot; memory=64 MiB &middot; threads=4 &middot; keylen=64")
+	writeDashRow(&s, "KDF", "Argon2id &middot; time=8 &middot; memory=64 MiB &middot; threads=1 &middot; keylen=64")
 	if authCredentialsEnabled() {
 		writeDashRow(&s, "Login", "<span class=\"dash-ok\">armed</span> (nav-bar [ Authenticate ] button)")
 	} else {

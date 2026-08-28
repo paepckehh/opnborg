@@ -31,7 +31,7 @@ A self-hosted, single-binary daemon that **backs up, monitors, and synchronizes 
 
 ## 🆕 Announcing BorgAUDIT — AI-reviewed firewall change history
 
-Point opnborg at a local [Ollama](https://ollama.com) daemon (`OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`) and every backup commit message is written by the LLM from the enriched diff — and ends with a **`tag: <severity>[, needs-review]`** line that pre-triages the security impact of each change (`low` / `medium` / `high` / `critical`). The new **BorgAUDIT** WebUI tile surfaces the git commit history with the full message and the syntax-highlighted unified diff for the last 24h / 7d / 1m, so the AI's risk classification meets a human reviewer in the same page. Resistance is futile — your firewall changes will be audited.
+Point opnborg at a local [Ollama](https://ollama.com) daemon (`OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`) and every backup commit message is written by the LLM from the enriched diff — and ends with a **`tag: <severity>[, needs-review]`** line that pre-triages the security impact of each change (`low` / `medium` / `high` / `critical`). The new **BorgAUDIT** WebUI tile surfaces the git commit history with the full message and the syntax-highlighted unified diff for the last 24h / 7d / 1m / 3m / 6m, so the AI's risk classification meets a human reviewer in the same page. Resistance is futile — your firewall changes will be audited.
 
 ---
 
@@ -41,7 +41,7 @@ Point opnborg at a local [Ollama](https://ollama.com) daemon (`OLLAMA_DESC_URL` 
 - **Central Package Management** — replicate installed OPNsense plugins from one master host to every target.
 - **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive for auditable change-log trails and rapid restore.
 - **AI Security Audit Review** — when a local [Ollama](https://ollama.com) daemon is configured, every backup commit message is authored by the LLM from the enriched diff and ends with a `tag: <severity>[, needs-review]` line that classifies the security impact of the change (`low` / `medium` / `high` / `critical`), so each change in the commit history is pre-triaged by risk for human review.
-- **BorgAUDIT WebUI** — a dedicated WebUI tile and `/audit` page render the storage repo git commit history (commit metadata, full message including the AI `tag:` line, and the full syntax-highlighted unified diff) for the last 24 hours / 7 days / 1 month, so an operator can review what changed across the hive at a glance.
+- **BorgAUDIT WebUI** — a dedicated WebUI tile and `/audit` page render the storage repo git commit history (commit metadata, full message including the AI `tag:` line, and the full syntax-highlighted unified diff) for the last 24 hours / 7 days / 1 / 3 / 6 months, so an operator can review what changed across the hive at a glance.
 - **Central Log Consolidation** — built-in RFC5424 syslog collector with rotation and archiving.
 - **Unifi Controller Backup** — download and archive Unifi controller `.unf` backups, mirror a co-located autoBackup folder, and export the Unifi inventory to CSV/JSON.
 - **Backup Dashboard** — the WebUI renders a bottom-of-page `BorgDASHBOARD` panel showing the on-disk backup store stats (servers, archive count, total size, newest archive), the local git repo state (HEAD, commit count, last commit, dirty worktree), and the upstream sync health (in sync / ahead / behind / diverged / never pushed, last push result) — all gathered from local state with no network round-trip on render.
@@ -373,10 +373,11 @@ The **Authentication** tile on the config dashboard shows the current mode,
 whether the credentials are armed (masked), the KDF parameter set, and a
 *Create Authentication Env Vars* button: enter the password you want to use,
 and opnborg derives the two env vars below with Argon2id (time=8, memory=64
-MiB, threads=4, keylen=64). Copy both into the opnborg environment (e.g.
+MiB, threads=1, keylen=64). Copy both into the opnborg environment (e.g.
 `.env` or systemd unit) and restart. The password itself is never stored or
-logged; the generator endpoint refuses to run once valid credentials are
-armed.
+logged; the generator page is always available, even when credentials are
+already armed (new values only take effect after you replace the env vars and
+restart).
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -387,7 +388,7 @@ armed.
 
 When `OPN_GIT_ENABLE` is set, the index page carries a **BorgAUDIT** tile that
 links to a dedicated `/audit?range=` page rendering the storage repo git commit
-history for the last 24 hours / 7 days / 1 month. Each entry is a collapsible
+history for the last 24 hours / 7 days / 1 / 3 / 6 months. Each entry is a collapsible
 card carrying the commit hash, author, date, file-change stats, the full commit
 message (including the AI `tag: <severity>[, needs-review]` line when the
 commit was Ollama-authored), and the full syntax-highlighted unified diff
@@ -398,8 +399,10 @@ it. The walk is bounded (250 commits per page, 512 KB diff per commit) and opens
 the repo directly against `OPN_PATH` with no `os.Chdir`, so it is safe to render
 concurrently with the backup workers.
 
-Host key verification relies on the default `~/.ssh/known_hosts` file; make sure
-the upstream host is present there before enabling push.
+Host key verification never reads or writes `~/.ssh/known_hosts`: pin the
+upstream host key fingerprint via `OPN_GIT_SSH_HOSTKEY` (recommended whenever
+the upstream is reachable over an untrusted network); when unset, host key
+verification is skipped entirely for unattended container/CI deployments.
 
 ### Package Installation Sync
 

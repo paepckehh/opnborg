@@ -3,6 +3,7 @@ package opnborg
 import (
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -67,7 +68,7 @@ func getApproveAllHandler() http.Handler {
 			if err != nil {
 				displayChan <- []byte("[APPROVAL][APPROVE-ALL][FAIL] " + err.Error())
 			} else {
-				displayChan <- []byte("[APPROVAL][APPROVE-ALL][OK][" + itoa(n) + "] by " + approvalSourceLabel(sourceIP, xff, remoteUser))
+				displayChan <- []byte("[APPROVAL][APPROVE-ALL][OK][" + strconv.FormatInt(n, 10) + "] by " + approvalSourceLabel(sourceIP, xff, remoteUser))
 			}
 		}
 		http.Redirect(r, q, auditRedirectTarget(q), http.StatusSeeOther)
@@ -97,29 +98,4 @@ func approvalSourceLabel(sourceIP, xff, remoteUser string) string {
 		b.WriteString(remoteUser)
 	}
 	return b.String()
-}
-
-// itoa is a local strconv.Itoa alias-free helper kept to avoid pulling an
-// extra import into approval-http.go; the bulk-approve count is a small
-// non-negative int64.
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

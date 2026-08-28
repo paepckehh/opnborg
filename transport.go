@@ -126,40 +126,38 @@ func installPKG(config *OPNCall, server, pkg string) error {
 	return nil
 }
 
-// fetchOPN retrives the xml and unmarschal it into an Opnsense object
-func fetchOPN(server string, config *OPNCall) (opn *Opnsense, err error) {
+// fetchOPN retrieves the xml, validates it, and unmarshals it into an Opnsense
+// object. The raw XML payload is returned as well so the caller (actionOPN)
+// can reuse it for the backup check-in instead of downloading the same
+// document a second time.
+func fetchOPN(server string, config *OPNCall) (opn *Opnsense, masterXML []byte, err error) {
 
 	// fetch current XML config from server
-	masterXML, err := fetchXML(server, config)
+	masterXML, err = fetchXML(server, config)
 	if err != nil {
 		displayChan <- []byte("[ERROR][FAIL:UNABLE-TO-FETCH] " + server)
-		return opn, err
+		return opn, nil, err
 	}
 
 	// validate XML
 	if !isValidXML(string(masterXML)) {
-		return opn, errors.New("[INVALID-XML-FILE]")
+		return opn, nil, errors.New("[INVALID-XML-FILE]")
 	}
 
 	// xml unmarshal
 	if err = xml.Unmarshal(masterXML, &opn); err != nil {
 		displayChan <- []byte("[ERROR][XML-PARSE]" + server)
-		return opn, err
+		return opn, nil, err
 	}
 
 	// verify opnborg schema completeness, re-encode xml
 	_, err = xml.MarshalIndent(&opn, " ", "  ")
 	if err != nil {
 		displayChan <- []byte("[ERROR][XML-RE-ENCODE]" + server)
-		return opn, err
+		return opn, nil, err
 	}
 
-	// diff xml files
-	// dmp := diffmatchpatch.New()
-	// diffs := dmp.DiffMain(string(masterXML), string(verifyXML), false)
-	// fmt.Println(dmp.DiffPrettyText(diffs))
-
-	return opn, nil
+	return opn, masterXML, nil
 }
 
 // fetchXML file from target server

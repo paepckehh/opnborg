@@ -83,7 +83,7 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	// append the sha256.db entry
 	logEntry := name + _tab + base64.StdEncoding.EncodeToString(sum[:]) + _linefeed
 	hashPath := filepath.Join(serverRoot, _hashFile)
-	hashFile, err := os.OpenFile(hashPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	hashFile, err := os.OpenFile(hashPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0660)
 	if err != nil {
 		logBackupErr("FAIL:UNABLE-TO-OPEN-OR-CREATE-HASHSHUM-FILE", server)
 		return err

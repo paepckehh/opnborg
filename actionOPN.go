@@ -22,8 +22,9 @@ func actionOPN(server, tag string, config *OPNCall, id int, wg *sync.WaitGroup) 
 	// get current opn config via xml
 	fetchFail, degraded, notice := false, false, ""
 	opn := new(Opnsense)
+	serverXML := []byte(nil)
 	if config.Sync.Enable || config.RSysLog.Enable {
-		if opn, err = fetchOPN(server, config); err != nil {
+		if opn, serverXML, err = fetchOPN(server, config); err != nil {
 			displayChan <- []byte("[XML][FAIL]" + err.Error())
 			degraded = true
 			fetchFail = true
@@ -47,12 +48,15 @@ func actionOPN(server, tag string, config *OPNCall, id int, wg *sync.WaitGroup) 
 		}
 	}
 
-	// fetch current XML backup from server
-	serverXML, err := fetchXML(server, config)
-	if err != nil {
-		displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-XML] " + server + err.Error())
-		setOPNStatus(config, server, tag, notice, id, ts, degraded, false)
-		return
+	// fetch current XML backup from server. When the sync/syslog pre-checks
+	// already pulled the config above, reuse that payload instead of issuing
+	// a second download of the same document.
+	if serverXML == nil {
+		if serverXML, err = fetchXML(server, config); err != nil {
+			displayChan <- []byte("[BACKUP][ERROR][FAIL:UNABLE-TO-FETCH-XML] " + server + err.Error())
+			setOPNStatus(config, server, tag, notice, id, ts, degraded, false)
+			return
+		}
 	}
 
 	// check for changes

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,11 +29,16 @@ import (
 // red/yellow for admin. Login attempts are globally rate-limited with a
 // doubling backoff shared across ALL browser sessions.
 
-// argon2id derivation parameters (fixed defaults, see AGENTS.md).
+// argon2id derivation parameters (fixed defaults, see README.md).
+//
+// NOTE on threads: the derivation intentionally runs single-lane (1). All
+// historical releases derived with threads=1, and the OPN_AUTH_HASH format
+// does not encode the KDF parameters, so raising the lane count now would
+// silently invalidate every credential already armed in the field. Keep 1.
 const (
 	_authArgonTime    = uint32(8)
 	_authArgonMemory  = uint32(64 * 1024)
-	_authArgonThreads = uint8(4) // documented default; IDKey derives its own lane count from 1..4 via runtime, fixed at call sites
+	_authArgonThreads = uint8(1)
 	_authArgonKeyLen  = uint32(64)
 	_authArgonSaltLen = 16
 
@@ -96,7 +102,7 @@ func authInit() {
 		return
 	}
 	if !validAuthHashFormat(hash) {
-		displayChan <- []byte("[AUTH][DISABLED][INVALID-" + _envAuthHash + "] expected '<base64-key>$<base64-key>' (argon2id, time=8,memory=65536,threads=4,keylen=64)")
+		displayChan <- []byte("[AUTH][DISABLED][INVALID-" + _envAuthHash + "] expected '<base64-key>$<base64-key>' (argon2id, time=8,memory=65536,threads=1,keylen=64)")
 		return
 	}
 	saltBytes, err := base64.StdEncoding.DecodeString(salt)
@@ -136,9 +142,9 @@ func decodeHashHalf(s string) ([]byte, error) {
 }
 
 // authArgonDerive runs the fixed-parameter Argon2id KDF (time=8,
-// memory=64MiB, threads=4, keylen=64).
+// memory=64MiB, threads=1, keylen=64).
 func authArgonDerive(password string, salt []byte) []byte {
-	return argon2.IDKey([]byte(password), salt, _authArgonTime, _authArgonMemory, 1, _authArgonKeyLen)
+	return argon2.IDKey([]byte(password), salt, _authArgonTime, _authArgonMemory, _authArgonThreads, _authArgonKeyLen)
 }
 
 // generateAuthCredentials derives OPN_AUTH_HASH and OPN_AUTH_SALT for a new
@@ -176,10 +182,8 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 		return "", remain, errors.New("login locked, please wait")
 	}
 	// 6h idle reset of the global fail counter
-	if !auth.lockUntil.IsZero() || auth.fails > 0 {
-		if !auth.lastFail.IsZero() && time.Since(auth.lastFail) >= _authFailWindow {
-			auth.fails = 0
-		}
+	if !auth.lastFail.IsZero() && time.Since(auth.lastFail) >= _authFailWindow {
+		auth.fails = 0
 	}
 	refHash, decErr := decodeHashHalf(auth.hash)
 	if decErr != nil {
@@ -190,7 +194,7 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 		auth.fails++
 		auth.lastFail = time.Now()
 		wait = authArmWaitLocked(auth.fails)
-		displayChan <- []byte("[AUTH][LOGIN][FAIL] failed attempts=" + itoa(int64(auth.fails)) + " global lock=" + wait.String())
+		displayChan <- []byte("[AUTH][LOGIN][FAIL] failed attempts=" + strconv.Itoa(auth.fails) + " global lock=" + wait.String())
 		return "", wait, errors.New("invalid password")
 	}
 	// success: reset the fail counter, mint the session

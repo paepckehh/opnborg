@@ -3,7 +3,9 @@ package opnborg
 import (
 	"html"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // auth-http.go wires the two-mode access model into the WebUI:
@@ -133,8 +135,8 @@ func getAuthStateHandler() http.Handler {
 		}
 		_, _ = r.Write([]byte(`{"mode":"` + mode +
 			`","credentials":` + boolJSON(authCredentialsEnabled()) +
-			`,"lock_seconds":` + itoa(int64(lock.Seconds())) +
-			`,"fails":` + itoa(int64(fails)) + `}`))
+			`,"lock_seconds":` + strconv.Itoa(int(lock.Seconds())) +
+			`,"fails":` + strconv.Itoa(fails) + `}`))
 	}
 	return http.HandlerFunc(h)
 }
@@ -191,12 +193,12 @@ func sanitizeAuthNext(next string) string {
 
 // authWaitSeconds renders a wait duration as whole seconds for the redirect
 // query string (minimum 1 so the dialog always shows a live countdown).
-func authWaitSeconds(d interface{ Seconds() float64 }) string {
+func authWaitSeconds(d time.Duration) string {
 	s := int(d.Seconds())
 	if s < 1 {
 		s = 1
 	}
-	return itoa(int64(s))
+	return strconv.Itoa(s)
 }
 
 // boolJSON renders a bool as a JSON literal.
@@ -300,7 +302,7 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 				"in your environment and restart opnborg. After the restart the old password will no longer work." +
 				"</div>")
 		}
-		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=4, keylen=64). " +
+		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"Add both environment variables to your opnborg environment (e.g. your <code>.env</code> file or systemd unit) and restart the daemon to arm admin mode:</p>")
 		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthHash + "=</span><code class=\"auth-env-code\">" + html.EscapeString(hashEnv) + "</code></div>")
 		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthSalt + "=</span><code class=\"auth-env-code\">" + html.EscapeString(saltEnv) + "</code></div>")
@@ -313,7 +315,7 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 				"</div>")
 		}
 		s.WriteString("<p class=\"cfg-intro\">Enter the admin password you want to use. opnborg derives the two environment variables " +
-			"<code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> for you (Argon2id, time=8, memory=64 MiB, threads=4, keylen=64). " +
+			"<code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> for you (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"The password itself is never stored; only the derived hash is displayed once for you to copy into the environment, then restart opnborg.</p>")
 		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"auth-hash\" id=\"auth-gen-form\">")
 		s.WriteString("<div class=\"auth-gen-field-label\">Password</div>")
@@ -351,34 +353,36 @@ func getBodyHead(q *http.Request) string {
 	if isAdmin {
 		modeBox = "<div class=\"mode-box mode-admin\" title=\"admin mode: authenticated session, config downloads and audit approvals unlocked\">ADMIN</div>"
 	} else if armed && lock > 0 {
-		modeBox = "<div class=\"mode-box mode-lock\" title=\"login locked after failed attempts (shared across all sessions)\" id=\"auth-lock\" data-wait=\"" + itoa(int64(lock.Seconds())) + "\">LOCKED " + itoa(int64(lock.Seconds())) + "s</div>"
+		modeBox = "<div class=\"mode-box mode-lock\" title=\"login locked after failed attempts (shared across all sessions)\" id=\"auth-lock\" data-wait=\"" + strconv.Itoa(int(lock.Seconds())) + "\">LOCKED " + strconv.Itoa(int(lock.Seconds())) + "s</div>"
 	}
 
 	// auth action button
 	authBtn := ""
+	failHint := ""
+	if fails > 0 {
+		failHint = "(" + strconv.Itoa(fails) + " failed)"
+	}
 	switch {
 	case isAdmin:
 		authBtn = "<form class=\"auth-nav-form\" method=\"post\" action=\"auth/logout\"><button type=\"submit\" class=\"auth-nav-btn auth-logout\" title=\"end the admin-mode session\">[ Logout ]</button></form>"
 	case armed:
 		if lock > 0 {
-			authBtn = "<button type=\"button\" class=\"auth-nav-btn auth-locked\" disabled title=\"login locked, shared wait across all sessions\">[ Locked " + itoa(int64(lock.Seconds())) + "s ]</button>"
+			authBtn = "<button type=\"button\" class=\"auth-nav-btn auth-locked\" disabled title=\"login locked, shared wait across all sessions\">[ Locked " + strconv.Itoa(int(lock.Seconds())) + "s ]</button>"
 		} else {
-			hint := ""
-			if fails > 0 {
-				hint = " (" + itoa(int64(fails)) + " failed)"
-			}
-			authBtn = "<button type=\"button\" class=\"auth-nav-btn\" onclick=\"openAuthDialog('')\" title=\"authenticate to unlock config downloads and audit approvals\">[ Authenticate ]</button>" + authDialog(hint)
+			authBtn = "<button type=\"button\" class=\"auth-nav-btn\" onclick=\"openAuthDialog('')\" title=\"authenticate to unlock config downloads and audit approvals\">[ Authenticate ]</button>"
 		}
 	default:
 		authBtn = "<a href=\"auth-hash\"><button type=\"button\" class=\"auth-nav-btn auth-setup\" title=\"no credentials configured: create OPN_AUTH_HASH / OPN_AUTH_SALT\">[ Authenticate ]</button></a>"
 	}
-	// the dialog markup is only rendered when the login flow is actually
+	// the login dialog markup is only rendered when the login flow is actually
 	// reachable: with no (or invalid) OPN_AUTH_* credentials there is nothing
 	// to authenticate against, so every locked button points at the config
-	// dashboard's authentication setup section instead.
+	// dashboard's authentication setup section instead. It is rendered exactly
+	// once (the fail hint rides along) so the page never carries two elements
+	// with the same dialog id.
 	dialog := ""
 	if !isAdmin && armed {
-		dialog = authDialog("")
+		dialog = authDialog(failHint)
 	}
 	// the info dialog is always available in monitoring mode so every
 	// greyed-out control can explain why it is locked and how to proceed.

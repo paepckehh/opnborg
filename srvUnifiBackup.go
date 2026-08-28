@@ -33,9 +33,12 @@ func srvUnifiBackup(config *OPNCall) {
 			InsecureSkipVerify: true,
 		},
 	}
+	// The timeout bounds every request (login, system check, backup download)
+	// so a wedged controller can never stall the backup goroutine forever.
 	client := http.Client{
 		Jar:       jar,
 		Transport: transport,
+		Timeout:   120 * time.Second,
 	}
 
 	// prep login

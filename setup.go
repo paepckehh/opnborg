@@ -119,9 +119,16 @@ func Setup() (*OPNCall, error) {
 		config.AppName = "[OPNBORG-API]"
 	}
 
-	// sanitize input
+	// sanitize input. The store path is resolved to an absolute path so the
+	// various os.Chdir call sites (gitInit / gitCheckIn / startWeb) always
+	// land on the same directory: with a relative OPN_PATH a first Chdir
+	// would move the process working directory and a second relative Chdir
+	// would resolve against the new base, escaping the store.
 	if config.Path == "" {
-		config.Path = filepath.Dir("./")
+		config.Path = "."
+	}
+	if abs, absErr := filepath.Abs(config.Path); absErr == nil {
+		config.Path = abs
 	}
 
 	// validate bools

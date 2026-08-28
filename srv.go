@@ -6,6 +6,27 @@ import (
 	"time"
 )
 
+// parseServerTag splits a "server[#asset-tag]" target entry into its host
+// and optional asset tag. ok is false for malformed entries (empty host or
+// more than one '#'), which the caller surfaces as a configuration error. A
+// trailing "#" (empty tag) is tolerated and dropped. This helper is the
+// single source of truth for the host/tag format; the status-tile init and
+// the worker dispatch in srv() both parse through it so the two can never
+// drift apart (see the AGENTS.md gotcha about the duplicated split).
+func parseServerTag(server string) (host, tag string, ok bool) {
+	s := strings.Split(server, "#")
+	if len(s) == 2 && s[1] == "" {
+		s = s[:1] // trailing "#": drop the empty tag
+	}
+	if len(s) > 2 || len(s[0]) == 0 {
+		return "", "", false
+	}
+	if len(s) == 2 {
+		return s[0], s[1], true
+	}
+	return s[0], "", true
+}
+
 // Start Server Application
 func srv(config *OPNCall) error {
 	// init
@@ -99,19 +120,16 @@ func srv(config *OPNCall) error {
 		// later; otherwise a targets string like "a,,b" would shift every
 		// status tile and eventually panic on a hive index out of range.
 		servers = nil
-		for _, server := range strings.Split(config.Targets, ",") {
-			s := strings.Split(server, "#")
-			if len(s) == 2 && len(s[1]) == 0 {
-				s = s[:1] // trailing "#": drop the empty tag
-			}
-			if len(s) > 2 || len(s[0]) == 0 {
+		for server := range strings.SplitSeq(config.Targets, ",") {
+			host, tag, valid := parseServerTag(server)
+			if !valid {
 				hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">configuration error, please fix configuration line for server: "+html.EscapeString(server)+"</span></div>")
 				displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
 				continue
 			}
-			hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">Member: "+html.EscapeString(s[0])+" Version: n/a Last Seen: n/a</span></div>")
-			if len(s) == 2 {
-				hive[len(hive)-1] += "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(s[1]) + "</span></div>"
+			hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">Member: "+html.EscapeString(host)+" Version: n/a Last Seen: n/a</span></div>")
+			if tag != "" {
+				hive[len(hive)-1] += "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(tag) + "</span></div>"
 			}
 			servers = append(servers, server)
 		}
@@ -155,13 +173,9 @@ func srv(config *OPNCall) error {
 			// lines and detect completion.
 			beginBackupPass()
 			for id, server := range servers {
-				s := strings.Split(server, "#")
-				tag := ""
-				if len(s) == 2 {
-					tag = s[1]
-				}
+				host, tag, _ := parseServerTag(server) // validity was checked during hive init
 				wg.Add(1)
-				go actionOPN(s[0], tag, config, id, &wg)
+				go actionOPN(host, tag, config, id, &wg)
 			}
 
 			// wait till all worker done

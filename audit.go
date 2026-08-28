@@ -844,6 +844,11 @@ func auditBadgeHTML(severity string, needsReview, backup bool) string {
 //     so an operator can see at a glance that the change was reviewed and
 //     signed off. Once approved the approve button is gone entirely.
 //
+// In monitoring mode (admin=false) with credentials armed the approve button
+// is replaced by a locked hint that opens the auth info dialog, matching the
+// greyed-out download buttons and diff details; the POST endpoint itself is
+// additionally gated by requireAdmin.
+//
 // rangeSlug is used in the approve form's redirect so the operator lands back
 // on the same audit range.
 //
@@ -881,6 +886,12 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 		return b.String()
 	}
 	var b strings.Builder
+	if !admin && authCredentialsEnabled() {
+		b.WriteString("<button type=\"button\" class=\"btn btn-approve approve-locked\" title=\"approvals are locked in monitoring mode \u2014 authenticate to unlock\" onclick=\"showAuthInfoDialog('approval actions are locked in monitoring mode, please authenticate')\">")
+		b.WriteString("<span class=\"approve-emoji\">\u2705</span> approve \u128274")
+		b.WriteString("</button>")
+		return b.String()
+	}
 	b.WriteString("<form class=\"approve-form\" method=\"post\" action=\"approve?hash=")
 	b.WriteString(html.EscapeString(c.fullHash))
 	b.WriteString("&range=")
@@ -919,10 +930,14 @@ func approvalOperatorLabel(st approvalState) string {
 // approved in one shot. The button label carries the current pending count so
 // an operator can see at a glance how many approvals are outstanding. When no
 // approvals are pending the button is still rendered (disabled) so the
-// operator knows the feature exists and the ledger is empty.
+// operator knows the feature exists and the ledger is empty. In monitoring
+// mode with credentials armed the button renders as a locked hint instead.
 func renderAuditApproveAllButton(rangeSlug string, admin bool) string {
 	if _cfg == nil || !_cfg.Git.Enable {
 		return ""
+	}
+	if !admin && authCredentialsEnabled() {
+		return "<button type=\"button\" class=\"btn btn-approve-all\" disabled title=\"approvals are locked in monitoring mode \u2014 authenticate to unlock\">approve all \u128274</button>"
 	}
 	pending := approvalPendingCount(_cfg)
 	var b strings.Builder

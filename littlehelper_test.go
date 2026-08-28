@@ -7555,3 +7555,177 @@ func TestAuthDialogBackdropHiddenCSS(t *testing.T) {
 		}
 	}
 }
+
+// TestParseServerTag covers the single source of truth for the
+// "server[#asset-tag]" target format used by both the hive status-tile init
+// and the worker dispatch in srv().
+func TestParseServerTag(t *testing.T) {
+	cases := []struct {
+		in        string
+		host, tag string
+		ok        bool
+	}{
+		{"fw01.lan", "fw01.lan", "", true},
+		{"fw01.lan#edge-1", "fw01.lan", "edge-1", true},
+		{"fw01.lan#", "fw01.lan", "", true},   // trailing '#': empty tag dropped
+		{"#edge-1", "", "", false},            // empty host
+		{"", "", "", false},                   // empty entry
+		{"fw01.lan#tag#extra", "", "", false}, // more than one '#'
+	}
+	for _, tc := range cases {
+		host, tag, ok := parseServerTag(tc.in)
+		if host != tc.host || tag != tc.tag || ok != tc.ok {
+			t.Errorf("parseServerTag(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tc.in, host, tag, ok, tc.host, tc.tag, tc.ok)
+		}
+	}
+}
+
+// TestSetupResolvesStorePathAbsolute verifies Setup() canonicalises OPN_PATH
+// to an absolute path so the repeated os.Chdir call sites (gitInit,
+// gitCheckIn, startWeb) always land on the same directory even when a
+// relative store path is configured.
+func TestSetupResolvesStorePathAbsolute(t *testing.T) {
+	ensureDisplayDrained(t)
+	for _, k := range []string{
+		"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS", "OPN_PATH",
+		"OPN_NODAEMON", "OPN_UNIFI_WEBUI", "OPN_UNIFI_WATCH_PATH",
+	} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+	withEnv(t, "OPN_APIKEY", "key", true)
+	withEnv(t, "OPN_APISECRET", "secret", true)
+	withEnv(t, "OPN_TARGETS", "fw01.lan", true)
+	withEnv(t, "OPN_PATH", "./store-sub", true)
+
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if !filepath.IsAbs(config.Path) {
+		t.Errorf("config.Path must be absolute, got %q", config.Path)
+	}
+	if filepath.Base(config.Path) != "store-sub" {
+		t.Errorf("config.Path must keep the configured leaf dir, got %q", config.Path)
+	}
+}
+
+// TestGetBodyHeadSingleLoginDialog verifies the nav-bar header renders the
+// login dialog exactly once: previously the fail hint rode inside the
+// authenticate button AND a second dialog was appended after the header,
+// producing two elements with the same id="auth-dialog".
+func TestGetBodyHeadSingleLoginDialog(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	// simulate one failed attempt so the fail hint path is exercised too
+	auth.mu.Lock()
+	auth.fails = 1
+	auth.mu.Unlock()
+	got := getBodyHead(nil)
+	if n := strings.Count(got, `id="auth-dialog"`); n != 1 {
+		t.Errorf("header must carry exactly one login dialog, found %d: %q", n, got)
+	}
+	if n := strings.Count(got, `id="auth-info-dialog"`); n != 1 {
+		t.Errorf("header must carry exactly one info dialog, found %d: %q", n, got)
+	}
+	// the fail hint must still surface through the single dialog
+	if !strings.Contains(got, "auth-dialog-fails") {
+		t.Errorf("failed-attempt hint must render inside the login dialog: %q", got)
+	}
+}
+
+// TestAuditApproveControlsLockedInMonitoringMode verifies the per-commit
+// approve button and the approve-all button render as locked hints in
+// monitoring mode when credentials are armed, and as active controls in
+// admin mode (matching the documented two-mode access model).
+func TestAuditApproveControlsLockedInMonitoringMode(t *testing.T) {
+	ensureDisplayDrained(t)
+	resetAuthState(t)
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	config.Git.Enable = true
+	_cfg = config
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	t.Cleanup(func() { approvalClose(); _ = os.RemoveAll(filepath.Join(store, _approvalDBName)) })
+
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+
+	commits := []auditCommit{{
+		hash:     "abcdef0",
+		fullHash: "0123456789012345678901234567890123456789",
+		author:   "test",
+		when:     time.Now(),
+		message:  "test commit\ntag: medium\n",
+		diff:     "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n-old\n+new\n",
+	}}
+
+	// monitoring mode: both approve controls are locked hints
+	out := renderAuditCommits(commits, "24h", false)
+	if !strings.Contains(out, "approve-locked") {
+		t.Errorf("monitoring mode must render a locked approve control: %q", out)
+	}
+	if strings.Contains(out, "approve-form") {
+		t.Errorf("monitoring mode must not render an active approve form: %q", out)
+	}
+	all := renderAuditApproveAllButton("24h", false)
+	if !strings.Contains(all, "disabled") {
+		t.Errorf("monitoring mode must render a disabled approve-all button: %q", all)
+	}
+
+	// admin mode: active approve controls
+	outAdmin := renderAuditCommits(commits, "24h", true)
+	if !strings.Contains(outAdmin, "approve-form") {
+		t.Errorf("admin mode must render an active approve form: %q", outAdmin)
+	}
+	if strings.Contains(outAdmin, "approve-locked") {
+		t.Errorf("admin mode must not render a locked approve control: %q", outAdmin)
+	}
+	allAdmin := renderAuditApproveAllButton("24h", true)
+	if strings.Contains(allAdmin, "disabled title=\"approvals are locked") {
+		t.Errorf("admin mode must not render a locked approve-all button: %q", allAdmin)
+	}
+
+	// when no credentials are configured the controls render active in both
+	// modes (monitoring-only deployment: there is no login to enforce)
+	resetAuthState(t)
+	outNoCreds := renderAuditCommits(commits, "24h", false)
+	if !strings.Contains(outNoCreds, "approve-form") {
+		t.Errorf("without credentials the approve form must render active: %q", outNoCreds)
+	}
+}
+
+// TestAuthArgonDeriveParams pins the Argon2id parameter set so an accidental
+// change (which would silently invalidate every armed OPN_AUTH_HASH, since
+// the credential format does not encode KDF parameters) cannot slip in.
+func TestAuthArgonDeriveParams(t *testing.T) {
+	if _authArgonThreads != 1 {
+		t.Errorf("argon2id thread count must stay 1 (historical compatibility), got %d", _authArgonThreads)
+	}
+	if _authArgonTime != 8 || _authArgonMemory != 64*1024 || _authArgonKeyLen != 64 {
+		t.Errorf("argon2id parameters drifted: time=%d memory=%d keylen=%d", _authArgonTime, _authArgonMemory, _authArgonKeyLen)
+	}
+	// derivation must be deterministic for a fixed salt
+	salt := []byte("0123456789abcdef")
+	a := authArgonDerive("pw", salt)
+	b := authArgonDerive("pw", salt)
+	if !bytes.Equal(a, b) {
+		t.Errorf("authArgonDerive must be deterministic")
+	}
+	if len(a) != int(_authArgonKeyLen) {
+		t.Errorf("derived key length = %d, want %d", len(a), _authArgonKeyLen)
+	}
+}
