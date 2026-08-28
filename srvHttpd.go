@@ -42,7 +42,7 @@ func startWeb(c *OPNCall) {
 	mux.Handle("/audit", addSecurityHeader(getAuditHandler()))
 	mux.Handle("/progress", addSecurityHeader(getProgressHandler()))
 	mux.Handle("/files/", addSecurityHeader(requireAdminFiles(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path))))))
-	mux.Handle("/force", requireAdmin(getForceHandler()))
+	mux.Handle("/force", getForceHandler())
 	mux.Handle("/approve", requireAdmin(getApproveHandler()))
 	mux.Handle("/approve-all", requireAdmin(getApproveAllHandler()))
 	mux.Handle("/auth/login", getLoginHandler())

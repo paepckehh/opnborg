@@ -510,6 +510,8 @@ var _rawEnvNames = []string{
 	"OPN_GRAFANA_DASHBOARD_HAPROXY",
 	"OPN_GRAFANA_DASHBOARD_UNIFI",
 	"OPN_SLEEP",
+	"OPN_AUTH_HASH",
+	"OPN_AUTH_SALT",
 }
 
 // _rawEnvSecrets are env vars whose values must never be echoed verbatim. They
@@ -521,6 +523,8 @@ var _rawEnvSecrets = map[string]bool{
 	"OPN_GIT_SSH_KEY":         true,
 	"OPN_UNIFI_BACKUP_SECRET": true,
 	"OPN_HTTPD_CAKEY":         true,
+	"OPN_AUTH_HASH":           true,
+	"OPN_AUTH_SALT":           true,
 }
 
 // _rawEnvPrefixGroups are OPN_ variable prefixes that define an open family of
