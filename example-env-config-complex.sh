@@ -28,3 +28,11 @@ export OPN_GRAFANA_DASHBOARD_UNIFI='g3kd0-3ds/unpoller'
 export OPN_UNIFI_WEBUI='http://localhost:8443'
 export OPN_WAZUH_WEBUI='http://localhost:9292'
 export OPN_PROMETHEUS_WEBUI='http://localhost:9191'
+
+# WebUI admin authentication (optional, both required together).
+# Generate both values via the WebUI: Config Dashboard -> Authentication tile
+# -> [ Create Authentication Env Vars ] (Argon2id, time=8, memory=64 MiB,
+# threads=4, keylen=64). Without (valid) values opnborg stays in
+# monitoring-only mode and login is disabled entirely.
+# export OPN_AUTH_HASH='<base64-key>$<base64-key>'
+# export OPN_AUTH_SALT='<base64-salt>'
