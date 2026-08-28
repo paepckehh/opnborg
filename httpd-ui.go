@@ -17,6 +17,8 @@ const (
 	_bodyStart = "<body>" + _lf
 	_bodyEnd   = "</body>" + _lf
 
+	// _bodyHeadStatic is the legacy header for pages that do not carry a live
+	// request (kept for test + placeholder rendering paths).
 	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1><div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ " + SemVer + " ]</a></div></header>" + _lf
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
@@ -387,6 +389,48 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .raw-env-val code{font-family:var(--mono);font-size:.75rem;background:rgba(0,0,0,.25);padding:.06rem .3rem;border-radius:4px;border:1px solid var(--border)}
 .raw-env-sub{color:var(--warn);font-size:.92rem;margin:1.1rem 0 .35rem 0;letter-spacing:.02em;text-shadow:0 0 12px rgba(210,153,34,.3)}
 .raw-env-unknown .raw-env-name{color:var(--err);text-shadow:0 0 10px rgba(248,81,73,.3)}
+.mode-box{display:inline-flex;align-items:center;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.28rem .75rem;border-radius:99px;font-family:var(--mono);white-space:nowrap;cursor:default}
+.mode-monitoring{color:var(--ok);border:1px solid rgba(63,185,80,.55);background:rgba(63,185,80,.12);text-shadow:0 0 10px rgba(63,185,80,.4);box-shadow:0 0 14px rgba(63,185,80,.15)}
+.mode-admin{color:#ffb84d;border:1px solid rgba(248,81,73,.6);background:linear-gradient(135deg,rgba(248,81,73,.18),rgba(210,153,34,.14));text-shadow:0 0 10px rgba(248,81,73,.45);box-shadow:0 0 16px rgba(248,81,73,.22);animation:mode-pulse 2.2s ease-in-out infinite}
+.mode-lock{color:var(--err);border:1px solid rgba(248,81,73,.6);background:rgba(248,81,73,.14);text-shadow:0 0 10px rgba(248,81,73,.45);animation:review-blink 1.1s ease-in-out infinite}
+@keyframes mode-pulse{0%,100%{box-shadow:0 0 14px rgba(248,81,73,.2)}50%{box-shadow:0 0 26px rgba(248,81,73,.38)}}
+.header-right{display:inline-flex;align-items:center;gap:.55rem}
+.auth-nav-btn{background:var(--card-2);color:var(--accent-2);border:1px solid var(--border-strong);padding:.32rem .8rem;border-radius:99px;cursor:pointer;font-size:.76rem;font-weight:600;letter-spacing:.02em;font-family:var(--mono);backdrop-filter:var(--glass-2);-webkit-backdrop-filter:var(--glass-2);transition:border-color .25s,box-shadow .25s,transform .2s,background .25s}
+.auth-nav-btn:hover{border-color:var(--accent);box-shadow:0 0 18px rgba(74,158,255,.4);transform:translateY(-1px);background:rgba(74,158,255,.12)}
+.auth-nav-btn.auth-locked{color:var(--err);border-color:rgba(248,81,73,.5);cursor:not-allowed;opacity:.85}
+.auth-nav-btn.auth-logout{color:var(--warn);border-color:rgba(210,153,34,.5)}
+.auth-nav-form{display:inline-flex}
+.auth-setup{color:var(--accent-2)}
+.btn-dl-locked{background:var(--card-2);color:var(--muted);border:1px solid var(--border);padding:.28rem .55rem;border-radius:6px;font-size:.74rem;font-family:var(--mono);cursor:not-allowed;opacity:.55;filter:grayscale(.7);text-decoration:line-through}
+.dl-locked{display:inline-flex;cursor:not-allowed}
+.dl-locked:hover .btn-dl-locked{border-color:var(--warn);color:var(--warn);opacity:.8}
+.approve-locked{cursor:not-allowed}
+.approve-locked:hover{border-color:var(--warn);color:var(--warn)}
+.auth-dialog-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(4,8,14,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center}
+.auth-dialog{max-width:420px;width:92%;padding:1.4rem 1.5rem;background:var(--card);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 18px 60px rgba(0,0,0,.6),0 0 40px rgba(74,158,255,.18);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass)}
+.auth-dialog-title{font-size:1.05rem;font-weight:700;color:var(--accent-2);letter-spacing:.05em;margin-bottom:.3rem;text-shadow:0 0 14px rgba(74,158,255,.4)}
+.auth-dialog-sub{color:var(--muted);font-size:.76rem;margin-bottom:.8rem}
+.auth-input{width:100%;padding:.55rem .75rem;margin:.35rem 0;border:1px solid var(--border-strong);border-radius:8px;background:rgba(0,0,0,.35);color:var(--fg);font-size:.9rem;font-family:var(--mono)}
+.auth-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 16px rgba(74,158,255,.35)}
+.auth-dialog-err{color:var(--err);font-size:.78rem;margin:.4rem 0;text-shadow:0 0 8px rgba(248,81,73,.4)}
+.auth-dialog-fails{color:var(--warn);font-size:.72rem;margin:.3rem 0}
+.auth-submit{margin:.5rem .4rem 0 0}
+.auth-cancel{background:var(--card-2);color:var(--muted)}
+.auth-checking{display:flex;flex-direction:column;align-items:center;gap:.55rem;padding:.9rem 0 .2rem 0}
+.auth-checking-text{color:var(--muted);font-size:.76rem;text-align:center}
+.auth-clock{position:relative;width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);box-shadow:0 0 16px rgba(74,158,255,.5),inset 0 0 12px rgba(74,158,255,.3);animation:auth-rotate 1.6s linear infinite}
+.auth-clock-hand{position:absolute;left:50%;top:50%;width:2px;height:16px;margin-left:-1px;background:var(--accent);transform-origin:top center;animation:auth-tick 1s linear infinite;box-shadow:0 0 6px var(--accent)}
+.auth-wait{display:flex;align-items:center;gap:.5rem;color:var(--warn);font-size:.78rem;margin:.4rem 0}
+.auth-wait-clock,.auth-wait-clock-dial{width:9px;height:9px;border-radius:50%;background:var(--err);box-shadow:0 0 8px var(--err);animation:review-blink .9s ease-in-out infinite}
+.auth-wait-clock-dial{background:var(--warn);box-shadow:0 0 8px var(--warn);animation-delay:.25s}
+.auth-env-line{display:flex;gap:.5rem;align-items:baseline;padding:.45rem .55rem;background:var(--card-2);border:1px solid var(--border);border-radius:6px;margin:.35rem 0;flex-wrap:wrap}
+.auth-env-code{font-family:var(--mono);font-size:.74rem;background:rgba(0,0,0,.28);padding:.12rem .4rem;border-radius:4px;border:1px solid var(--border);word-break:break-all;flex:1 1 auto}
+.auth-gen-form{display:flex;flex-direction:column;gap:.5rem;max-width:380px;margin:.6rem 0}
+.auth-gen-form-pw2{width:100%}
+.auth-gen-err{color:var(--err);font-size:.8rem;margin-bottom:.5rem}
+.auth-panel-actions{margin:.55rem 0 .25rem 0}
+@keyframes auth-rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes auth-tick{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .audit-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
 .backup-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
 .sync-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}

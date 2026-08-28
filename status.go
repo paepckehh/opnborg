@@ -33,8 +33,8 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 		borgSC := "<a href=\"https://" + html.EscapeString(server) + _srvc + "\" " + _nwin + "><button><img src=\"favicon.ico\" width=\"12\" height=\"12\"></button></a>"
 		linkUI := "<a href=\"https://" + html.EscapeString(server) + _dash + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>" + borgSC
 		linkVS := "<a href=\"https://" + html.EscapeString(server) + _fwup + "\" " + _nwin + "><button>[" + html.EscapeString(ver) + "]</button></a>"
-		linkCurrent := "<a href=\"./files/" + html.EscapeString(server) + "/current.xml\"" + _nwin + "><button>[current.xml]</button></a>"
-		linkArchive := "<a href=\"./files/" + html.EscapeString(server) + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
+		linkCurrent := renderDownloadButton("./files/"+html.EscapeString(server)+"/current.xml", "[current.xml]")
+		linkArchive := renderDownloadButton("./files/"+html.EscapeString(server)+"/"+archive, "[archive]")
 		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		tagBox := ""
 		if tag != "" {
@@ -72,8 +72,8 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 		state := _unifi
 		seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Seen</span><span class=\"meta-value\">" + ts.Format(time.RFC3339) + "</span></div>"
 		linkUI := "<a href=\"" + html.EscapeString(config.Unifi.WebUI.String()) + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>"
-		linkCurrent := "<a href=\"./files/" + html.EscapeString(server) + "/current.unf\"" + _nwin + "><button>[current.unf]</button></a>"
-		linkArchive := "<a href=\"./files/" + html.EscapeString(server) + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
+		linkCurrent := renderDownloadButton("./files/"+html.EscapeString(server)+"/current.unf", "[current.unf]")
+		linkArchive := renderDownloadButton("./files/"+html.EscapeString(server)+"/"+archive, "[archive]")
 		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		if !backup {
 			state = _degraded
@@ -84,8 +84,8 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 		export := ""
 		if config.Unifi.Export.Enable {
 			ext := html.EscapeString(config.Unifi.Export.Format)
-			exportCurrent := "<a href=\"./files/" + _uniEx + "/current." + ext + "\"" + _nwin + "><button>[current." + ext + "]</button></a>"
-			exportArchive := "<a href=\"./files/" + _uniEx + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
+			exportCurrent := renderDownloadButton("./files/"+_uniEx+"/current."+ext, "[current."+ext+"]")
+			exportArchive := renderDownloadButton("./files/"+_uniEx+"/"+archive, "[archive]")
 			export = "<span class=\"member-links member-links-export\">" + exportCurrent + exportArchive + "</span>"
 		}
 		tagBox := ""
@@ -159,12 +159,29 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 		errBox = "<div class=\"meta-box meta-err\"><span class=\"meta-label\">Error</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Watch.LastSyncErr) + "</span></div>"
 	}
 	linkUI := "<a href=\"" + html.EscapeString(uiLink) + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>"
-	linkCurrent := "<a href=\"./files/" + _uniWatch + "/current.unf\"" + _nwin + "><button>[current.unf]</button></a>"
-	linkArchive := "<a href=\"./files/" + _uniWatch + "/" + archive + "\" " + _nwin + "><button>[archive]</button></a>"
+	linkCurrent := renderDownloadButton("./files/"+_uniWatch+"/current.unf", "[current.unf]")
+	linkArchive := renderDownloadButton("./files/"+_uniWatch+"/"+archive, "[archive]")
 	links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 	tagBox := ""
 	if config.Unifi.Tag != "" {
 		tagBox = "<div class=\"meta-box meta-tag\"><span class=\"meta-label\">Tag</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Tag) + "</span></div>"
 	}
 	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + totalBox + lastFileBox + errBox + tagBox
+}
+
+// _btnDownloadLockedTitle is the hover tooltip shown on greyed-out config
+// download buttons in monitoring mode.
+const (
+	_btnDownloadLockedTitle = "opnborg is currently in monitoring mode only, please authenticate first"
+)
+
+// renderDownloadButton renders one config-file download button. In monitoring
+// mode (the default startup mode, no admin session) the button is greyed out:
+// hovering or clicking surfaces the monitoring-mode hint telling the operator
+// to authenticate first. In admin mode the regular download link is rendered.
+func renderDownloadButton(href, label string) string {
+	if adminEnabled.Load() {
+		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
+	}
+	return "<span class=\"dl-locked\" title=\"" + _btnDownloadLockedTitle + "\" onclick=\"openAuthDialog('monitoring mode only: config download locked, please authenticate first')\"><button disabled class=\"btn-dl-locked\">" + label + "</button></span>"
 }

@@ -95,7 +95,7 @@ func getAuditHandler() http.Handler {
 		r = headHTML(r)
 		switch q.Method {
 		case "GET":
-			writeTransportCompressedPage(getAuditHTML(q.URL.Query().Get("range")), r, q, true)
+			writeTransportCompressedPage(getAuditHTML(q.URL.Query().Get("range"), q), r, q, true)
 		default:
 			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 		}
@@ -105,15 +105,15 @@ func getAuditHandler() http.Handler {
 
 // getAuditHTML assembles the full audit page document for the given range
 // slug (validated + defaulted via auditRangeSlug).
-func getAuditHTML(rangeParam string) string {
+func getAuditHTML(rangeParam string, q *http.Request) string {
 	rangeSlug := auditRangeSlug(rangeParam)
 	var s strings.Builder
 	s.WriteString(_htmlStart)
 	s.WriteString(_headStatic)
 	s.WriteString(_bodyStart)
-	s.WriteString(_bodyHead)
+	s.WriteString(getBodyHead(q))
 	s.WriteString(getAuditNavi(rangeSlug))
-	s.WriteString(renderAuditPage(_cfg, rangeSlug))
+	s.WriteString(renderAuditPage(_cfg, rangeSlug, q))
 	s.WriteString(_bodyFooter)
 	s.WriteString(_bodyEnd)
 	s.WriteString(_htmlEnd)
@@ -158,7 +158,8 @@ func getAuditNavi(active string) string {
 // count, window boundaries), then the per-commit list. A nil config (httpd
 // not armed yet, e.g. in tests) collapses to a placeholder. When git is
 // disabled the page reports that the feature needs OPN_GIT_ENABLE.
-func renderAuditPage(config *OPNCall, rangeSlug string) string {
+func renderAuditPage(config *OPNCall, rangeSlug string, q *http.Request) string {
+	admin := q != nil && authIsAdmin(q)
 	if config == nil {
 		return "<div class=\"dashboard\"><h2>BorgConfigAUDIT</h2><div class=\"dash-row\"><span class=\"dash-value dash-muted\">awaiting config</span></div></div>"
 	}
@@ -184,7 +185,7 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 	s.WriteString("<h2>BorgConfigAUDIT &middot; Git Commit History &middot; ")
 	s.WriteString(html.EscapeString(label))
 	s.WriteString("</h2>")
-	s.WriteString(renderAuditApproveAllButton(rangeSlug))
+	s.WriteString(renderAuditApproveAllButton(rangeSlug, admin))
 	s.WriteString("</div>")
 	s.WriteString("<p class=\"cfg-intro\">Detailed git commit log for the backup storage repository. Each entry lists the commit hash, author, date, message, file-change stats and the full unified diff with syntax highlighting. Window: since ")
 	s.WriteString(html.EscapeString(since.UTC().Format(time.RFC3339)))
@@ -195,7 +196,7 @@ func renderAuditPage(config *OPNCall, rangeSlug string) string {
 		s.WriteString("<div class=\"audit-empty\"><span class=\"dash-muted\">no commits in the selected window</span></div>")
 	} else {
 		s.WriteString(renderAuditThreatDashboard(commits))
-		s.WriteString(renderAuditCommits(commits, rangeSlug))
+		s.WriteString(renderAuditCommits(commits, rangeSlug, admin))
 	}
 	s.WriteString("</div>")
 	s.WriteString(_auditFilterScript)
@@ -848,9 +849,14 @@ func auditBadgeHTML(severity string, needsReview, backup bool) string {
 //
 // Commits whose tag is low, none, or a plain Unifi backup rotation render no
 // approval control: they are not tracked in the ledger.
-func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string) string {
+func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin bool) string {
 	if !isSecurityRelevantTag(severity) || c.fullHash == "" {
 		return ""
+	}
+	// monitoring mode: approval actions require an authenticated admin-mode
+	// session; surface a locked hint instead of the active button.
+	if !admin {
+		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\"><span class=\"meta-label\">approve &#128274; (auth required)</span></span>"
 	}
 	st, ok := approvalGet(_cfg, c.fullHash)
 	if !ok {
@@ -919,9 +925,14 @@ func approvalOperatorLabel(st approvalState) string {
 // an operator can see at a glance how many approvals are outstanding. When no
 // approvals are pending the button is still rendered (disabled) so the
 // operator knows the feature exists and the ledger is empty.
-func renderAuditApproveAllButton(rangeSlug string) string {
+func renderAuditApproveAllButton(rangeSlug string, admin bool) string {
 	if _cfg == nil || !_cfg.Git.Enable {
 		return ""
+	}
+	// monitoring mode: approval actions require an authenticated admin-mode
+	// session; render the disabled locked hint instead of the active form.
+	if !admin {
+		return "<span class=\"meta-approved approve-locked\" title=\"monitoring mode only: approving security-impact commits requires authentication, please authenticate first\"><span class=\"meta-label\">approve all &#128274; (auth required)</span></span>"
 	}
 	pending := approvalPendingCount(_cfg)
 	var b strings.Builder
@@ -992,7 +1003,7 @@ func highlightAuditTagLine(body string) string {
 // to the same audit range without a shared mutable global (two concurrent
 // audit requests with different ?range= values would otherwise cross-wire
 // each other's forms).
-func renderAuditCommits(commits []auditCommit, rangeSlug string) string {
+func renderAuditCommits(commits []auditCommit, rangeSlug string, admin bool) string {
 	var s strings.Builder
 	s.WriteString("<div class=\"audit-list\" id=\"audit-list\">")
 	for _, c := range commits {
@@ -1021,7 +1032,7 @@ func renderAuditCommits(commits []auditCommit, rangeSlug string) string {
 		s.WriteString("</span> <span class=\"dash-err\">-")
 		s.WriteString(strconv.Itoa(c.deletions))
 		s.WriteString("</span></span>")
-		s.WriteString(renderAuditApprovalControl(c, severity, rangeSlug))
+		s.WriteString(renderAuditApprovalControl(c, severity, rangeSlug, admin))
 		s.WriteString("</summary>")
 		// Append a synthetic "change-performed-by:" line after the tag line
 		// when the diff carries an OPNsense revision block, so the admin

@@ -1108,7 +1108,7 @@ func TestGetStartHTMLStructure(t *testing.T) {
 	tg = []OPNGroup{{Name: "TEST", OPN: true, Member: []string{"fw01"}}}
 	hive = []string{_na + "<span class=\"member-meta\">fw01</span>"}
 	sleep = "60"
-	got := getStartHTML()
+	got := getStartHTML(nil)
 	for _, want := range []string{
 		"<!doctype html>",
 		"<html>",
@@ -1151,7 +1151,7 @@ func TestGetStartHTMLNoLegacyTags(t *testing.T) {
 	tg = nil
 	hive = nil
 	sleep = "60"
-	got := getStartHTML()
+	got := getStartHTML(nil)
 	for _, bad := range []string{"<table", "<td>", "<tr>", "<center>", "</td>", "</tr>"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("getStartHTML should not contain %q", bad)
@@ -1453,7 +1453,7 @@ func TestConfigButtonInsideDashboard(t *testing.T) {
 	hive = nil
 	sleep = "60"
 	_cfg = config
-	full := getStartHTML()
+	full := getStartHTML(nil)
 	if strings.Count(full, "Config Dashboard") != 1 {
 		t.Errorf("Config Dashboard button should appear exactly once in getStartHTML, got %d", strings.Count(full, "Config Dashboard"))
 	}
@@ -4502,12 +4502,12 @@ func TestAuditHandlerGET(t *testing.T) {
 // the right placeholder for nil config and for git-disabled config, and
 // renders a summary header for a valid git repo.
 func TestRenderAuditPageStates(t *testing.T) {
-	if got := renderAuditPage(nil, "24h"); !strings.Contains(got, "awaiting config") {
+	if got := renderAuditPage(nil, "24h", nil); !strings.Contains(got, "awaiting config") {
 		t.Errorf("nil config should render placeholder, got: %q", got)
 	}
 	cfg := &OPNCall{Path: t.TempDir()}
 	cfg.Git.Enable = false
-	got := renderAuditPage(cfg, "24h")
+	got := renderAuditPage(cfg, "24h", nil)
 	if !strings.Contains(got, "git management disabled") {
 		t.Errorf("disabled-git should render disabled message, got: %q", got)
 	}
@@ -4762,7 +4762,7 @@ func TestRenderAuditCommitsMessage(t *testing.T) {
 		message: "opnborg auto update",
 		diff:    "",
 	}
-	out := renderAuditCommits([]auditCommit{ollama, plain}, "24h")
+	out := renderAuditCommits([]auditCommit{ollama, plain}, "24h", true)
 	for _, want := range []string{
 		`<pre class="audit-message">tighten WAN inbound filter`,
 		`<span class="audit-tag-line sev-medium">tag: medium, needs-review</span>`,
@@ -5016,7 +5016,7 @@ func TestRenderAuditCommitsPerformer(t *testing.T) {
 		message: "opnborg auto update",
 		diff:    "+++ b/x\n+nothing relevant\n",
 	}
-	out := renderAuditCommits([]auditCommit{withPerformer, withoutPerformer}, "24h")
+	out := renderAuditCommits([]auditCommit{withPerformer, withoutPerformer}, "24h", true)
 	if !strings.Contains(out, `<span class="audit-performer-line">change-performed-by: EXAMPLE@NAMEPC</span>`) {
 		t.Errorf("performer line should be highlighted for commit with revision block:\n%s", out)
 	}
@@ -5153,7 +5153,7 @@ func TestGetStartHTMLIncludesAuditTile(t *testing.T) {
 	sleep = "60"
 	_cfg = &OPNCall{Path: t.TempDir()}
 	_cfg.Git.Enable = true
-	got := getStartHTML()
+	got := getStartHTML(nil)
 	for _, want := range []string{"BorgConfigAUDIT", "audit?range=24h", "audit-tile"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("getStartHTML missing %q", want)
@@ -5495,7 +5495,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	msg := "broadened WAN inbound\n\ntag: critical, needs-review"
 	approvalTrackCommit(cfg, hash, msg, time.Now())
 	c := auditCommit{hash: hash[:7], fullHash: hash, message: msg}
-	got := renderAuditApprovalControl(c, "critical", "24h")
+	got := renderAuditApprovalControl(c, "critical", "24h", true)
 	if !strings.Contains(got, "btn-approve") || !strings.Contains(got, hash) {
 		t.Errorf("unapproved critical commit should render approve button with hash, got %q", got)
 	}
@@ -5505,7 +5505,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	if err := approvalApprove(cfg, hash, "10.0.0.9", "", "alice"); err != nil {
 		t.Fatalf("approvalApprove: %v", err)
 	}
-	got = renderAuditApprovalControl(c, "critical", "24h")
+	got = renderAuditApprovalControl(c, "critical", "24h", true)
 	if !strings.Contains(got, "meta-approved") {
 		t.Errorf("approved commit should render approved box, got %q", got)
 	}
@@ -5514,7 +5514,7 @@ func TestApprovalAuditUI(t *testing.T) {
 	}
 	// Low-severity commits render no control.
 	low := auditCommit{hash: "low0000", fullHash: "low0000000000000000000000000000000000000", message: "tag: low"}
-	if g := renderAuditApprovalControl(low, "low", "24h"); g != "" {
+	if g := renderAuditApprovalControl(low, "low", "24h", true); g != "" {
 		t.Errorf("low-severity commit should render no control, got %q", g)
 	}
 }
@@ -5533,7 +5533,7 @@ func TestApprovalApproveAllButton(t *testing.T) {
 	if _, err := approvalDBOpen(dir); err != nil {
 		t.Fatalf("approvalDBOpen: %v", err)
 	}
-	got := renderAuditApproveAllButton("24h")
+	got := renderAuditApproveAllButton("24h", true)
 	if !strings.Contains(got, "approve-all-form") || !strings.Contains(got, "approve-all?range=24h") {
 		t.Errorf("approve-all button missing, got %q", got)
 	}
@@ -5543,7 +5543,7 @@ func TestApprovalApproveAllButton(t *testing.T) {
 	for i := range 2 {
 		approvalTrackCommit(cfg, fmt.Sprintf("h%02d0000000000000000000000000000000000000", i), "tag: high", time.Now())
 	}
-	got = renderAuditApproveAllButton("7d")
+	got = renderAuditApproveAllButton("7d", true)
 	if !strings.Contains(got, "(2)") {
 		t.Errorf("pending count should be (2), got %q", got)
 	}
@@ -5816,7 +5816,7 @@ func TestReviewBannerHiddenWhenIdle(t *testing.T) {
 	_cfg = &OPNCall{Path: t.TempDir()}
 	_cfg.Git.Enable = true
 	reviewPending.Store(false)
-	got := getStartHTML()
+	got := getStartHTML(nil)
 	if strings.Contains(got, `class="review-banner"`) {
 		t.Errorf("getStartHTML should not render review-banner div when idle")
 	}
@@ -5843,14 +5843,14 @@ func TestReviewBannerShownWhenPending(t *testing.T) {
 	_cfg = &OPNCall{Path: t.TempDir()}
 	_cfg.Git.Enable = true
 	reviewPending.Store(true)
-	got := getStartHTML()
+	got := getStartHTML(nil)
 	for _, want := range []string{`class="review-banner"`, "review in progress", "not yet committed"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("getStartHTML missing %q when review pending", want)
 		}
 	}
 	reviewPending.Store(false)
-	got = getStartHTML()
+	got = getStartHTML(nil)
 	if strings.Contains(got, `class="review-banner"`) {
 		t.Errorf("getStartHTML should not render review-banner div after review completes")
 	}
@@ -6675,5 +6675,423 @@ func TestGetFirmwareVersionHTTPStatus(t *testing.T) {
 	config := &OPNCall{}
 	if got := getFirmwareVersion(config, host); got != "fail" {
 		t.Errorf("getFirmwareVersion on 401 = %q, want fail", got)
+	}
+}
+
+// --- auth.go: two-mode WebUI authentication -------------------------------
+
+// resetAuthState restores the global auth state to the pristine (no
+// credentials, no sessions, no lockout) pre-test condition.
+func resetAuthState(tb testing.TB) {
+	tb.Helper()
+	ensureDisplayDrained(tb)
+	auth.mu.Lock()
+	auth.enabled = false
+	auth.hash = ""
+	auth.salt = nil
+	auth.fails = 0
+	auth.lockUntil = time.Time{}
+	auth.lastFail = time.Time{}
+	auth.sessions = make(map[string]time.Time)
+	auth.mu.Unlock()
+	adminEnabled.Store(false)
+	tb.Cleanup(func() {
+		auth.mu.Lock()
+		auth.enabled = false
+		auth.hash = ""
+		auth.salt = nil
+		auth.fails = 0
+		auth.lockUntil = time.Time{}
+		auth.lastFail = time.Time{}
+		auth.sessions = make(map[string]time.Time)
+		auth.mu.Unlock()
+		adminEnabled.Store(false)
+	})
+}
+
+// armTestAuthConfigures the global auth state with a known password and
+// returns the credential env values (as they would be stored in
+// OPN_AUTH_HASH / OPN_AUTH_SALT).
+func armTestAuth(tb testing.TB, password string) (hashEnv, saltEnv string) {
+	tb.Helper()
+	hashEnv, saltEnv = generateAuthCredentials(password)
+	auth.mu.Lock()
+	auth.enabled = true
+	auth.hash = hashEnv
+	auth.salt, _ = base64.StdEncoding.DecodeString(saltEnv)
+	auth.mu.Unlock()
+	return hashEnv, saltEnv
+}
+
+func TestGenerateAuthCredentialsFormat(t *testing.T) {
+	resetAuthState(t)
+	hashEnv, saltEnv := generateAuthCredentials("correct horse battery staple")
+	// hash env: "<b64>$<b64>" both halves decoding to 64 bytes
+	h1, h2, ok := strings.Cut(hashEnv, "$")
+	if !ok || h1 == "" || h2 == "" {
+		t.Fatalf("hash env must be '<b64>$<b64>', got %q", hashEnv)
+	}
+	for _, h := range []string{h1, h2} {
+		raw, err := base64.StdEncoding.DecodeString(h)
+		if err != nil {
+			t.Fatalf("hash half not base64: %v", err)
+		}
+		if len(raw) != 64 {
+			t.Errorf("hash half decodes to %d bytes, want 64 (keylen)", len(raw))
+		}
+	}
+	// salt env: valid base64, at least 8 raw bytes
+	saltRaw, err := base64.StdEncoding.DecodeString(saltEnv)
+	if err != nil || len(saltRaw) < 8 {
+		t.Fatalf("salt env must be base64 with >= 8 raw bytes, got %q (err %v)", saltEnv, err)
+	}
+	// two derivations of the same password must share the hash (deterministic
+	// given equal salt) but produce fresh salts per call
+	hashEnv2, saltEnv2 := generateAuthCredentials("correct horse battery battery staple")
+	if saltEnv == saltEnv2 {
+		t.Errorf("two generated credentials must use independent random salts")
+	}
+	if hashEnv == hashEnv2 {
+		t.Errorf("two generated credential sets must differ (random salts)")
+	}
+}
+
+func TestAuthInitValidatesEnv(t *testing.T) {
+	resetAuthState(t)
+	os.Unsetenv("OPN_AUTH_HASH")
+	os.Unsetenv("OPN_AUTH_SALT")
+	t.Cleanup(func() {
+		os.Unsetenv("OPN_AUTH_HASH")
+		os.Unsetenv("OPN_AUTH_SALT")
+	})
+	authInit()
+	if authCredentialsEnabled() {
+		t.Errorf("auth must stay disabled when env vars are unset")
+	}
+	// invalid hash format disables (but never crashes)
+	os.Setenv("OPN_AUTH_HASH", "not-a-valid-credential")
+	os.Setenv("OPN_AUTH_SALT", "AAAAAAAAAAAAAAAAAAAAAA==")
+	authInit()
+	if authCredentialsEnabled() {
+		t.Errorf("auth must stay disabled when OPN_AUTH_HASH is malformed")
+	}
+	// valid-looking values arm the feature
+	hashEnv, saltEnv := generateAuthCredentials("test-password-1")
+	os.Setenv("OPN_AUTH_HASH", hashEnv)
+	os.Setenv("OPN_AUTH_SALT", saltEnv)
+	authInit()
+	if !authCredentialsEnabled() {
+		t.Errorf("auth must arm when both env vars are valid")
+	}
+	if adminEnabled.Load() {
+		t.Errorf("admin mode must start locked (monitoring mode) before login")
+	}
+}
+
+func TestAuthLoginSuccessAndSession(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "hunter2hunter2")
+	token, wait, err := authCheckPassword("hunter2hunter2")
+	if err != nil {
+		t.Fatalf("valid password rejected: %v", err)
+	}
+	if wait != 0 {
+		t.Errorf("valid password must not arm a wait, got %v", wait)
+	}
+	if token == "" {
+		t.Fatalf("valid password must mint a session token")
+	}
+	if !authSessionAdmin(token) {
+		t.Errorf("minted token must carry an admin session")
+	}
+	// logout revokes
+	authLogout(token)
+	if authSessionAdmin(token) {
+		t.Errorf("revoked token must no longer carry a session")
+	}
+}
+
+func TestAuthLoginFailLockoutDoubling(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "the-real-password")
+	// 1st failure: 10s global lock
+	_, w1, err1 := authCheckPassword("wrong")
+	if err1 == nil || w1 != 10*time.Second {
+		t.Fatalf("first failure must arm a 10s lock, got %v (err %v)", w1, err1)
+	}
+	// the lock is GLOBAL: even the correct password is refused during the window
+	_, w2, err2 := authCheckPassword("the-real-password")
+	if err2 == nil || w2 <= 0 {
+		t.Fatalf("correct password must be refused during global lock (wait %v)", w2)
+	}
+	// simulate the lock expiring, 2nd failure: 20s
+	auth.mu.Lock()
+	auth.lockUntil = time.Now().Add(-time.Second)
+	auth.mu.Unlock()
+	_, w3, _ := authCheckPassword("wrong")
+	if w3 != 20*time.Second {
+		t.Errorf("2nd failure must arm a 20s lock, got %v", w3)
+	}
+	// 3rd failure: 40s
+	auth.mu.Lock()
+	auth.lockUntil = time.Now()
+	auth.mu.Unlock()
+	_, w4, _ := authCheckPassword("wrong")
+	if w4 != 40*time.Second {
+		t.Errorf("3rd failure must arm a 40s lock, got %v", w4)
+	}
+	// counter resets on success
+	auth.mu.Lock()
+	auth.lockUntil = time.Now()
+	auth.fails = 0
+	auth.mu.Unlock()
+	if _, _, err := authCheckPassword("the-real-password"); err != nil {
+		t.Fatalf("valid password rejected: %v", err)
+	}
+	if _, fails := authRemainingLock(); fails != 0 {
+		t.Errorf("successful login must reset the global fail counter, got %d", fails)
+	}
+}
+
+func TestAuthArmWaitTable(t *testing.T) {
+	for _, tc := range []struct {
+		fails int
+		want  time.Duration
+	}{
+		{0, 0},
+		{1, 10 * time.Second},
+		{2, 20 * time.Second},
+		{3, 40 * time.Second},
+		{4, 80 * time.Second},
+		{5, 160 * time.Second},
+	} {
+		if got := authArmWait(tc.fails); got != tc.want {
+			t.Errorf("authArmWait(%d) = %v, want %v", tc.fails, got, tc.want)
+		}
+	}
+}
+
+func TestAuthCredentialsNotConfigured(t *testing.T) {
+	resetAuthState(t)
+	_, _, err := authCheckPassword("anything")
+	if err == nil {
+		t.Fatalf("login without configured credentials must fail")
+	}
+}
+
+func TestGetBodyHeadMonitoringMode(t *testing.T) {
+	resetAuthState(t)
+	got := getBodyHead(nil)
+	if !strings.Contains(got, "MONITORING") {
+		t.Errorf("monitoring mode header must show the MONITORING badge: %q", got)
+	}
+	if strings.Contains(got, ">ADMIN<") {
+		t.Errorf("monitoring header must not show ADMIN badge")
+	}
+	if !strings.Contains(got, SemVer) {
+		t.Errorf("header must carry the version pill")
+	}
+}
+
+func TestGetBodyHeadAdminModeAndLocked(t *testing.T) {
+	resetAuthState(t)
+	token, _, err := authCheckPasswordWithCredentials(t, "pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	q := httptest.NewRequest("GET", "http://x/", nil)
+	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	got := getBodyHead(q)
+	if !strings.Contains(got, ">ADMIN<") {
+		t.Errorf("authenticated header must show ADMIN badge: %q", got)
+	}
+	if !strings.Contains(got, "Logout") {
+		t.Errorf("authenticated header must offer logout")
+	}
+	// locked nav bar state
+	auth.mu.Lock()
+	auth.lockUntil = time.Now().Add(15 * time.Second)
+	auth.mu.Unlock()
+	q2 := httptest.NewRequest("GET", "http://x/", nil)
+	got2 := getBodyHead(q2)
+	if !strings.Contains(got2, "LOCK") {
+		t.Errorf("locked header must show the LOCK indicator: %q", got2)
+	}
+}
+
+// authCheckPasswordWithCredentials arms credentials then performs a login.
+func authCheckPasswordWithCredentials(t *testing.T, password string) (string, time.Duration, error) {
+	t.Helper()
+	armTestAuth(t, password)
+	return authCheckPassword(password)
+}
+
+func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
+	resetAuthState(t)
+	got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+	if !strings.Contains(got, "btn-dl-locked") {
+		t.Errorf("monitoring mode must grey out download buttons: %q", got)
+	}
+	if !strings.Contains(got, "monitoring mode only") {
+		t.Errorf("locked button must carry the monitoring-mode hint: %q", got)
+	}
+	adminEnabled.Store(true)
+	got2 := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+	if !strings.Contains(got2, "<a href=") {
+		t.Errorf("admin mode must render the active download link: %q", got2)
+	}
+}
+
+func TestStartHTMLIncludesAuthNavUI(t *testing.T) {
+	resetAuthState(t)
+	savedHive, savedTg, savedSleep := hive, tg, sleep
+	t.Cleanup(func() { hive, tg, sleep = savedHive, savedTg, savedSleep })
+	tg = []OPNGroup{{Name: "T", OPN: true, Member: []string{"fw01"}}}
+	hive = []string{_na}
+	sleep = "60"
+	got := getStartHTML(nil)
+	for _, want := range []string{"MONITORING", "mode-box", "Authenticate", "auth-dialog", "semver"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("getStartHTML missing %q", want)
+		}
+	}
+}
+
+func TestAuditApprovalLockedInMonitoringMode(t *testing.T) {
+	resetAuthState(t)
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+	_cfg = &OPNCall{Git: struct {
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
+	}{Enable: true}}
+	c := auditCommit{fullHash: "0123456789abcdef0123456789abcdef01234567"}
+	got := renderAuditApprovalControl(c, "critical", "24h", false)
+	if !strings.Contains(got, "auth required") {
+		t.Errorf("monitoring mode must render the locked approve hint: %q", got)
+	}
+	gotAll := renderAuditApproveAllButton("24h", false)
+	if !strings.Contains(gotAll, "auth required") {
+		t.Errorf("monitoring mode must lock approve-all: %q", gotAll)
+	}
+}
+
+func TestFilesHandlerRequiresAdmin(t *testing.T) {
+	resetAuthState(t)
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+	requireAdminFiles(http.NotFoundHandler()).ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("monitoring-mode file access must redirect, got %d", rec.Code)
+	}
+	// with a live session the request passes through to the next handler
+	token, _, err := authCheckPasswordWithCredentials(t, "pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	rec2 := httptest.NewRecorder()
+	q2 := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+	q2.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	requireAdminFiles(inner).ServeHTTP(rec2, q2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("admin session must pass the file gate, got %d", rec2.Code)
+	}
+}
+
+func TestLoginHandlerFlow(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	// wrong password: redirect with fail flag
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("POST", "http://x/auth/login?password=wrong", strings.NewReader("password=wrong"))
+	q.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getLoginHandler().ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("failed login must redirect, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Location"), "auth=fail") {
+		t.Errorf("failed login redirect must carry auth=fail: %q", rec.Header().Get("Location"))
+	}
+	// correct password (lock reset to keep the test focused on the cookie)
+	auth.mu.Lock()
+	auth.lockUntil = time.Time{}
+	auth.fails = 0
+	auth.mu.Unlock()
+	rec2 := httptest.NewRecorder()
+	q2 := httptest.NewRequest("POST", "http://x/auth/login", strings.NewReader("password=pw-123456"))
+	q2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getLoginHandler().ServeHTTP(rec2, q2)
+	if rec2.Code != http.StatusSeeOther {
+		t.Fatalf("successful login must redirect, got %d", rec2.Code)
+	}
+	cookies := rec2.Result().Cookies()
+	found := false
+	for _, c := range cookies {
+		if c.Name == "opnborg_auth" && c.Value != "" && c.HttpOnly {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("successful login must set an HttpOnly session cookie, got %v", cookies)
+	}
+}
+
+func TestAuthHashGeneratorFlow(t *testing.T) {
+	resetAuthState(t)
+	// GET renders the form
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("GET", "http://x/auth-hash", nil)
+	getAuthHashHandler().ServeHTTP(rec, q)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("generator GET must render, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "OPN_AUTH_HASH") || !strings.Contains(rec.Body.String(), "OPN_AUTH_SALT") {
+		t.Errorf("generator page must explain the two env vars")
+	}
+	// POST returns derived env values
+	rec2 := httptest.NewRecorder()
+	q2 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=super-secret-9&password2=super-secret-9"))
+	q2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getAuthHashHandler().ServeHTTP(rec2, q2)
+	body := rec2.Body.String()
+	if !strings.Contains(body, "OPN_AUTH_HASH=") {
+		t.Errorf("generator must render the OPN_AUTH_HASH env line")
+	}
+	// mismatched passwords surface an error
+	rec3 := httptest.NewRecorder()
+	q3 := httptest.NewRequest("POST", "http://x/auth-hash", strings.NewReader("password=super-secret-9&password2=other"))
+	q3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getAuthHashHandler().ServeHTTP(rec3, q3)
+	if !strings.Contains(rec3.Body.String(), "do not match") {
+		t.Errorf("mismatched passwords must surface an error")
+	}
+}
+
+func TestSanitizeAuthNext(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"", ""},
+		{"config", "config"},
+		{"audit", "audit"},
+		{"//evil.example", ""},
+		{"https://evil.example", ""},
+	} {
+		if got := sanitizeAuthNext(tc.in); got != tc.want {
+			t.Errorf("sanitizeAuthNext(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestRenderAuthPanel(t *testing.T) {
+	resetAuthState(t)
+	got := renderAuthPanel(&OPNCall{})
+	for _, want := range []string{"Authentication", "monitoring", "Create Authentication Env Vars", "Argon2id"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderAuthPanel missing %q: %s", want, got)
+		}
 	}
 }

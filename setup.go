@@ -128,6 +128,12 @@ func Setup() (*OPNCall, error) {
 	config.Daemon = !isEnv("OPN_NODAEMON")
 	config.Debug = isEnv("OPN_DEBUG")
 
+	// configure WebUI authentication credentials (OPN_AUTH_HASH /
+	// OPN_AUTH_SALT). When both are set with valid-looking values the
+	// [ Authenticate ] button in the nav bar unlocks admin mode per browser
+	// session; otherwise the WebUI stays in monitoring-only mode.
+	authInit()
+
 	// configure backup storage git repo management (init + auto commit +
 	// optional upstream SSH sync). The feature is opt-in via OPN_GIT_ENABLE;
 	// when disabled the storage folder is left as a plain directory tree.
@@ -222,6 +228,7 @@ func Setup() (*OPNCall, error) {
 		s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
 		css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
 		s.WriteString(css)
+		s.WriteString(_authJS)
 		_head = s.String() + "<meta http-equiv=\"refresh\" content=\"60\">" + _lf + "</head>" + _lf
 		// Audit and config dashboard pages are static per-request renders (no
 		// live polling), so they use a refresh-free head and never auto-reload.

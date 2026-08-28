@@ -22,7 +22,7 @@ func getConfigDashboardHandler() http.Handler {
 		r = headHTML(r)
 		switch q.Method {
 		case "GET":
-			writeTransportCompressedPage(getConfigDashboardHTML(), r, q, true)
+			writeTransportCompressedPage(getConfigDashboardHTML(q), r, q, true)
 		default:
 			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 		}
@@ -31,12 +31,12 @@ func getConfigDashboardHandler() http.Handler {
 }
 
 // getConfigDashboardHTML assembles the full config dashboard document.
-func getConfigDashboardHTML() string {
+func getConfigDashboardHTML(q *http.Request) string {
 	var s strings.Builder
 	s.WriteString(_htmlStart)
 	s.WriteString(_headStatic)
 	s.WriteString(_bodyStart)
-	s.WriteString(_bodyHead)
+	s.WriteString(getBodyHead(q))
 	s.WriteString(getConfigNavi())
 	s.WriteString(renderConfigDashboard(_cfg))
 	s.WriteString(_bodyFooter)
@@ -71,6 +71,7 @@ func renderConfigDashboard(config *OPNCall) string {
 
 	s.WriteString(renderGeneralPanel(config))
 	s.WriteString(renderOPNPanel(config))
+	s.WriteString(renderAuthPanel(config))
 	s.WriteString(renderGroupsPanel(config))
 	s.WriteString(renderSyncPanel(config))
 	s.WriteString(renderGitPanel(config))
@@ -625,4 +626,45 @@ func renderRawEnvValue(name, val string) string {
 		return formatTargetsDisplay(val)
 	}
 	return "<code>" + html.EscapeString(val) + "</code>"
+}
+
+// renderAuthPanel renders the "Authentication" tile on the config dashboard.
+// It shows the current WebUI mode (monitoring vs admin), whether the
+// OPN_AUTH_HASH / OPN_AUTH_SALT credentials are armed, and a button that
+// opens the credential generator so the operator can create the two env
+// vars for a chosen password (Argon2id, time=8, memory=64 MiB, threads=4,
+// keylen=64). The password itself is never stored; opnborg only displays
+// the derived env values once for the operator to copy into the daemon
+// environment and restart.
+func renderAuthPanel(c *OPNCall) string {
+	var s strings.Builder
+	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Authentication</div>")
+	mode := "<span class=\"dash-ok\">monitoring (default)</span>"
+	if c != nil && adminEnabled.Load() {
+		mode = "<span class=\"dash-warn\">admin (authenticated session)</span>"
+	}
+	writeDashRow(&s, "Current Mode", mode)
+	writeDashRow(&s, "Credentials", secretPillOpnAuth())
+	writeDashRow(&s, "KDF", "Argon2id &middot; time=8 &middot; memory=64 MiB &middot; threads=4 &middot; keylen=64")
+	if authCredentialsEnabled() {
+		writeDashRow(&s, "Login", "<span class=\"dash-ok\">armed</span> (nav-bar [ Authenticate ] button)")
+	} else {
+		writeDashRow(&s, "Login", "<span class=\"dash-muted\">not armed</span>")
+		s.WriteString("<div class=\"auth-panel-actions\">")
+		s.WriteString("<a href=\"auth-hash\" class=\"btn btn-force\">[ Create Authentication Env Vars ]</a>")
+		s.WriteString("</div>")
+		s.WriteString("<p class=\"cfg-intro\">Enter your admin password on the generator page; opnborg derives " +
+			"<code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> for you. Copy both into the opnborg environment and restart the daemon to arm admin mode.</p>")
+	}
+	s.WriteString("</div>")
+	return s.String()
+}
+
+// secretPillOpnAuth renders the credential set/not-set pill for the
+// OPN_AUTH_HASH + OPN_AUTH_SALT pair (values are never displayed).
+func secretPillOpnAuth() string {
+	if authCredentialsEnabled() {
+		return "<span class=\"dash-warn\">set (masked)</span>"
+	}
+	return "<span class=\"dash-muted\">not set</span>"
 }

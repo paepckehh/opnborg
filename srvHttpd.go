@@ -41,10 +41,14 @@ func startWeb(c *OPNCall) {
 	mux.Handle("/config", addSecurityHeader(getConfigDashboardHandler()))
 	mux.Handle("/audit", addSecurityHeader(getAuditHandler()))
 	mux.Handle("/progress", addSecurityHeader(getProgressHandler()))
-	mux.Handle("/files/", addSecurityHeader(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path)))))
+	mux.Handle("/files/", addSecurityHeader(requireAdminFiles(http.StripPrefix("/files/", http.FileServer(http.Dir(c.Path))))))
 	mux.Handle("/force", getForceHandler())
 	mux.Handle("/approve", getApproveHandler())
 	mux.Handle("/approve-all", getApproveAllHandler())
+	mux.Handle("/auth/login", getLoginHandler())
+	mux.Handle("/auth/logout", getLogoutHandler())
+	mux.Handle("/auth/state", getAuthStateHandler())
+	mux.Handle("/auth-hash", getAuthHashHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())
 
 	// httpsrv

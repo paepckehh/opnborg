@@ -77,7 +77,10 @@ func getIndexHandler() http.Handler {
 		r = headHTML(r)
 		switch q.Method {
 		case "GET":
-			writeTransportCompressedPage(getStartHTML(), r, q, true)
+			if fail := q.URL.Query().Get("auth"); fail == "locked" {
+				_, _ = r.Write([]byte("<script>document.addEventListener('DOMContentLoaded',function(){openAuthDialog('monitoring mode: config download locked, please authenticate first')})</script>"))
+			}
+			writeTransportCompressedPage(getStartHTML(q), r, q, true)
 		default:
 			inf := "Error: Method Not Allowed (405) [" + q.Method + "]"
 			http.Error(r, inf, http.StatusMethodNotAllowed)
@@ -87,12 +90,12 @@ func getIndexHandler() http.Handler {
 }
 
 // getStartHTML is the root page
-func getStartHTML() string {
+func getStartHTML(q *http.Request) string {
 	var s strings.Builder
 	s.WriteString(_htmlStart)
 	s.WriteString(_head)
 	s.WriteString(_bodyStart)
-	s.WriteString(_bodyHead)
+	s.WriteString(getBodyHead(q))
 	s.WriteString(getReviewBanner())
 	s.WriteString(getNavi())
 	s.WriteString(getAuditTile())
