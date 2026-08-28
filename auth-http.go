@@ -148,6 +148,20 @@ func requireAdminFiles(next http.Handler) http.Handler {
 	})
 }
 
+// requireAdmin guards mutating action endpoints (approve, approve-all, force)
+// so an unauthenticated client cannot bypass the greyed-out UI buttons by
+// POSTing directly to the endpoint. Monitoring-mode clients are redirected
+// to the audit page with an auth=locked flag so the UI surfaces the reason.
+func requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
+		if !authIsAdmin(q) {
+			http.Redirect(w, q, "audit?auth=locked", http.StatusSeeOther)
+			return
+		}
+		next.ServeHTTP(w, q)
+	})
+}
+
 // sanitizeAuthNext constrains the post-login redirect target to a small
 // allow-list of relative pages so an open-redirect cannot smuggle operators
 // off the WebUI (or onto //evil.example style scheme-relative URLs).
@@ -332,6 +346,7 @@ document.addEventListener('DOMContentLoaded',function(){
  if(f)f.addEventListener('submit',function(){authCheckStart();});
  var q=new URLSearchParams(window.location.search);
  if(q.get('auth')==='fail'){var w=parseInt(q.get('wait')||'0',10);openAuthDialog(w>0?('login locked for '+w+'s (shared wait for all sessions), attempt #'+(q.get('f')||'?')):'invalid password, please try again');}
+ if(q.get('auth')==='locked'){openAuthDialog('monitoring mode: action locked, please authenticate first');}
  stopAuthPoll();window._authPoll=setInterval(authPollLock,1000);authPollLock();
 });
 </script>`

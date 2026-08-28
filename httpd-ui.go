@@ -401,9 +401,9 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .auth-nav-btn.auth-logout{color:var(--warn);border-color:rgba(210,153,34,.5)}
 .auth-nav-form{display:inline-flex}
 .auth-setup{color:var(--accent-2)}
-.btn-dl-locked{background:var(--card-2);color:var(--muted);border:1px solid var(--border);padding:.28rem .55rem;border-radius:6px;font-size:.74rem;font-family:var(--mono);cursor:not-allowed;opacity:.55;filter:grayscale(.7);text-decoration:line-through}
-.dl-locked{display:inline-flex;cursor:not-allowed}
-.dl-locked:hover .btn-dl-locked{border-color:var(--warn);color:var(--warn);opacity:.8}
+.btn-dl-locked{display:inline-block;background:var(--card-2);color:var(--muted);border:1px solid var(--border);padding:.28rem .55rem;border-radius:6px;font-size:.74rem;font-family:var(--mono);cursor:pointer;opacity:.55;filter:grayscale(.7);text-decoration:line-through;transition:border-color .2s,color .2s,opacity .2s}
+.dl-locked{display:inline-flex;cursor:pointer}
+.dl-locked:hover{border-color:var(--warn);color:var(--warn);opacity:.8}
 .approve-locked{cursor:not-allowed}
 .approve-locked:hover{border-color:var(--warn);color:var(--warn)}
 .auth-dialog-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(4,8,14,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center}

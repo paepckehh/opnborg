@@ -6935,6 +6935,12 @@ func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
 	if !strings.Contains(got, "monitoring mode only") {
 		t.Errorf("locked button must carry the monitoring-mode hint: %q", got)
 	}
+	// regression guard: a disabled <button> swallows click events, so the
+	// onclick navigation on the wrapping span would never fire. The locked
+	// control must be a clickable element itself, never a disabled button.
+	if strings.Contains(got, "<button disabled") {
+		t.Errorf("locked control must not use a disabled <button> (click events would be swallowed): %q", got)
+	}
 	// without credentials: clicking must point at the config dashboard setup
 	// section, and the login dialog must NOT be invoked
 	if !strings.Contains(got, "window.location.href='config'") {
@@ -6948,6 +6954,9 @@ func TestDownloadButtonGreyedOutInMonitoringMode(t *testing.T) {
 	gotArmed := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
 	if !strings.Contains(gotArmed, "openAuthDialog") {
 		t.Errorf("locked click with armed credentials must open the login dialog: %q", gotArmed)
+	}
+	if strings.Contains(gotArmed, "<button disabled") {
+		t.Errorf("locked control must not use a disabled <button>: %q", gotArmed)
 	}
 	adminEnabled.Store(true)
 	got2 := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
@@ -7014,6 +7023,78 @@ func TestFilesHandlerRequiresAdmin(t *testing.T) {
 	requireAdminFiles(inner).ServeHTTP(rec2, q2)
 	if rec2.Code != http.StatusOK {
 		t.Errorf("admin session must pass the file gate, got %d", rec2.Code)
+	}
+}
+
+func TestRequireAdminBlocksUnauthenticated(t *testing.T) {
+	resetAuthState(t)
+	// monitoring mode: any POST to /approve or /approve-all must be
+	// redirected before the inner handler runs
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567", nil)
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
+	requireAdmin(inner).ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("monitoring-mode approve must redirect, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
+		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
+	}
+	if called {
+		t.Error("inner handler must NOT be called in monitoring mode")
+	}
+}
+
+func TestRequireAdminAllowsAuthenticated(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	token, _, err := authCheckPasswordWithCredentials(t, "pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567", nil)
+	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	requireAdmin(inner).ServeHTTP(rec, q)
+	if rec.Code != http.StatusOK {
+		t.Errorf("admin session must pass the gate, got %d", rec.Code)
+	}
+	if !called {
+		t.Error("inner handler must be called in admin mode")
+	}
+}
+
+func TestApproveHandlerRequiresAdmin(t *testing.T) {
+	resetAuthState(t)
+	// monitoring mode: direct POST to /approve must be blocked
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("POST", "http://x/approve?hash=0123456789abcdef0123456789abcdef01234567&range=24h", nil)
+	requireAdmin(getApproveHandler()).ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("monitoring-mode approve must redirect, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
+		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
+	}
+}
+
+func TestApproveAllHandlerRequiresAdmin(t *testing.T) {
+	resetAuthState(t)
+	// monitoring mode: direct POST to /approve-all must be blocked
+	rec := httptest.NewRecorder()
+	q := httptest.NewRequest("POST", "http://x/approve-all?range=24h", nil)
+	requireAdmin(getApproveAllHandler()).ServeHTTP(rec, q)
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("monitoring-mode approve-all must redirect, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Location"), "auth=locked") {
+		t.Errorf("redirect must carry auth=locked: %q", rec.Header().Get("Location"))
 	}
 }
 
