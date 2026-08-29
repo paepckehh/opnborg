@@ -72,13 +72,11 @@ func renderConfigDashboard(config *OPNCall) string {
 	s.WriteString(renderGeneralPanel(config))
 	s.WriteString(renderOPNPanel(config))
 	s.WriteString(renderAuthPanel(config))
-	s.WriteString(renderGroupsPanel(config))
 	s.WriteString(renderSyncPanel(config))
 	s.WriteString(renderGitPanel(config))
 	s.WriteString(renderOllamaPanel(config))
 	s.WriteString(renderOpenAIPanel(config))
 	s.WriteString(renderHttpdPanel(config))
-	s.WriteString(renderRSysLogPanel(config))
 	s.WriteString(renderUnifiPanel(config))
 	s.WriteString(renderMonitoringPanel(config))
 
@@ -110,31 +108,6 @@ func renderOPNPanel(c *OPNCall) string {
 	writeDashRow(&s, "API Key", secretPill(c.Key))
 	writeDashRow(&s, "API Secret", secretPill(c.Secret))
 	writeDashRow(&s, "TLS Key Pin", secretPill(c.TLSKeyPin))
-	s.WriteString("</div>")
-	return s.String()
-}
-
-// renderGroupsPanel lists every parsed target group (OPN and Unifi) with its
-// description, image URL, and member hosts.
-func renderGroupsPanel(c *OPNCall) string {
-	var s strings.Builder
-	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Target Groups</div>")
-	if len(c.TGroups) == 0 {
-		s.WriteString("<div class=\"dash-row\"><span class=\"dash-value dash-muted\">none configured</span></div>")
-	} else {
-		for i, grp := range c.TGroups {
-			s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Group ")
-			s.WriteString(strconv.Itoa(i + 1))
-			s.WriteString("</span><span class=\"dash-value\">")
-			s.WriteString(html.EscapeString(groupSummary(grp)))
-			s.WriteString("</span></div>")
-			if len(grp.Member) > 0 {
-				s.WriteString("<div class=\"dash-row\"><span class=\"dash-label\">Members</span><span class=\"dash-value\">")
-				s.WriteString(formatTargetsDisplay(strings.Join(grp.Member, ",")))
-				s.WriteString("</span></div>")
-			}
-		}
-	}
 	s.WriteString("</div>")
 	return s.String()
 }
@@ -272,18 +245,6 @@ func renderHttpdPanel(c *OPNCall) string {
 		writeDashRow(&s, "mTLS Client CA", maskIfEmpty(html.EscapeString(c.Httpd.CAClient)))
 		writeDashRow(&s, "Theme FG", html.EscapeString(c.Httpd.Color.FG))
 		writeDashRow(&s, "Theme BG", html.EscapeString(c.Httpd.Color.BG))
-	}
-	s.WriteString("</div>")
-	return s.String()
-}
-
-// renderRSysLogPanel covers the RFC5424 remote syslog sink.
-func renderRSysLogPanel(c *OPNCall) string {
-	var s strings.Builder
-	s.WriteString("<div class=\"dash-panel\"><div class=\"dash-title\">Remote Syslog</div>")
-	writeDashRow(&s, "Syslog Server", boolPill(c.RSysLog.Enable))
-	if c.RSysLog.Enable {
-		writeDashRow(&s, "Listen Address", html.EscapeString(c.RSysLog.Server))
 	}
 	s.WriteString("</div>")
 	return s.String()
@@ -487,32 +448,6 @@ func urlCell(u *url.URL) string {
 		return "<span class=\"dash-muted\">not set</span>"
 	}
 	return "<a href=\"" + html.EscapeString(u.String()) + "\" target=\"_blank\">" + html.EscapeString(u.String()) + "</a>"
-}
-
-// groupSummary composes a one-line summary of a target group for the panel.
-func groupSummary(grp OPNGroup) string {
-	var b strings.Builder
-	if grp.OPN {
-		b.WriteString("[OPN] ")
-	}
-	if grp.Unifi {
-		b.WriteString("[UNIFI] ")
-	}
-	if grp.Name != "" {
-		b.WriteString(grp.Name)
-	} else {
-		b.WriteString("(default)")
-	}
-	if grp.Desc != "" {
-		b.WriteString(" — ")
-		b.WriteString(grp.Desc)
-	}
-	b.WriteString(" | members: ")
-	b.WriteString(strconv.Itoa(len(grp.Member)))
-	if grp.ImgURL != "" {
-		b.WriteString(" | image set")
-	}
-	return b.String()
 }
 
 // _rawEnvNames is the fixed list of OPN_* environment variables recognised by
