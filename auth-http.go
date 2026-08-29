@@ -397,6 +397,15 @@ func getBodyHead(q *http.Request) string {
 	if !isAdmin {
 		infoDialog = authInfoDialog(armed)
 	}
+	// The result dialog is shown after a failed login redirect. It is
+	// only needed in monitoring mode (a failed login keeps the user in
+	// monitoring). It carries a big OK button that dismisses it and
+	// returns the user to normal monitoring view — the global lockout
+	// counter is untouched (server-side state).
+	resultDialog := ""
+	if !isAdmin {
+		resultDialog = authResultDialog()
+	}
 
 	var s strings.Builder
 	s.WriteString("<header class=\"app-header\"><h1>" + _app + "</h1>")
@@ -407,6 +416,7 @@ func getBodyHead(q *http.Request) string {
 	s.WriteString("</div></header>" + _lf)
 	s.WriteString(dialog)
 	s.WriteString(infoDialog)
+	s.WriteString(resultDialog)
 	return s.String()
 }
 
@@ -473,6 +483,27 @@ func authInfoDialog(armed bool) string {
 </div>` + _lf
 }
 
+// authResultDialog renders a modal dialog shown after a failed login
+// attempt. It displays the authentication-failure result with a prominent
+// OK button. Clicking OK dismisses the dialog and returns the user to
+// normal unauthenticated monitoring view-only mode. The global lockout
+// counter (server-side authState) is preserved so the nav-bar countdown
+// and rate-limiting remain in effect — the user simply continues
+// monitoring until the lock expires and they can try again.
+func authResultDialog() string {
+	return `<div class="auth-dialog-backdrop" id="auth-result-dialog" hidden>
+<div class="auth-dialog auth-result-dialog">
+<div class="auth-result-icon" aria-hidden="true">&#9888;</div>
+<div class="auth-dialog-title">Authentication Failed</div>
+<div class="auth-result-msg" id="auth-result-msg"></div>
+<div class="auth-result-note">You are now in <strong>monitoring mode</strong>. All pages remain readable; config downloads and audit approvals stay locked until you authenticate successfully.</div>
+<div class="auth-result-actions">
+<button type="button" class="btn btn-force auth-result-ok" onclick="closeAuthResultDialog()">[ OK ]</button>
+</div>
+</div>
+</div>` + _lf
+}
+
 // _authJS is the small browser helper shipped with every page that carries
 // the nav-bar auth UI. It opens/closes the login dialog, shows the clock
 // standby animation while the Argon2id derivation round-trips, and polls
@@ -483,6 +514,8 @@ function openAuthDialog(msg){var d=document.getElementById('auth-dialog');if(!d)
 function closeAuthDialog(){var d=document.getElementById('auth-dialog');if(d)d.hidden=true;stopAuthPoll();}
 function showAuthInfoDialog(msg){var d=document.getElementById('auth-info-dialog');if(!d)return;d.hidden=false;var m=document.getElementById('auth-info-msg');if(msg&&m){m.textContent=msg;m.hidden=false;}else if(m){m.hidden=true;}}
 function closeAuthInfoDialog(){var d=document.getElementById('auth-info-dialog');if(d)d.hidden=true;}
+function showAuthResultDialog(msg){var d=document.getElementById('auth-result-dialog');if(!d)return;d.hidden=false;var m=document.getElementById('auth-result-msg');if(m){m.textContent=msg||'The password you entered was not accepted.';m.hidden=false;}}
+function closeAuthResultDialog(){var d=document.getElementById('auth-result-dialog');if(d)d.hidden=true;var u=new URL(window.location.href);u.search='';window.history.replaceState({},'',u);}
 function stopAuthPoll(){if(window._authPoll){clearInterval(window._authPoll);window._authPoll=null;}}
 function authCheckStart(){
  var chk=document.getElementById('auth-checking');var f=document.getElementById('auth-form');
@@ -505,7 +538,7 @@ document.addEventListener('DOMContentLoaded',function(){
  var f=document.getElementById('auth-form');
  if(f)f.addEventListener('submit',function(){authCheckStart();});
  var q=new URLSearchParams(window.location.search);
- if(q.get('auth')==='fail'){var w=parseInt(q.get('wait')||'0',10);openAuthDialog(w>0?('login locked for '+w+'s (shared wait for all sessions), attempt #'+(q.get('f')||'?')):'invalid password, please try again');}
+ if(q.get('auth')==='fail'){var w=parseInt(q.get('wait')||'0',10);var msg=w>0?('Login failed. The password was not accepted. Login is locked for '+w+' seconds (shared across all sessions). You can try again after the lock expires.'):'Login failed. The password you entered was not accepted. You can try again at any time.';showAuthResultDialog(msg);}
  if(q.get('auth')==='locked'){showAuthInfoDialog('monitoring mode: action locked, please authenticate first');}
  stopAuthPoll();window._authPoll=setInterval(authPollLock,1000);authPollLock();
 });

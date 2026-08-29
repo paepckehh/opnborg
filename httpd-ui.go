@@ -425,6 +425,12 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .auth-info-step code{font-family:var(--mono);font-size:.76rem;background:rgba(0,0,0,.28);padding:.1rem .35rem;border-radius:4px;border:1px solid var(--border);word-break:break-all}
 .auth-info-actions{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem}
 .auth-info-action{margin-right:.4rem}
+.auth-result-dialog{max-width:400px;text-align:center}
+.auth-result-icon{font-size:2.6rem;color:var(--warn);text-shadow:0 0 22px rgba(248,113,34,.5);margin:.3rem 0 .1rem}
+.auth-result-msg{color:var(--err);font-size:.84rem;margin:.4rem 0 .3rem;padding:.45rem .6rem;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:6px}
+.auth-result-note{color:var(--muted);font-size:.76rem;margin:.4rem 0 .6rem;line-height:1.4}
+.auth-result-actions{display:flex;justify-content:center;margin-top:.4rem}
+.auth-result-ok{min-width:140px;font-size:1rem;padding:.6rem 1.4rem}
 .auth-checking{display:flex;flex-direction:column;align-items:center;gap:.55rem;padding:.9rem 0 .2rem 0}.auth-checking[hidden]{display:none}
 .auth-checking-text{color:var(--muted);font-size:.76rem;text-align:center}
 .auth-clock{position:relative;width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);box-shadow:0 0 16px rgba(74,158,255,.5),inset 0 0 12px rgba(74,158,255,.3);animation:auth-rotate 1.6s linear infinite}

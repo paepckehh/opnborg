@@ -8063,3 +8063,145 @@ func TestConfigFilesNeverAccessibleWithoutAdminSession(t *testing.T) {
 		}
 	}
 }
+
+// TestAuthResultDialogRendered verifies the auth-fail result dialog is always
+// present (hidden) in the header markup so the JS can show it after a failed
+// login redirect. The dialog must carry a prominent OK button and monitoring-
+// mode messaging.
+func TestAuthResultDialogRendered(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	got := getBodyHead(nil)
+	for _, want := range []string{
+		`id="auth-result-dialog"`,
+		"auth-result-ok",
+		"Authentication Failed",
+		"monitoring mode",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("header missing %q in result dialog: %q", want, got)
+		}
+	}
+}
+
+// TestAuthResultDialogRenderedUnarmed verifies the result dialog is rendered
+// even when no credentials are configured — a failed login redirect could
+// arrive from a stale URL bar after credentials were removed, and the user
+// should still see the result and return to monitoring mode.
+func TestAuthResultDialogRenderedUnarmed(t *testing.T) {
+	resetAuthState(t)
+	got := getBodyHead(nil)
+	if !strings.Contains(got, `id="auth-result-dialog"`) {
+		t.Errorf("result dialog must render even without credentials: %q", got)
+	}
+}
+
+// TestAuthResultDialogRenderedAdmin verifies the result dialog is NOT rendered
+// when an admin session is active (no need — login failures don't occur in
+// admin mode).
+func TestAuthResultDialogRenderedAdmin(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	auth.mu.Lock()
+	for token := range auth.sessions {
+		auth.sessions[token] = time.Now().Add(time.Hour)
+	}
+	auth.mu.Unlock()
+	q := httptest.NewRequest("GET", "http://x/", nil)
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	auth.mu.Lock()
+	auth.lockUntil = time.Time{}
+	auth.mu.Unlock()
+	q.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+	got := getBodyHead(q)
+	if strings.Contains(got, `id="auth-result-dialog"`) {
+		t.Errorf("result dialog must not render in admin mode: %q", got)
+	}
+}
+
+// TestAuthFailRedirectPreservesLockout verifies that after a failed login the
+// global lockout counter is preserved (server-side state) while the user
+// remains in monitoring mode (adminEnabled stays false). The result dialog
+// dismiss returns the user to normal monitoring without clearing the lock.
+func TestAuthFailRedirectPreservesLockout(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	// failed attempt
+	_, wait, err := authCheckPassword("wrong-password")
+	if err == nil {
+		t.Fatalf("wrong password must fail")
+	}
+	if wait <= 0 {
+		t.Errorf("failed login must arm a lockout wait, got %v", wait)
+	}
+	// lockout state must be set
+	lock, fails := authRemainingLock()
+	if lock <= 0 {
+		t.Errorf("lockout must be active after failed login, got %v", lock)
+	}
+	if fails != 1 {
+		t.Errorf("fail count must be 1, got %d", fails)
+	}
+	// user stays in monitoring mode
+	if adminEnabled.Load() {
+		t.Errorf("adminEnabled must be false after failed login")
+	}
+	// result dialog is in the rendered header
+	got := getBodyHead(nil)
+	if !strings.Contains(got, `id="auth-result-dialog"`) {
+		t.Errorf("result dialog must render after failed login: %q", got)
+	}
+}
+
+// TestAuthResultDialogCSS verifies the CSS rules for the result dialog exist
+// so it renders correctly (hidden override, icon, OK button sizing).
+func TestAuthResultDialogCSS(t *testing.T) {
+	for _, want := range []string{
+		".auth-result-dialog",
+		".auth-result-ok",
+		".auth-result-msg",
+		".auth-result-icon",
+	} {
+		if !strings.Contains(_css, want) {
+			t.Errorf("CSS missing rule %q", want)
+		}
+	}
+}
+
+// TestAuthResultDialogJS verifies the client-side JS includes the functions
+// to show/close the result dialog.
+func TestAuthResultDialogJS(t *testing.T) {
+	for _, want := range []string{
+		"showAuthResultDialog",
+		"closeAuthResultDialog",
+	} {
+		if !strings.Contains(_authJS, want) {
+			t.Errorf("_authJS missing function %q", want)
+		}
+	}
+}
+
+// TestAuthFailHandlerRedirectsToResultDialog verifies the login handler
+// redirects to ?auth=fail on failure (which triggers the result dialog via
+// JS) and that the lockout wait is passed in the query string.
+func TestAuthFailHandlerRedirectsToResultDialog(t *testing.T) {
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/auth/login?next=", strings.NewReader("password=wrong"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	getLoginHandler().ServeHTTP(rec, req)
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "auth=fail") {
+		t.Errorf("login failure must redirect with auth=fail, got %q", loc)
+	}
+	if !strings.Contains(loc, "wait=") {
+		t.Errorf("login failure redirect must include wait=, got %q", loc)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("expected 303 redirect, got %d", rec.Code)
+	}
+}
