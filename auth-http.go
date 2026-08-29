@@ -263,6 +263,24 @@ function updatePwMatch(){
   if(p1===p2){m.textContent='passwords match';m.className='auth-pw-match match-yes';}
   else{m.textContent='passwords do not match';m.className='auth-pw-match match-no';}
 }
+function togglePw(id,btn){
+  var el=document.getElementById(id);
+  if(el.type==='password'){el.type='text';btn.textContent='[ Hide ]';btn.classList.add('pw-visible');}
+  else{el.type='password';btn.textContent='[ Show ]';btn.classList.remove('pw-visible');}
+}
+function copyEnvVars(btn){
+  var lines=document.querySelectorAll('.auth-env-box-code');
+  var txt='';
+  for(var i=0;i<lines.length;i++){txt+=lines[i].textContent+'\n';}
+  txt=txt.trimEnd();
+  function done(){btn.textContent='\\u2713 Copied';btn.classList.add('copied');setTimeout(function(){btn.textContent='\\u2398 Copy';btn.classList.remove('copied');},2000);}
+  function fail(){btn.textContent='\\u2717 Failed';setTimeout(function(){btn.textContent='\\u2398 Copy';},2000);}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done).catch(function(){fallbackCopy(txt,done,fail);});}
+  else{fallbackCopy(txt,done,fail);}
+}
+function fallbackCopy(txt,ok,fail){
+  try{var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();var r=document.execCommand('copy');document.body.removeChild(ta);if(r){ok();}else{fail();}}catch(e){fail();}
+}
 document.addEventListener('DOMContentLoaded',function(){
   var f=document.getElementById('auth-gen-form');
   if(f)f.addEventListener('submit',function(e){
@@ -311,8 +329,11 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 		}
 		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"Add both environment variables to your opnborg environment (e.g. your <code>.env</code> file or systemd unit) and restart the daemon to arm admin mode:</p>")
-		s.WriteString("<div class=\"auth-env-line\"><code class=\"auth-env-code\">" + html.EscapeString(_envAuthHash+"="+hashEnv) + "</code></div>")
-		s.WriteString("<div class=\"auth-env-line\"><code class=\"auth-env-code\">" + html.EscapeString(_envAuthSalt+"="+saltEnv) + "</code></div>")
+		s.WriteString("<div class=\"auth-env-box\">")
+		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">" + html.EscapeString(_envAuthHash+"="+hashEnv) + "</code></div>")
+		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">" + html.EscapeString(_envAuthSalt+"="+saltEnv) + "</code></div>")
+		s.WriteString("<div style=\"text-align:right;margin-top:.4rem\"><button type=\"button\" class=\"auth-copy-btn\" onclick=\"copyEnvVars(this)\">&#x2398; Copy</button></div>")
+		s.WriteString("</div>")
 		s.WriteString("<p class=\"cfg-intro\">Keep both values secret. After the restart the nav-bar [ Authenticate ] button unlocks admin mode with the password you entered above.</p>")
 	} else {
 		if armed {
@@ -326,13 +347,19 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 			"The password itself is never stored; only the derived hash is displayed once for you to copy into the environment, then restart opnborg.</p>")
 		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"auth-hash\" id=\"auth-gen-form\">")
 		s.WriteString("<div class=\"auth-gen-field-label\">Password</div>")
+		s.WriteString("<div class=\"auth-pw-field-row\">")
 		s.WriteString("<input class=\"auth-input\" type=\"password\" name=\"password\" id=\"pw1\" placeholder=\"admin password\" minlength=\"5\" required autocomplete=\"new-password\" oninput=\"updatePwQuality()\">")
+		s.WriteString("<button type=\"button\" class=\"auth-pw-toggle\" onclick=\"togglePw('pw1',this)\">[ Show ]</button>")
+		s.WriteString("</div>")
 		s.WriteString("<div class=\"auth-pw-strength\">")
 		s.WriteString("<div class=\"auth-pw-bar-track\"><div class=\"auth-pw-bar-fill pw-empty\" id=\"pw-bar\"></div></div>")
 		s.WriteString("<div class=\"auth-pw-label\" id=\"pw-label\">enter a password (minimum 5 characters)</div>")
 		s.WriteString("</div>")
 		s.WriteString("<div class=\"auth-gen-field-label\">Repeat Password</div>")
+		s.WriteString("<div class=\"auth-pw-field-row\">")
 		s.WriteString("<input class=\"auth-input auth-gen-form-pw2\" type=\"password\" name=\"password2\" id=\"pw2\" placeholder=\"repeat password\" minlength=\"5\" required autocomplete=\"new-password\" oninput=\"updatePwMatch()\">")
+		s.WriteString("<button type=\"button\" class=\"auth-pw-toggle\" onclick=\"togglePw('pw2',this)\">[ Show ]</button>")
+		s.WriteString("</div>")
 		s.WriteString("<div class=\"auth-pw-match\" id=\"pw-match\"></div>")
 		s.WriteString("<button type=\"submit\" class=\"btn btn-force\" id=\"pw-submit\">[ Generate Env Vars ]</button>")
 		s.WriteString("</form>")

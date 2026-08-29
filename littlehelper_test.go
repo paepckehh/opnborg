@@ -7347,6 +7347,13 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "minimum 5 characters") {
 		t.Errorf("generator page must mention the 5 character minimum")
 	}
+	// GET must include the password reveal toggle buttons
+	if !strings.Contains(rec.Body.String(), "togglePw") {
+		t.Errorf("generator page must include the password reveal toggle function")
+	}
+	if strings.Count(rec.Body.String(), "auth-pw-toggle") < 2 {
+		t.Errorf("generator page must include a Show/Hide toggle for each password field")
+	}
 	// GET must use equal-looking password fields (both use auth-input class)
 	if strings.Count(rec.Body.String(), "class=\"auth-input\"") < 1 {
 		t.Errorf("generator page must use auth-input class for password fields")
@@ -7362,11 +7369,18 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	}
 	// The full "NAME=value" must be inside a single code block (not split
 	// across span + code) so it can be copied as one line.
-	if !strings.Contains(body, "<code class=\"auth-env-code\">OPN_AUTH_HASH=") {
+	if !strings.Contains(body, "<code class=\"auth-env-box-code\">OPN_AUTH_HASH=") {
 		t.Errorf("generator must render OPN_AUTH_HASH=value inside a single code block")
 	}
-	if !strings.Contains(body, "<code class=\"auth-env-code\">OPN_AUTH_SALT=") {
+	if !strings.Contains(body, "<code class=\"auth-env-box-code\">OPN_AUTH_SALT=") {
 		t.Errorf("generator must render OPN_AUTH_SALT=value inside a single code block")
+	}
+	// Both env vars must be inside a single combined box with a copy button
+	if !strings.Contains(body, "auth-env-box") {
+		t.Errorf("generator must render both env vars inside a combined box")
+	}
+	if !strings.Contains(body, "copyEnvVars") {
+		t.Errorf("generator must include the copy-to-clipboard function")
 	}
 	// The generated hash must not contain "$" (single key, not duplicated)
 	if strings.Contains(body, "$</code>") && strings.Contains(body, "OPN_AUTH_HASH=") {

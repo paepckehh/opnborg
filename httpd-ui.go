@@ -460,6 +460,17 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .auth-panel-actions{margin:.55rem 0 .25rem 0}
 .auth-gen-warning{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.5);border-radius:6px;padding:.6rem .7rem;margin:.5rem 0;color:var(--warn);font-size:.8rem;line-height:1.4}
 .auth-gen-notice{background:rgba(63,185,80,.08);border:1px solid var(--border);border-radius:6px;padding:.5rem .6rem;margin:.5rem 0;font-size:.78rem;color:var(--muted);line-height:1.4}
+.auth-pw-field-row{display:flex;gap:.4rem;align-items:center}
+.auth-pw-field-row .auth-input{flex:1 1 auto;margin:0}
+.auth-pw-toggle{flex:0 0 auto;padding:.4rem .6rem;font-size:.72rem;background:var(--card-2);border:1px solid var(--border-strong);border-radius:8px;color:var(--muted);cursor:pointer;white-space:nowrap;transition:border-color .2s,color .2s}
+.auth-pw-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.auth-env-box{margin:.5rem 0;padding:.6rem .7rem;background:var(--card-2);border:1px solid var(--border-strong);border-radius:8px}
+.auth-env-box-line{display:flex;gap:.5rem;align-items:baseline;padding:.35rem 0}
+.auth-env-box-line+.auth-env-box-line{border-top:1px solid var(--border)}
+.auth-env-box-code{font-family:var(--mono);font-size:.74rem;background:rgba(0,0,0,.28);padding:.12rem .4rem;border-radius:4px;border:1px solid var(--border);word-break:break-all;flex:1 1 auto;display:block}
+.auth-copy-btn{flex:0 0 auto;padding:.4rem .6rem;font-size:.72rem;background:linear-gradient(135deg,rgba(74,158,255,.18),rgba(160,107,255,.14));border:1px solid var(--border-strong);border-radius:6px;color:var(--accent-2);cursor:pointer;white-space:nowrap;transition:border-color .2s,filter .2s;display:inline-flex;align-items:center;gap:.3rem}
+.auth-copy-btn:hover{border-color:var(--accent);filter:brightness(1.12)}
+.auth-copy-btn.copied{color:var(--ok);border-color:var(--ok)}
 @keyframes auth-rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes auth-tick{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .audit-tile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
