@@ -3592,6 +3592,40 @@ func TestOllamaPromptContainsDiffAndContract(t *testing.T) {
 	}
 }
 
+// TestOllamaPromptTruncatesLargeDiff verifies that when the diff exceeds
+// _ollamaMaxDiffLines, the prompt carries only the first 100 lines and a
+// truncation marker, so the model context window is not overrun.
+func TestOllamaPromptTruncatesLargeDiff(t *testing.T) {
+	var lines []string
+	for i := range 200 {
+		lines = append(lines, fmt.Sprintf("line %d", i))
+	}
+	diff := strings.Join(lines, "\n")
+	p := ollamaPrompt([]string{"fw01.lan"}, diff)
+	if strings.Contains(p, "line 100\n") {
+		t.Fatalf("prompt contains line 100 (index 100), should have been truncated at 100 lines")
+	}
+	if !strings.Contains(p, "--- DIFF TRUNCATED") {
+		t.Fatalf("prompt missing truncation marker")
+	}
+	if !strings.Contains(p, "line 99") {
+		t.Fatalf("prompt should contain line 99 (last kept line), got truncated too early")
+	}
+}
+
+// TestOllamaPromptSmallDiffNotTruncated verifies that a short diff is passed
+// through verbatim without a truncation marker.
+func TestOllamaPromptSmallDiffNotTruncated(t *testing.T) {
+	diff := "--- a/fw01.lan/current.xml\n+++ b/fw01.lan/current.xml\n@@ -1 +1 @@\n-<old/>\n+<new/>"
+	p := ollamaPrompt([]string{"fw01.lan"}, diff)
+	if strings.Contains(p, "DIFF TRUNCATED") {
+		t.Fatalf("short diff should not be truncated")
+	}
+	if !strings.Contains(p, diff) {
+		t.Fatalf("short diff not passed through verbatim")
+	}
+}
+
 // TestExtractServersFromStatus verifies the first path segment of every changed
 // file is extracted as the server name, deduplicated and sorted, with
 // root-level (slash-less) paths skipped.

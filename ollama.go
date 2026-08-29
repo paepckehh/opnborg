@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -55,6 +56,13 @@ const (
 	// sibling rules, aliases, interface names) so it can describe not just what
 	// changed but where in the configuration tree the change lives.
 	_ollamaDiffContext = 8
+	// _ollamaMaxDiffLines caps the number of diff lines sent to the model so a
+	// large configuration rotation does not overrun the model context window.
+	// Only the first 100 lines of the enriched diff are forwarded; the tail is
+	// dropped and a truncation marker is appended so the model knows the input
+	// was clipped. This line-based cap works alongside the byte-based
+	// _ollamaMaxDiffBytes cap applied earlier in gitDiffText.
+	_ollamaMaxDiffLines = 100
 	// _ollamaSmallFileBytes is the threshold below which the full new file
 	// content is appended to its diff block (in addition to the unified hunks).
 	// For small config fragments this lets the model reason about the complete
@@ -210,16 +218,30 @@ type openaiChatResponse struct {
 	Choices []openaiChatChoice `json:"choices"`
 }
 
+// truncateLines cuts s to at most max lines, appending a truncation marker so
+// the model knows the input was clipped. If s has max lines or fewer it is
+// returned unchanged.
+func truncateLines(s string, max int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= max {
+		return s
+	}
+	return strings.Join(lines[:max], "\n") + "\n--- DIFF TRUNCATED (first " + strconv.Itoa(max) + " lines) ---\n"
+}
+
 // ollamaPrompt assembles the full prompt sent to the model: the system persona,
 // the affected server name(s) derived from the first path segment of each
 // changed file, and the unified diff payload. The server list is injected as
 // explicit input so the model can anchor its description to the affected
-// appliance(s) rather than having to infer them from the diff paths.
+// appliance(s) rather than having to infer them from the diff paths. The diff
+// is truncated to the first _ollamaMaxDiffLines lines before being embedded so
+// a large configuration rotation does not overrun the model context window.
 func ollamaPrompt(servers []string, diff string) string {
 	serverLine := "(none)"
 	if len(servers) > 0 {
 		serverLine = strings.Join(servers, ", ")
 	}
+	diff = truncateLines(diff, _ollamaMaxDiffLines)
 	return _ollamaSystemPrompt + "\n\nAffected server(s): " + serverLine + "\n\n--- BEGIN DIFF ---\n" + diff + "\n--- END DIFF ---\n"
 }
 
