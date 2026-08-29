@@ -102,7 +102,7 @@ func authInit() {
 		return
 	}
 	if !validAuthHashFormat(hash) {
-		displayChan <- []byte("[AUTH][DISABLED][INVALID-" + _envAuthHash + "] expected '<base64-key>$<base64-key>' (argon2id, time=8,memory=65536,threads=1,keylen=64)")
+		displayChan <- []byte("[AUTH][DISABLED][INVALID-" + _envAuthHash + "] expected a base64-encoded 64-byte key (argon2id, time=8,memory=65536,threads=1,keylen=64)")
 		return
 	}
 	saltBytes, err := base64.StdEncoding.DecodeString(salt)
@@ -116,27 +116,42 @@ func authInit() {
 	displayChan <- []byte("[AUTH][ENABLED] admin mode credentials armed, monitoring mode active until login")
 }
 
-// validAuthHashFormat checks the "<base64-key>$<base64-key>" credential
-// shape: both halves must be valid base64 decoding to keylen bytes.
+// validAuthHashFormat checks that the OPN_AUTH_HASH value is either a single
+// base64-encoded 64-byte key, or the legacy "<base64-key>$<base64-key>"
+// format (key encoded twice). Both forms must decode to keylen bytes.
 func validAuthHashFormat(s string) bool {
 	_, err := decodeHashHalf(s)
 	return err == nil
 }
 
-// decodeHashHalf decodes and validates the base64 hash half of the
-// OPN_AUTH_HASH value ("first$second"): the second half must decode to
-// exactly keylen (64) bytes.
+// decodeHashHalf decodes and validates the base64 hash from OPN_AUTH_HASH.
+// Accepts two formats for backward compatibility:
+//   - Legacy: "<base64-key>$<base64-key>" — the second half must decode to
+//     keylen (64) bytes.
+//   - Current: a single base64-encoded key that must decode to keylen bytes.
 func decodeHashHalf(s string) ([]byte, error) {
-	_, h, _ := strings.Cut(s, "$")
-	if h == "" {
-		return nil, errors.New("empty hash part")
+	if before, after, ok := strings.Cut(s, "$"); ok {
+		// Legacy "<b64>$<b64>" format.
+		_ = before
+		if after == "" {
+			return nil, errors.New("empty hash part")
+		}
+		raw, err := base64.StdEncoding.DecodeString(after)
+		if err != nil {
+			return nil, errors.New("hash part is not valid base64")
+		}
+		if len(raw) != int(_authArgonKeyLen) {
+			return nil, errors.New("hash part must decode to 64 bytes (keylen=64)")
+		}
+		return raw, nil
 	}
-	raw, err := base64.StdEncoding.DecodeString(h)
+	// Current single-key format.
+	raw, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		return nil, errors.New("hash part is not valid base64")
+		return nil, errors.New("hash is not valid base64")
 	}
 	if len(raw) != int(_authArgonKeyLen) {
-		return nil, errors.New("hash part must decode to 64 bytes (keylen=64)")
+		return nil, errors.New("hash must decode to 64 bytes (keylen=64)")
 	}
 	return raw, nil
 }
@@ -149,15 +164,14 @@ func authArgonDerive(password string, salt []byte) []byte {
 
 // generateAuthCredentials derives OPN_AUTH_HASH and OPN_AUTH_SALT for a new
 // admin password using the fixed Argon2id parameter set and a fresh 16-byte
-// random salt. The OPN_AUTH_HASH format is "<base64-key>$<base64-key>"
-// (the key material encoded twice, separated by '$') so the credential is a
-// single opaque env line.
+// random salt. OPN_AUTH_HASH is a single base64-encoded Argon2id key (64
+// bytes). decodeHashHalf still accepts the legacy "<base64>$<base64>" format
+// (key encoded twice) for credentials already armed in the field.
 func generateAuthCredentials(password string) (hashEnv, saltEnv string) {
 	salt := make([]byte, _authArgonSaltLen)
 	_, _ = rand.Read(salt)
 	key := authArgonDerive(password, salt)
-	enc := base64.StdEncoding.EncodeToString(key)
-	return enc + "$" + enc, base64.StdEncoding.EncodeToString(salt)
+	return base64.StdEncoding.EncodeToString(key), base64.StdEncoding.EncodeToString(salt)
 }
 
 // authCredentialsEnabled reports whether login is armed.

@@ -6806,19 +6806,16 @@ func armTestAuth(tb testing.TB, password string) (hashEnv, saltEnv string) {
 func TestGenerateAuthCredentialsFormat(t *testing.T) {
 	resetAuthState(t)
 	hashEnv, saltEnv := generateAuthCredentials("correct horse battery staple")
-	// hash env: "<b64>$<b64>" both halves decoding to 64 bytes
-	h1, h2, ok := strings.Cut(hashEnv, "$")
-	if !ok || h1 == "" || h2 == "" {
-		t.Fatalf("hash env must be '<b64>$<b64>', got %q", hashEnv)
+	// hash env: single base64-encoded 64-byte key (no "$" separator)
+	if strings.Contains(hashEnv, "$") {
+		t.Fatalf("hash env must be a single base64 key (no '$'), got %q", hashEnv)
 	}
-	for _, h := range []string{h1, h2} {
-		raw, err := base64.StdEncoding.DecodeString(h)
-		if err != nil {
-			t.Fatalf("hash half not base64: %v", err)
-		}
-		if len(raw) != 64 {
-			t.Errorf("hash half decodes to %d bytes, want 64 (keylen)", len(raw))
-		}
+	raw, err := base64.StdEncoding.DecodeString(hashEnv)
+	if err != nil {
+		t.Fatalf("hash not base64: %v", err)
+	}
+	if len(raw) != 64 {
+		t.Errorf("hash decodes to %d bytes, want 64 (keylen)", len(raw))
 	}
 	// salt env: valid base64, at least 8 raw bytes
 	saltRaw, err := base64.StdEncoding.DecodeString(saltEnv)
@@ -6833,6 +6830,39 @@ func TestGenerateAuthCredentialsFormat(t *testing.T) {
 	}
 	if hashEnv == hashEnv2 {
 		t.Errorf("two generated credential sets must differ (random salts)")
+	}
+}
+
+func TestDecodeHashHalfLegacyFormat(t *testing.T) {
+	// Legacy "<b64>$<b64>" format must still be accepted so credentials
+	// already armed in the field keep working.
+	key := authArgonDerive("legacy-password", []byte("0123456789abcdef"))
+	enc := base64.StdEncoding.EncodeToString(key)
+	legacy := enc + "$" + enc
+	if !validAuthHashFormat(legacy) {
+		t.Errorf("legacy '$'-separated hash format must be accepted")
+	}
+	raw, err := decodeHashHalf(legacy)
+	if err != nil {
+		t.Fatalf("decodeHashHalf must accept legacy format: %v", err)
+	}
+	if len(raw) != 64 {
+		t.Errorf("legacy hash must decode to 64 bytes, got %d", len(raw))
+	}
+	// Current single-key format.
+	if !validAuthHashFormat(enc) {
+		t.Errorf("single-key hash format must be accepted")
+	}
+	raw2, err := decodeHashHalf(enc)
+	if err != nil {
+		t.Fatalf("decodeHashHalf must accept single-key format: %v", err)
+	}
+	if len(raw2) != 64 {
+		t.Errorf("single-key hash must decode to 64 bytes, got %d", len(raw2))
+	}
+	// Both must produce the same key.
+	if !bytes.Equal(raw, raw2) {
+		t.Errorf("legacy and current format must decode to the same key")
 	}
 }
 
@@ -7295,6 +7325,18 @@ func TestAuthHashGeneratorFlow(t *testing.T) {
 	body := rec2.Body.String()
 	if !strings.Contains(body, "OPN_AUTH_HASH=") {
 		t.Errorf("generator must render the OPN_AUTH_HASH env line")
+	}
+	// The full "NAME=value" must be inside a single code block (not split
+	// across span + code) so it can be copied as one line.
+	if !strings.Contains(body, "<code class=\"auth-env-code\">OPN_AUTH_HASH=") {
+		t.Errorf("generator must render OPN_AUTH_HASH=value inside a single code block")
+	}
+	if !strings.Contains(body, "<code class=\"auth-env-code\">OPN_AUTH_SALT=") {
+		t.Errorf("generator must render OPN_AUTH_SALT=value inside a single code block")
+	}
+	// The generated hash must not contain "$" (single key, not duplicated)
+	if strings.Contains(body, "$</code>") && strings.Contains(body, "OPN_AUTH_HASH=") {
+		t.Errorf("generated hash must not contain '$' (should be single base64 key)")
 	}
 	// POST result must also carry the warning
 	if !strings.Contains(body, "auth-gen-warning") {

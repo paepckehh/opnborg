@@ -311,8 +311,8 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 		}
 		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"Add both environment variables to your opnborg environment (e.g. your <code>.env</code> file or systemd unit) and restart the daemon to arm admin mode:</p>")
-		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthHash + "=</span><code class=\"auth-env-code\">" + html.EscapeString(hashEnv) + "</code></div>")
-		s.WriteString("<div class=\"auth-env-line\"><span class=\"raw-env-name\">" + _envAuthSalt + "=</span><code class=\"auth-env-code\">" + html.EscapeString(saltEnv) + "</code></div>")
+		s.WriteString("<div class=\"auth-env-line\"><code class=\"auth-env-code\">" + html.EscapeString(_envAuthHash+"="+hashEnv) + "</code></div>")
+		s.WriteString("<div class=\"auth-env-line\"><code class=\"auth-env-code\">" + html.EscapeString(_envAuthSalt+"="+saltEnv) + "</code></div>")
 		s.WriteString("<p class=\"cfg-intro\">Keep both values secret. After the restart the nav-bar [ Authenticate ] button unlocks admin mode with the password you entered above.</p>")
 	} else {
 		if armed {

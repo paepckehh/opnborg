@@ -433,7 +433,7 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .auth-wait-clock,.auth-wait-clock-dial{width:9px;height:9px;border-radius:50%;background:var(--err);box-shadow:0 0 8px var(--err);animation:review-blink .9s ease-in-out infinite}
 .auth-wait-clock-dial{background:var(--warn);box-shadow:0 0 8px var(--warn);animation-delay:.25s}
 .auth-env-line{display:flex;gap:.5rem;align-items:baseline;padding:.45rem .55rem;background:var(--card-2);border:1px solid var(--border);border-radius:6px;margin:.35rem 0;flex-wrap:wrap}
-.auth-env-code{font-family:var(--mono);font-size:.74rem;background:rgba(0,0,0,.28);padding:.12rem .4rem;border-radius:4px;border:1px solid var(--border);word-break:break-all;flex:1 1 auto}
+.auth-env-code{font-family:var(--mono);font-size:.74rem;background:rgba(0,0,0,.28);padding:.12rem .4rem;border-radius:4px;border:1px solid var(--border);word-break:break-all;flex:1 1 auto;display:block}
 .auth-gen-form{display:flex;flex-direction:column;gap:.5rem;max-width:420px;margin:.6rem 0}
 .auth-gen-form-pw2{width:100%}
 .auth-gen-err{color:var(--err);font-size:.8rem;margin-bottom:.5rem}
