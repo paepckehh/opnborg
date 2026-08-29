@@ -169,11 +169,15 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	unifiWatchStatus = "<div class=\"member-status\">" + state + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\">" + linkUI + "</span>" + links + "</div>" + seen + totalBox + lastFileBox + errBox + tagBox
 }
 
-// renderDownloadButton renders one config-file download button. When
-// credentials are armed and no admin session is live (monitoring mode) the
-// button is rendered as a locked control that opens the auth info dialog
-// explaining how to authenticate. In admin mode (or when no credentials are
-// configured) the button is an active download link.
+// renderDownloadButton renders one config-file download button. When the
+// request is not from an authenticated admin session the button is rendered
+// as a locked control that opens the auth info dialog explaining how to
+// authenticate. Only authenticated admin sessions get an active download
+// link — this applies both when credentials are armed (monitoring mode
+// shows locked buttons) and when no credentials are configured (locked
+// buttons with setup instructions). Sensitive config files (current.xml,
+// current.unf, archive) must never be downloadable from an unauthenticated
+// monitoring session.
 func renderDownloadButton(href, label string) string {
 	if adminEnabled.Load() {
 		return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
@@ -181,5 +185,5 @@ func renderDownloadButton(href, label string) string {
 	if authCredentialsEnabled() {
 		return "<button class=\"dl-locked\" title=\"config downloads are locked in monitoring mode &#8212; authenticate to unlock\" onclick=\"showAuthInfoDialog('config file downloads are locked in monitoring mode, please authenticate')\">" + label + " &#128274;</button>"
 	}
-	return "<a href=\"" + href + "\"" + _nwin + "><button>" + label + "</button></a>"
+	return "<button class=\"dl-locked\" title=\"config downloads require admin authentication &#8212; configure credentials to unlock\" onclick=\"showAuthInfoDialog('config file downloads require admin authentication, please configure OPN_AUTH_HASH and OPN_AUTH_SALT')\">" + label + " &#128274;</button>"
 }

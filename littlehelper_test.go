@@ -7008,14 +7008,18 @@ func authCheckPasswordWithCredentials(t *testing.T, password string) (string, ti
 
 func TestDownloadButtonGatedByAuthMode(t *testing.T) {
 	resetAuthState(t)
-	// no credentials configured: downloads are active (monitoring-only mode
-	// has no login to enforce)
+	// no credentials configured: downloads are locked — sensitive config
+	// files must never be accessible from an unauthenticated monitoring
+	// session even when no credentials are configured.
 	got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
-	if !strings.Contains(got, "<a href=") {
-		t.Errorf("download button must be an active link when no credentials configured: %q", got)
+	if strings.Contains(got, "<a href=") {
+		t.Errorf("download button must not be an active link when no credentials configured: %q", got)
 	}
-	if strings.Contains(got, "dl-locked") {
-		t.Errorf("download button must not be locked without credentials: %q", got)
+	if !strings.Contains(got, "dl-locked") {
+		t.Errorf("download button must be locked without credentials: %q", got)
+	}
+	if !strings.Contains(got, "showAuthInfoDialog") {
+		t.Errorf("locked download button must open auth info dialog: %q", got)
 	}
 
 	// credentials armed, monitoring mode: locked
@@ -7090,15 +7094,17 @@ func TestAuditDiffLockedInMonitoringMode(t *testing.T) {
 
 func TestFilesHandlerAdminGate(t *testing.T) {
 	resetAuthState(t)
-	// no credentials configured: files endpoint is a pass-through (monitoring-only)
+	// no credentials configured: files endpoint must return 403 Forbidden —
+	// sensitive config files must never be served to an unauthenticated
+	// monitoring session, even when no credentials are configured.
 	rec := httptest.NewRecorder()
 	q := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	requireAdminFiles(inner).ServeHTTP(rec, q)
-	if rec.Code != http.StatusOK {
-		t.Errorf("files endpoint must be accessible without credentials configured, got %d", rec.Code)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("files endpoint must return 403 without credentials configured, got %d", rec.Code)
 	}
 
 	// credentials armed, monitoring mode: redirect to config?auth=locked
@@ -7699,12 +7705,16 @@ func TestAuditApproveControlsLockedInMonitoringMode(t *testing.T) {
 		t.Errorf("admin mode must not render a locked approve-all button: %q", allAdmin)
 	}
 
-	// when no credentials are configured the controls render active in both
-	// modes (monitoring-only deployment: there is no login to enforce)
+	// when no credentials are configured the controls must still be locked —
+	// admin authentication is required for approval actions regardless of
+	// whether credentials are armed.
 	resetAuthState(t)
 	outNoCreds := renderAuditCommits(commits, "24h", false)
-	if !strings.Contains(outNoCreds, "approve-form") {
-		t.Errorf("without credentials the approve form must render active: %q", outNoCreds)
+	if !strings.Contains(outNoCreds, "approve-locked") {
+		t.Errorf("without credentials the approve control must still be locked: %q", outNoCreds)
+	}
+	if strings.Contains(outNoCreds, "approve-form") {
+		t.Errorf("without credentials the approve form must not render active: %q", outNoCreds)
 	}
 }
 
@@ -7727,5 +7737,253 @@ func TestAuthArgonDeriveParams(t *testing.T) {
 	}
 	if len(a) != int(_authArgonKeyLen) {
 		t.Errorf("derived key length = %d, want %d", len(a), _authArgonKeyLen)
+	}
+}
+
+// TestConfigFilesNeverAccessibleWithoutAdminSession is the security
+// regression guard for the hard-wired requirement that current.xml,
+// current.unf, and the config archive are never accessible from an
+// unauthenticated monitoring session. It covers three independent access
+// vectors:
+//
+//  1. The /files/ HTTP route (requireAdminFiles middleware) must block all
+//     non-admin requests — returning 403 when no credentials are configured
+//     and 303-redirecting to the auth page when credentials are armed.
+//  2. The index-page download buttons (renderDownloadButton) must render as
+//     locked controls for all non-admin sessions, whether or not credentials
+//     are configured. No active <a href> link may ever appear.
+//  3. Audit approval controls must render locked hints for all non-admin
+//     sessions, whether or not credentials are configured.
+//
+// The test also verifies that an authenticated admin session does unlock all
+// three vectors, confirming the gate is not permanently closed.
+func TestConfigFilesNeverAccessibleWithoutAdminSession(t *testing.T) {
+	// ---- sub-test 1: requireAdminFiles middleware ----
+
+	// 1a. no credentials configured + no session → 403
+	resetAuthState(t)
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("[no-creds] /files/current.xml must return 403, got %d", rec.Code)
+		}
+	}
+
+	// 1b. no credentials + admin cookie should not exist, but even if
+	// someone manually sets a session it won't validate — still 403
+	resetAuthState(t)
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/fw01.lan/.archive/2025/01/snap.xml", nil)
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("[no-creds] /files/.archive/... must return 403, got %d", rec.Code)
+		}
+	}
+
+	// 1c. credentials armed + no session → redirect to config?auth=locked
+	resetAuthState(t)
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("[armed-no-session] /files/current.xml must redirect, got %d", rec.Code)
+		}
+		loc := rec.Header().Get("Location")
+		if !strings.Contains(loc, "config") || !strings.Contains(loc, "auth=locked") {
+			t.Errorf("[armed-no-session] redirect must go to config?auth=locked, got %q", loc)
+		}
+	}
+
+	// 1d. credentials armed + current.unf (Unifi) → redirect
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/unifi/current.unf", nil)
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("[armed-no-session] /files/current.unf must redirect, got %d", rec.Code)
+		}
+	}
+
+	// 1e. credentials armed + archive path → redirect
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/fw01.lan/.archive/2025/01/snap.xml", nil)
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("[armed-no-session] /files/.archive/... must redirect, got %d", rec.Code)
+		}
+	}
+
+	// 1f. credentials armed + valid admin session → 200 (pass-through)
+	token, _, err := authCheckPassword("pw-123456")
+	if err != nil {
+		t.Fatalf("[admin] login failed: %v", err)
+	}
+	{
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/files/fw01.lan/current.xml", nil)
+		req.AddCookie(&http.Cookie{Name: "opnborg_auth", Value: token})
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		requireAdminFiles(inner).ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("[admin] /files/current.xml must be accessible in admin mode, got %d", rec.Code)
+		}
+	}
+
+	// ---- sub-test 2: renderDownloadButton ----
+
+	// 2a. no credentials → locked button, no <a href>
+	resetAuthState(t)
+	{
+		got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+		if strings.Contains(got, "<a href=") {
+			t.Errorf("[no-creds] download button must not be an active link: %q", got)
+		}
+		if !strings.Contains(got, "dl-locked") {
+			t.Errorf("[no-creds] download button must be locked: %q", got)
+		}
+		if !strings.Contains(got, "showAuthInfoDialog") {
+			t.Errorf("[no-creds] locked button must open auth info dialog: %q", got)
+		}
+	}
+
+	// 2b. no credentials → current.unf locked too
+	{
+		got := renderDownloadButton("./files/unifi/current.unf", "[current.unf]")
+		if strings.Contains(got, "<a href=") {
+			t.Errorf("[no-creds] current.unf download button must not be active: %q", got)
+		}
+		if !strings.Contains(got, "dl-locked") {
+			t.Errorf("[no-creds] current.unf download button must be locked: %q", got)
+		}
+	}
+
+	// 2c. no credentials → archive button locked too
+	{
+		got := renderDownloadButton("./files/fw01.lan/.archive/2025/01/snap.xml", "[archive]")
+		if strings.Contains(got, "<a href=") {
+			t.Errorf("[no-creds] archive download button must not be active: %q", got)
+		}
+		if !strings.Contains(got, "dl-locked") {
+			t.Errorf("[no-creds] archive download button must be locked: %q", got)
+		}
+	}
+
+	// 2d. credentials armed + monitoring → locked button
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(false)
+	{
+		got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+		if strings.Contains(got, "<a href=") {
+			t.Errorf("[armed-monitoring] download button must not be active: %q", got)
+		}
+		if !strings.Contains(got, "dl-locked") {
+			t.Errorf("[armed-monitoring] download button must be locked: %q", got)
+		}
+	}
+
+	// 2e. admin mode → active link
+	adminEnabled.Store(true)
+	{
+		got := renderDownloadButton("./files/fw01.lan/current.xml", "[current.xml]")
+		if !strings.Contains(got, "<a href=") {
+			t.Errorf("[admin] download button must be an active link: %q", got)
+		}
+		if strings.Contains(got, "dl-locked") {
+			t.Errorf("[admin] download button must not be locked: %q", got)
+		}
+	}
+
+	// ---- sub-test 3: audit approval controls ----
+
+	// Set up a config with git enabled so renderAuditApproveAllButton
+	// doesn't bail early on _cfg==nil or !Git.Enable.
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+	_cfg = &OPNCall{Path: t.TempDir(), Git: struct {
+		Enable     bool
+		Upstream   string
+		SSHKey     string
+		SSHHostKey string
+	}{Enable: true}}
+
+	// 3a. no credentials → locked approve control
+	resetAuthState(t)
+	commits := []auditCommit{{
+		hash:     "abcdef0",
+		fullHash: "0123456789012345678901234567890123456789",
+		author:   "test",
+		when:     time.Now(),
+		message:  "test commit\ntag: medium\n",
+		diff:     "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n-old\n+new\n",
+	}}
+	{
+		out := renderAuditCommits(commits, "24h", false)
+		if !strings.Contains(out, "approve-locked") {
+			t.Errorf("[no-creds] approve control must be locked: %q", out)
+		}
+		if strings.Contains(out, "approve-form") {
+			t.Errorf("[no-creds] approve form must not render: %q", out)
+		}
+	}
+
+	// 3b. no credentials → approve-all locked
+	{
+		all := renderAuditApproveAllButton("24h", false)
+		if !strings.Contains(all, "disabled") {
+			t.Errorf("[no-creds] approve-all must be disabled: %q", all)
+		}
+	}
+
+	// 3c. no credentials → audit diff locked (not shown)
+	{
+		out := renderAuditCommits(commits, "24h", false)
+		if !strings.Contains(out, "audit-diff-locked") {
+			t.Errorf("[no-creds] audit diff must be locked: %q", out)
+		}
+		if strings.Contains(out, "audit-diff-body") {
+			t.Errorf("[no-creds] audit diff body must not render: %q", out)
+		}
+	}
+
+	// 3d. admin mode → all controls active
+	armTestAuth(t, "pw-123456")
+	adminEnabled.Store(true)
+	// Note: renderAuditCommits uses the `admin` bool parameter directly, not
+	// the global adminEnabled, so pass true.
+	{
+		out := renderAuditCommits(commits, "24h", true)
+		if !strings.Contains(out, "approve-form") {
+			t.Errorf("[admin] approve form must render: %q", out)
+		}
+		if strings.Contains(out, "approve-locked") {
+			t.Errorf("[admin] approve control must not be locked: %q", out)
+		}
+		if !strings.Contains(out, "audit-diff-body") {
+			t.Errorf("[admin] audit diff body must render: %q", out)
+		}
 	}
 }

@@ -858,6 +858,13 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 	if !isSecurityRelevantTag(severity) || c.fullHash == "" {
 		return ""
 	}
+	if !admin {
+		var b strings.Builder
+		b.WriteString("<button type=\"button\" class=\"btn btn-approve approve-locked\" title=\"approvals require admin authentication \u2014 authenticate to unlock\" onclick=\"showAuthInfoDialog('approval actions require admin authentication, please authenticate')\">")
+		b.WriteString("<span class=\"approve-emoji\">\u2705</span> approve \u128274")
+		b.WriteString("</button>")
+		return b.String()
+	}
 	st, ok := approvalGet(_cfg, c.fullHash)
 	if !ok {
 		// The ledger is unavailable or the query failed: render a degraded box
@@ -886,12 +893,6 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 		return b.String()
 	}
 	var b strings.Builder
-	if !admin && authCredentialsEnabled() {
-		b.WriteString("<button type=\"button\" class=\"btn btn-approve approve-locked\" title=\"approvals are locked in monitoring mode \u2014 authenticate to unlock\" onclick=\"showAuthInfoDialog('approval actions are locked in monitoring mode, please authenticate')\">")
-		b.WriteString("<span class=\"approve-emoji\">\u2705</span> approve \u128274")
-		b.WriteString("</button>")
-		return b.String()
-	}
 	b.WriteString("<form class=\"approve-form\" method=\"post\" action=\"approve?hash=")
 	b.WriteString(html.EscapeString(c.fullHash))
 	b.WriteString("&range=")
@@ -936,8 +937,8 @@ func renderAuditApproveAllButton(rangeSlug string, admin bool) string {
 	if _cfg == nil || !_cfg.Git.Enable {
 		return ""
 	}
-	if !admin && authCredentialsEnabled() {
-		return "<button type=\"button\" class=\"btn btn-approve-all\" disabled title=\"approvals are locked in monitoring mode \u2014 authenticate to unlock\">approve all \u128274</button>"
+	if !admin {
+		return "<button type=\"button\" class=\"btn btn-approve-all\" disabled title=\"approvals require admin authentication \u2014 authenticate to unlock\">approve all \u128274</button>"
 	}
 	pending := approvalPendingCount(_cfg)
 	var b strings.Builder

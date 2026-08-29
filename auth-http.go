@@ -30,15 +30,18 @@ import (
 // redirected to the index with ?auth=locked so the operator is told to
 // authenticate first. Page-render routes (/, /config, /audit, /progress)
 // are NOT gated: they are always viewable; sensitive sub-features (diffs,
-// download buttons, approve controls) are greyed out in the render path
-// when no admin session is present. When no credentials are configured
-// the middleware is a pass-through.
+// download buttons, approve controls) are locked in the render path when
+// no admin session is present, regardless of whether credentials are
+// configured. When no credentials are configured the mutating-action
+// middleware (requireAdmin) is a pass-through (monitoring-only mode has
+// no login to enforce), but requireAdminFiles is NOT — see below.
 
 // requireAdmin wraps a mutating action handler so only authenticated admin
 // sessions reach it. When credentials are armed and the request lacks a
 // live admin session the client is redirected to the index with
 // ?auth=locked. When credentials are not configured the middleware is a
-// pass-through (monitoring-only mode has no login to enforce).
+// pass-through (monitoring-only mode has no login to enforce). Note:
+// requireAdminFiles has stricter rules — see its comment.
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !authCredentialsEnabled() {
@@ -54,17 +57,21 @@ func requireAdmin(next http.Handler) http.Handler {
 }
 
 // requireAdminFiles wraps the /files/ static file server so config-file
-// downloads (current.xml / archive) are admin-only when credentials are
-// armed. When credentials are not configured the middleware is a
-// pass-through.
+// downloads (current.xml / current.unf / archive) are admin-only under
+// all conditions. When credentials are armed and the request lacks a live
+// admin session the client is redirected to config?auth=locked so the
+// operator can authenticate. When no credentials are configured the
+// middleware returns 403 Forbidden — sensitive config files must never be
+// served to an unauthenticated monitoring session, and without credentials
+// there is no login path to redirect to.
 func requireAdminFiles(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authCredentialsEnabled() {
+		if authIsAdmin(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if authIsAdmin(r) {
-			next.ServeHTTP(w, r)
+		if !authCredentialsEnabled() {
+			http.Error(w, "Forbidden: config file downloads require admin authentication (configure OPN_AUTH_HASH and OPN_AUTH_SALT, then authenticate)", http.StatusForbidden)
 			return
 		}
 		http.Redirect(w, r, "config?auth=locked", http.StatusSeeOther)
