@@ -51,7 +51,7 @@ func getConfigDashboardHTML(q *http.Request) string {
 func getConfigNavi() string {
 	var s strings.Builder
 	s.WriteString("<nav>")
-	s.WriteString("<a href=\"./\"><button>[ &larr; Hive Index ]</button></a>")
+	s.WriteString("<a href=\"/\"><button>[ &larr; Hive Index ]</button></a>")
 	s.WriteString(getNavi())
 	s.WriteString("</nav>")
 	return s.String()
@@ -643,7 +643,7 @@ func renderAuthPanel(c *OPNCall) string {
 		writeDashRow(&s, "Login", "<span class=\"dash-muted\">not armed</span>")
 	}
 	s.WriteString("<div class=\"auth-panel-actions\">")
-	s.WriteString("<a href=\"auth-hash\" class=\"btn btn-force\">[ Create Authentication Env Vars ]</a>")
+	s.WriteString("<a href=\"/auth-hash\" class=\"btn btn-force\">[ Create Authentication Env Vars ]</a>")
 	s.WriteString("</div>")
 	if authCredentialsEnabled() {
 		s.WriteString("<p class=\"cfg-intro\">Generate a new password/salt pair to replace the current credentials. " +

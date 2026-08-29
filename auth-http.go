@@ -52,7 +52,7 @@ func requireAdmin(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		http.Redirect(w, r, "./?auth=locked", http.StatusSeeOther)
+		http.Redirect(w, r, "/?auth=locked", http.StatusSeeOther)
 	})
 }
 
@@ -74,7 +74,7 @@ func requireAdminFiles(next http.Handler) http.Handler {
 			http.Error(w, "Forbidden: config file downloads require admin authentication (configure OPN_AUTH_HASH and OPN_AUTH_SALT, then authenticate)", http.StatusForbidden)
 			return
 		}
-		http.Redirect(w, r, "config?auth=locked", http.StatusSeeOther)
+		http.Redirect(w, r, "/config?auth=locked", http.StatusSeeOther)
 	})
 }
 
@@ -94,7 +94,7 @@ func getLoginHandler() http.Handler {
 		token, wait, err := authCheckPassword(password)
 		if err != nil {
 			displayChan <- []byte("[AUTH][LOGIN][DENIED] wait=" + wait.String())
-			http.Redirect(r, q, "./?auth=fail&wait="+authWaitSeconds(wait)+"&next="+next, http.StatusSeeOther)
+			http.Redirect(r, q, "/?auth=fail&wait="+authWaitSeconds(wait)+"&next="+next, http.StatusSeeOther)
 			return
 		}
 		http.SetCookie(r, &http.Cookie{
@@ -105,7 +105,7 @@ func getLoginHandler() http.Handler {
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   int(_authSessionTTL.Seconds()),
 		})
-		http.Redirect(r, q, "./"+next, http.StatusSeeOther)
+		http.Redirect(r, q, "/"+next, http.StatusSeeOther)
 	}
 	return http.HandlerFunc(h)
 }
@@ -125,7 +125,7 @@ func getLogoutHandler() http.Handler {
 			HttpOnly: true,
 			MaxAge:   -1,
 		})
-		http.Redirect(r, q, "./", http.StatusSeeOther)
+		http.Redirect(r, q, "/", http.StatusSeeOther)
 	}
 	return http.HandlerFunc(h)
 }
@@ -306,7 +306,7 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 	s.WriteString(_headStatic)
 	s.WriteString(_bodyStart)
 	s.WriteString(_bodyHead)
-	s.WriteString("<nav><a href=\"./\"><button>[ &larr; Hive Index ]</button></a><a href=\"config\"><button>[ Config Dashboard ]</button></a></nav>")
+	s.WriteString("<nav><a href=\"/\"><button>[ &larr; Hive Index ]</button></a><a href=\"/config\"><button>[ Config Dashboard ]</button></a></nav>")
 	s.WriteString("<div class=\"dashboard auth-gen\">")
 	s.WriteString("<h2>Authentication &middot; Credential Generator</h2>")
 	s.WriteString("<div class=\"auth-gen-warning\">" +
@@ -345,7 +345,7 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 		s.WriteString("<p class=\"cfg-intro\">Enter the admin password you want to use. opnborg derives the two environment variables " +
 			"<code>" + _envAuthHash + "</code> and <code>" + _envAuthSalt + "</code> for you (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"The password itself is never stored; only the derived hash is displayed once for you to copy into the environment, then restart opnborg.</p>")
-		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"auth-hash\" id=\"auth-gen-form\">")
+		s.WriteString("<form class=\"auth-gen-form\" method=\"post\" action=\"/auth-hash\" id=\"auth-gen-form\">")
 		s.WriteString("<div class=\"auth-gen-field-label\">Password</div>")
 		s.WriteString("<div class=\"auth-pw-field-row\">")
 		s.WriteString("<input class=\"auth-input\" type=\"password\" name=\"password\" id=\"pw1\" placeholder=\"admin password\" minlength=\"5\" required autocomplete=\"new-password\" oninput=\"updatePwQuality()\">")
@@ -398,7 +398,7 @@ func getBodyHead(q *http.Request) string {
 	}
 	switch {
 	case isAdmin:
-		authBtn = "<form class=\"auth-nav-form\" method=\"post\" action=\"auth/logout\"><button type=\"submit\" class=\"auth-nav-btn auth-logout\" title=\"end the admin-mode session\">[ Logout ]</button></form>"
+		authBtn = "<form class=\"auth-nav-form\" method=\"post\" action=\"/auth/logout\"><button type=\"submit\" class=\"auth-nav-btn auth-logout\" title=\"end the admin-mode session\">[ Logout ]</button></form>"
 	case armed:
 		if lock > 0 {
 			authBtn = "<button type=\"button\" class=\"auth-nav-btn auth-locked\" disabled title=\"login locked, shared wait across all sessions\">[ Locked " + strconv.Itoa(int(lock.Seconds())) + "s ]</button>"
@@ -406,7 +406,7 @@ func getBodyHead(q *http.Request) string {
 			authBtn = "<button type=\"button\" class=\"auth-nav-btn\" onclick=\"openAuthDialog('')\" title=\"authenticate to unlock config downloads and audit approvals\">[ Authenticate ]</button>"
 		}
 	default:
-		authBtn = "<a href=\"auth-hash\"><button type=\"button\" class=\"auth-nav-btn auth-setup\" title=\"no credentials configured: create OPN_AUTH_HASH / OPN_AUTH_SALT\">[ Authenticate ]</button></a>"
+		authBtn = "<a href=\"/auth-hash\"><button type=\"button\" class=\"auth-nav-btn auth-setup\" title=\"no credentials configured: create OPN_AUTH_HASH / OPN_AUTH_SALT\">[ Authenticate ]</button></a>"
 	}
 	// the login dialog markup is only rendered when the login flow is actually
 	// reachable: with no (or invalid) OPN_AUTH_* credentials there is nothing
@@ -461,7 +461,7 @@ func authDialog(failHint string) string {
 <div class="auth-dialog">
 <div class="auth-dialog-title">Admin Authentication</div>
 <div class="auth-dialog-sub">monitoring mode only &#8212; authenticate to unlock config downloads and audit approvals</div>
-<form id="auth-form" method="post" action="auth/login" onsubmit="return authSubmit()">
+<form id="auth-form" method="post" action="/auth/login" onsubmit="return authSubmit()">
 <input class="auth-input" id="auth-password" type="password" name="password" placeholder="admin password" autofocus autocomplete="current-password">
 ` + pre + `
 <div class="auth-dialog-err" id="auth-err" hidden></div>
@@ -490,7 +490,7 @@ func authInfoDialog(armed bool) string {
 <div class="auth-info-step"><span class="auth-info-num">2</span><span>Enter your admin password in the dialog that opens.</span></div>
 <div class="auth-info-step"><span class="auth-info-num">3</span><span>After successful authentication, monitoring mode switches to <strong>admin mode</strong> and this action will be unlocked.</span></div>`
 	} else {
-		body = `<div class="auth-info-step"><span class="auth-info-num">1</span><span>Generate credentials: visit the <a href="auth-hash">/auth-hash</a> page to create an admin password and derive the <code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> values.</span></div>
+		body = `<div class="auth-info-step"><span class="auth-info-num">1</span><span>Generate credentials: visit the <a href="/auth-hash">/auth-hash</a> page to create an admin password and derive the <code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> values.</span></div>
 <div class="auth-info-step"><span class="auth-info-num">2</span><span>Set environment variables: configure <code>OPN_AUTH_HASH</code> and <code>OPN_AUTH_SALT</code> in your opnborg environment (e.g. in your <code>.env</code> file).</span></div>
 <div class="auth-info-step"><span class="auth-info-num">3</span><span>Restart opnborg to apply the new configuration. The nav bar will then show the <strong>[ Authenticate ]</strong> login button.</span></div>`
 	}
@@ -498,7 +498,7 @@ func authInfoDialog(armed bool) string {
 	if armed {
 		actionBtn = `<button type="button" class="btn btn-force auth-info-action" onclick="closeAuthInfoDialog();openAuthDialog('')">[ Authenticate Now ]</button>`
 	} else {
-		actionBtn = `<a href="auth-hash"><button type="button" class="btn btn-force auth-info-action">[ Go to Auth Setup ]</button></a>`
+		actionBtn = `<a href="/auth-hash"><button type="button" class="btn btn-force auth-info-action">[ Go to Auth Setup ]</button></a>`
 	}
 	return `<div class="auth-dialog-backdrop" id="auth-info-dialog" hidden>
 <div class="auth-dialog auth-info-dialog">
@@ -551,7 +551,7 @@ function authCheckStart(){
  return true;}
 function authPollLock(){
  var box=document.getElementById('auth-wait');var txt=document.getElementById('auth-wait-text');var sub=document.getElementById('auth-submit');var nb=document.getElementById('auth-lock');
- fetch('auth/state').then(function(r){return r.json()}).then(function(j){
+ fetch('/auth/state').then(function(r){return r.json()}).then(function(j){
   if(j.lock_seconds>0){
    if(box){box.hidden=false;var m=Math.floor(j.lock_seconds/60),s2=j.lock_seconds%60;var c=(m>0)?(m+'m '+s2+'s'):((j.lock_seconds>=10)?j.lock_seconds+' seconds':j.lock_seconds+' second');if(txt)txt.textContent='login locked for all sessions: '+c+' (attempt '+j.fails+')';}
    if(sub)sub.disabled=true;

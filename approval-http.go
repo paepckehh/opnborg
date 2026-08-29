@@ -81,7 +81,7 @@ func getApproveAllHandler() http.Handler {
 // one) is present so the redirect always lands on a valid page.
 func auditRedirectTarget(q *http.Request) string {
 	rng := auditRangeSlug(q.URL.Query().Get("range"))
-	return "audit?range=" + rng
+	return "/audit?range=" + rng
 }
 
 // approvalSourceLabel renders a compact one-line label of the operator source

@@ -232,7 +232,7 @@ func Setup() (*OPNCall, error) {
 		s.WriteString("<head>" + _lf + "<title>" + _app + "</title>" + _lf)
 		s.WriteString("<meta charset=\"UTF-8\">" + _lf)
 		s.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" + _lf)
-		s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">" + _lf)
+		s.WriteString("<link rel=\"icon\" type=\"image/png\" href=\"/favicon.ico\">" + _lf)
 		css := strings.ReplaceAll(strings.ReplaceAll(_css, "%FG%", config.Httpd.Color.FG), "%BG%", config.Httpd.Color.BG)
 		s.WriteString(css)
 		s.WriteString(_authJS)
@@ -243,7 +243,7 @@ func Setup() (*OPNCall, error) {
 		// The forced-backup dashboard polls /progress for live log lines and
 		// redirects via JS once the pass ends. The meta refresh is only a
 		// long fallback safety net in case JS is disabled or the pass hangs.
-		_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"180; url='../'\">" + _lf + "</head>" + _lf
+		_headForce := s.String() + "<meta http-equiv=\"refresh\" content=\"180; url='/'\">" + _lf + "</head>" + _lf
 		// %FORCE% is left as a placeholder here and substituted per request
 		// by the /force handler with the live forced-pass sequence, so the
 		// dashboard can tell its own pass apart from a timer-tick pass.

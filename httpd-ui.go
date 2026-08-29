@@ -23,8 +23,8 @@ const (
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
 	_forceInfo    = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
-	_forceButton  = "<a href=\"./force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
-	_configButton = "<a href=\"./config\" class=\"btn btn-force\" target=\"_blank\">[ Config Dashboard ]</a>"
+	_forceButton  = "<a href=\"/force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
+	_configButton = "<a href=\"/config\" class=\"btn btn-force\" target=\"_blank\">[ Config Dashboard ]</a>"
 
 	// _forceDashboard is the animated forced-backup progress screen. It
 	// replaces the static "wait for redirect" page and streams the live log
@@ -242,7 +242,7 @@ const (
     if(Date.now()>=holdDeadline){
       clearInterval(countdownTimer);
       redirected=true;
-      window.location.href='../';
+      window.location.href='/';
     }
   }
   window.addEventListener('click',function(){
@@ -261,7 +261,7 @@ const (
   async function poll(){
     if(redirected)return;
     try{
-      const r=await fetch('progress?since='+since,{cache:'no-store',headers:{'Cache-Control':'no-store'}});
+      const r=await fetch('/progress?since='+since,{cache:'no-store',headers:{'Cache-Control':'no-store'}});
       const d=await r.json();
       const fresh=[];
       for(const l of d.lines||[]){if(l.seq>since){since=l.seq;fresh.push(l);}addLine(l);}

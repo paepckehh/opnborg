@@ -33,8 +33,8 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 		borgSC := "<a href=\"https://" + html.EscapeString(server) + _srvc + "\" " + _nwin + "><button><img src=\"favicon.ico\" width=\"12\" height=\"12\"></button></a>"
 		linkUI := "<a href=\"https://" + html.EscapeString(server) + _dash + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>" + borgSC
 		linkVS := "<a href=\"https://" + html.EscapeString(server) + _fwup + "\" " + _nwin + "><button>[" + html.EscapeString(ver) + "]</button></a>"
-		linkCurrent := renderDownloadButton("./files/"+html.EscapeString(server)+"/current.xml", "[current.xml]")
-		linkArchive := renderDownloadButton("./files/"+html.EscapeString(server)+"/"+archive, "[archive]")
+		linkCurrent := renderDownloadButton("/files/"+html.EscapeString(server)+"/current.xml", "[current.xml]")
+		linkArchive := renderDownloadButton("/files/"+html.EscapeString(server)+"/"+archive, "[archive]")
 		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		tagBox := ""
 		if tag != "" {
@@ -72,8 +72,8 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 		state := _unifi
 		seen := "<div class=\"meta-box meta-last-seen\"><span class=\"meta-label\">Last Seen</span><span class=\"meta-value\">" + ts.Format(time.RFC3339) + "</span></div>"
 		linkUI := "<a href=\"" + html.EscapeString(config.Unifi.WebUI.String()) + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>"
-		linkCurrent := renderDownloadButton("./files/"+html.EscapeString(server)+"/current.unf", "[current.unf]")
-		linkArchive := renderDownloadButton("./files/"+html.EscapeString(server)+"/"+archive, "[archive]")
+		linkCurrent := renderDownloadButton("/files/"+html.EscapeString(server)+"/current.unf", "[current.unf]")
+		linkArchive := renderDownloadButton("/files/"+html.EscapeString(server)+"/"+archive, "[archive]")
 		links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 		if !backup {
 			state = _degraded
@@ -84,8 +84,8 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 		export := ""
 		if config.Unifi.Export.Enable {
 			ext := html.EscapeString(config.Unifi.Export.Format)
-			exportCurrent := renderDownloadButton("./files/"+_uniEx+"/current."+ext, "[current."+ext+"]")
-			exportArchive := renderDownloadButton("./files/"+_uniEx+"/"+archive, "[archive]")
+			exportCurrent := renderDownloadButton("/files/"+_uniEx+"/current."+ext, "[current."+ext+"]")
+			exportArchive := renderDownloadButton("/files/"+_uniEx+"/"+archive, "[archive]")
 			export = "<span class=\"member-links member-links-export\">" + exportCurrent + exportArchive + "</span>"
 		}
 		tagBox := ""
@@ -159,8 +159,8 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 		errBox = "<div class=\"meta-box meta-err\"><span class=\"meta-label\">Error</span><span class=\"meta-value\">" + html.EscapeString(config.Unifi.Watch.LastSyncErr) + "</span></div>"
 	}
 	linkUI := "<a href=\"" + html.EscapeString(uiLink) + "\" " + _nwin + "><button>[" + html.EscapeString(server) + "]</button></a>"
-	linkCurrent := renderDownloadButton("./files/"+_uniWatch+"/current.unf", "[current.unf]")
-	linkArchive := renderDownloadButton("./files/"+_uniWatch+"/"+archive, "[archive]")
+	linkCurrent := renderDownloadButton("/files/"+_uniWatch+"/current.unf", "[current.unf]")
+	linkArchive := renderDownloadButton("/files/"+_uniWatch+"/"+archive, "[archive]")
 	links := "<span class=\"member-links member-links-backup\">" + linkCurrent + linkArchive + "</span>"
 	tagBox := ""
 	if config.Unifi.Tag != "" {

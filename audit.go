@@ -75,7 +75,7 @@ func getAuditTile() string {
 	s.WriteString("<div class=\"backup-section audit-tile\"><b>BorgConfigAUDIT</b> <span class=\"member-meta\">Module:Git:CommitHistory [ Review recent backup changes ]</span>")
 	s.WriteString("<div class=\"tile-actions\">")
 	for _, r := range _auditRangeLabels {
-		s.WriteString("<a href=\"audit?range=")
+		s.WriteString("<a href=\"/audit?range=")
 		s.WriteString(r.slug)
 		s.WriteString("\" class=\"btn btn-force\" target=\"_blank\">[ ")
 		s.WriteString(r.label)
@@ -135,13 +135,13 @@ func auditRangeSlug(v string) string {
 func getAuditNavi(active string) string {
 	var s strings.Builder
 	s.WriteString("<nav>")
-	s.WriteString("<a href=\"./\"><button>[ &larr; Hive Index ]</button></a>")
+	s.WriteString("<a href=\"/\"><button>[ &larr; Hive Index ]</button></a>")
 	for _, r := range _auditRangeLabels {
 		cls := ""
 		if r.slug == active {
 			cls = " class=\"audit-active\""
 		}
-		s.WriteString("<a href=\"audit?range=")
+		s.WriteString("<a href=\"/audit?range=")
 		s.WriteString(r.slug)
 		s.WriteString("\"><button")
 		s.WriteString(cls)
