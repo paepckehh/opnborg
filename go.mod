@@ -9,7 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/sirupsen/logrus v1.10.1
+	github.com/sirupsen/logrus v1.10.2
 	golang.org/x/crypto v0.55.0
 	modernc.org/sqlite v1.57.0
 	paepcke.de/uniex v0.1.31
