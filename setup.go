@@ -429,8 +429,13 @@ func checkSetRequiredOPN() bool {
 // checkRequired Unifi env
 func checkSetRequiredUnifi() bool {
 
+	// require a parseable, non-empty OPN_UNIFI_WEBUI: without a controller
+	// URL the backup worker would dereference a nil config.Unifi.WebUI.
+	if !isEnv("OPN_UNIFI_WEBUI") {
+		return false
+	}
 	unifiURL, err := url.Parse(os.Getenv("OPN_UNIFI_WEBUI"))
-	if err != nil {
+	if err != nil || unifiURL.Hostname() == "" {
 		return false // detailed checks & err analysis later
 	}
 

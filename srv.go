@@ -123,7 +123,6 @@ func srv(config *OPNCall) error {
 		for server := range strings.SplitSeq(config.Targets, ",") {
 			host, tag, valid := parseServerTag(server)
 			if !valid {
-				hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">configuration error, please fix configuration line for server: "+html.EscapeString(server)+"</span></div>")
 				displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
 				continue
 			}
@@ -209,12 +208,12 @@ func srv(config *OPNCall) error {
 
 		// exit if not in daemon mode
 		if !config.Daemon {
-			// release the exit path: the spawned goroutines (httpd, syslog, unifi
-			// watchers) keep running and may still send to displayChan, so the
-			// channel is intentionally not closed; a close here would race with
-			// those sends and panic. The process exit (or the next call to srv in
-			// tests) is the natural end of the display stream.
-			display.Wait()
+			// In one-shot mode the httpd, syslog, and unifi goroutines are
+			// not armed, so no producer keeps sending to displayChan. The
+			// channel is intentionally not closed (a close would race with
+			// any lingering send from a unifi goroutine that was armed
+			// before the one-shot gate); instead we return immediately and
+			// the process exit terminates the startLog goroutine naturally.
 			return nil
 		}
 		<-updateOPN

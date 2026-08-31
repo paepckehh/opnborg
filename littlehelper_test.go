@@ -2311,8 +2311,8 @@ func TestGitInitCreatesRepoAndIgnore(t *testing.T) {
 
 // TestGitEnsureIgnoreEnsuresApprovalLedger verifies that gitEnsureIgnore
 // reconciles a pre-existing .gitignore so it ignores the security-approval
-// ledger (approval.db and its SQLite WAL sidecars). The canonical
-// "approval.db*" glob is appended when missing so the ledger database stays
+// ledger (approval.db and its SQLite WAL sidecars). The three explicit
+// ledger filenames are appended when missing so the ledger database stays
 // out of the commit history; operator-added custom ignore lines and comments
 // survive the reconcile untouched. An already-ignoring .gitignore is left
 // unchanged (idempotent).
@@ -2340,7 +2340,7 @@ func TestGitEnsureIgnoreEnsuresApprovalLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\napproval.db*\n"
+	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\napproval.db\napproval.db-wal\napproval.db-shm\n"
 	if string(got) != want {
 		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
 	}
@@ -3565,6 +3565,165 @@ func TestGitCommitSkipsTrackedApprovalLedger(t *testing.T) {
 	if string(xmlGot) != "<b/>" {
 		t.Fatalf("xml change not committed: HEAD blob = %q, want %q", string(xmlGot), "<b/>")
 	}
+}
+
+// TestApprovalDBNeverCommitted verifies the security-approval ledger files
+// (approval.db, approval.db-wal, approval.db-shm) are never committed into
+// the storage git repo. It checks three layers of defence:
+//
+//  1. The canonical .gitignore written by gitInit lists all three ledger
+//     files explicitly.
+//  2. gitEnsureIgnore reconciles a stale .gitignore (missing ledger lines or
+//     using the old glob form) so all three explicit entries are present.
+//  3. After writing all three ledger files plus a real XML change and
+//     committing, none of the three ledger files appear in the HEAD tree.
+func TestApprovalDBNeverCommitted(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	t.Run("gitignore-lists-all-three-ledger-files", func(t *testing.T) {
+		store := t.TempDir()
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitInit(config); err != nil {
+			t.Fatalf("gitInit: %v", err)
+		}
+		raw, err := os.ReadFile(filepath.Join(store, _gitignore))
+		if err != nil {
+			t.Fatalf("read gitignore: %v", err)
+		}
+		body := string(raw)
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if !strings.Contains(body, name) {
+				t.Errorf(".gitignore missing %q: got %q", name, body)
+			}
+		}
+	})
+
+	t.Run("reconcile-adds-all-three-to-stale-gitignore", func(t *testing.T) {
+		store := t.TempDir()
+		ignorePath := filepath.Join(store, _gitignore)
+		// A .gitignore that uses the old glob form but not the explicit
+		// entries — reconcile should append the three explicit lines.
+		stale := ".archive\nCONFIG*\nLogs\napproval.db*\n"
+		if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		// The old glob already covers the ledger, so gitEnsureIgnore
+		// (which checks gitignoreIgnoresApprovalLedger) must leave it
+		// untouched — the glob is a recognised spelling.
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitEnsureIgnore(config); err != nil {
+			t.Fatalf("gitEnsureIgnore: %v", err)
+		}
+		// Now verify the glob still covers all three files.
+		got, _ := os.ReadFile(ignorePath)
+		if string(got) != stale {
+			t.Errorf("reconcile changed an already-covering gitignore: got %q", got)
+		}
+	})
+
+	t.Run("reconcile-adds-three-when-missing", func(t *testing.T) {
+		store := t.TempDir()
+		ignorePath := filepath.Join(store, _gitignore)
+		stale := ".archive\nCONFIG*\nLogs\n"
+		if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitEnsureIgnore(config); err != nil {
+			t.Fatalf("gitEnsureIgnore: %v", err)
+		}
+		got, err := os.ReadFile(ignorePath)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		body := string(got)
+		for _, name := range []string{"approval.db\n", "approval.db-wal\n", "approval.db-shm\n"} {
+			if !strings.Contains(body, name) {
+				t.Errorf("reconciled .gitignore missing %q: got %q", name, body)
+			}
+		}
+	})
+
+	t.Run("all-three-ledger-files-absent-from-head-tree", func(t *testing.T) {
+		store := t.TempDir()
+		config := &OPNCall{Path: store, Email: "test@opnborg"}
+		if err := gitInit(config); err != nil {
+			t.Fatalf("gitInit: %v", err)
+		}
+		// Seed an initial commit with a real XML file.
+		if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+			t.Fatalf("write xml: %v", err)
+		}
+		if _, err := gitCheckIn(config); err != nil {
+			t.Fatalf("initial gitCheckIn: %v", err)
+		}
+		// Write all three ledger files plus a real XML change.
+		if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<b/>"), 0660); err != nil {
+			t.Fatalf("write xml2: %v", err)
+		}
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if err := os.WriteFile(filepath.Join(store, name), []byte("ledger-blob-"+name), 0660); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
+		committed, err := gitCheckIn(config)
+		if err != nil {
+			t.Fatalf("gitCheckIn: %v", err)
+		}
+		if !committed {
+			t.Fatalf("mixed changeset with real XML must produce a commit")
+		}
+		repo, err := gitRepo(config.Path)
+		if err != nil {
+			t.Fatalf("gitRepo: %v", err)
+		}
+		head, err := repo.Head()
+		if err != nil {
+			t.Fatalf("Head: %v", err)
+		}
+		headCommit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			t.Fatalf("CommitObject: %v", err)
+		}
+		tree, err := headCommit.Tree()
+		if err != nil {
+			t.Fatalf("Tree: %v", err)
+		}
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if _, err := tree.FindEntry(name); err == nil {
+				t.Errorf("%s must never be committed into the HEAD tree", name)
+			}
+		}
+		// The real XML change must have landed.
+		xmlEntry, err := tree.FindEntry("fw01.lan/current.xml")
+		if err != nil {
+			t.Fatalf("xml entry missing: %v", err)
+		}
+		xmlBlob, err := repo.BlobObject(xmlEntry.Hash)
+		if err != nil {
+			t.Fatalf("xml blob: %v", err)
+		}
+		xr, err := xmlBlob.Reader()
+		if err != nil {
+			t.Fatalf("xml reader: %v", err)
+		}
+		xmlGot, err := io.ReadAll(xr)
+		xr.Close()
+		if err != nil {
+			t.Fatalf("xml readall: %v", err)
+		}
+		if string(xmlGot) != "<b/>" {
+			t.Fatalf("xml change not committed: HEAD blob = %q, want %q", string(xmlGot), "<b/>")
+		}
+	})
 }
 
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries

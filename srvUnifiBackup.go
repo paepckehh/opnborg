@@ -72,6 +72,10 @@ func srvUnifiBackup(config *OPNCall) {
 		// perform authentication
 		res, err := client.Post(config.Unifi.WebUI.String()+"/api/login", "application/json", bytes.NewBuffer(postLogin))
 		if err != nil {
+			if res != nil && res.Body != nil {
+				_, _ = io.Copy(io.Discard, res.Body)
+				_ = res.Body.Close()
+			}
 			isReachable = false
 			notice = "[UNIFI][BACKUP][ERROR][UNABLE-TO-AUTENTHICATE]" + err.Error()
 			displayChan <- []byte(notice)
@@ -100,6 +104,10 @@ func srvUnifiBackup(config *OPNCall) {
 				// perform actual fetch test
 				res, err = client.Post(config.Unifi.WebUI.String()+"/api/s/default/cmd/system", "application/json", bytes.NewBuffer(postSystem))
 				if err != nil {
+					if res != nil && res.Body != nil {
+						_, _ = io.Copy(io.Discard, res.Body)
+						_ = res.Body.Close()
+					}
 					isReachable = false
 					notice = "[UNIFI][BACKUP][ERROR][CONFIG-DOWNLOAD-FAIL] " + err.Error()
 					displayChan <- []byte(notice)
@@ -146,6 +154,10 @@ func srvUnifiBackup(config *OPNCall) {
 				// download backup file
 				res, err = client.Get(config.Unifi.WebUI.String() + "/dl/backup/" + url.PathEscape(config.Unifi.Version) + ".unf")
 				if err != nil {
+					if res != nil && res.Body != nil {
+						_, _ = io.Copy(io.Discard, res.Body)
+						_ = res.Body.Close()
+					}
 					backupOK = false
 					notice = "[UNIFI][BACKUP][ERROR][BACKUP-DOWNLOAD-FILE-HEAD-FAIL] " + err.Error()
 					displayChan <- []byte(notice)

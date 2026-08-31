@@ -25,26 +25,21 @@ const (
 	// _ignore is the canonical .gitignore content written into the storage
 	// root. It keeps the archive/history files, the symlink targets, the
 	// logs, and the on-disk security-approval ledger out of the commit
-	// history. The approval ledger (approval.db and its SQLite WAL sidecars
-	// approval.db-wal / approval.db-shm) is a local-only runtime database:
-	// it must never be added, evaluated, or committed by the opnborg commit
-	// cycle, so it is ignored alongside the other non-version-controlled
-	// store artifacts. The "approval.db*" glob covers the main database and
-	// every sidecar spelling in a single line.
-	_ignore         = ".archive\nCONFIG*\nLogs\napproval.db*\napproval.db-shm\napproval.db-wal\n"
-	_origin         = "origin"
-	_commitMsg      = "opnborg auto update"
-	_authorName     = "OPNBORG-AUTO-COMMIT"
-	_defaultSSHUser = "git"
-	// _aggressivePackWindow is the delta-compression window applied to the
-	// storage repo so the per-tick repack behaves like `git gc --aggressive`
-	// (git's aggressive default is pack.deltaWindow=250). It is written once
-	// during gitInit.
+	// history. The approval ledger is a local-only runtime database
+	// comprising three SQLite files — approval.db (main database),
+	// approval.db-wal (write-ahead log), and approval.db-shm (shared memory
+	// index). All three are listed explicitly so the .gitignore is
+	// self-documenting and every sidecar is covered even if a future
+	// SQLite build renames a sidecar pattern. gitCommit additionally skips
+	// every approval-ledger path at staging time (isApprovalDBPath) so a
+	// ledger update can never enter a commit, even when a stale or
+	// hand-edited .gitignore failed to ignore the file.
+	_ignore               = ".archive\nCONFIG*\nLogs\napproval.db\napproval.db-shm\napproval.db-wal\n"
+	_origin               = "origin"
+	_commitMsg            = "opnborg auto update"
+	_authorName           = "OPNBORG-AUTO-COMMIT"
+	_defaultSSHUser       = "git"
 	_aggressivePackWindow = uint(250)
-	// _pruneGrace is how recently an unreachable loose object must have been
-	// created to be spared from pruning, mirroring git's gc.pruneExpire safety
-	// window so a concurrent tick never loses an object it still needs.
-	_pruneGrace = time.Hour
 )
 
 // gitLastPush tracks the outcome of the most recent upstream push so the
@@ -77,14 +72,13 @@ func gitRepo(path string) (*git.Repository, error) {
 // missing, so the archive/history files, the symlink targets, the logs, and
 // the on-disk security-approval ledger stay out of the commit history. When a
 // .gitignore already exists it is reconciled rather than clobbered: the
-// reconcile ensures the approval-ledger ignore line ("approval.db*") is present
-// so the ledger database and its SQLite WAL sidecars (approval.db-wal /
-// approval.db-shm) are never added, evaluated, or committed by the opnborg
-// commit cycle. This migration matters because older opnborg releases
-// deliberately stripped every ledger-ignore line so the ledger was
-// version-controlled; that policy is inverted here; the ledger is now a
-// local-only runtime database and must stay untracked. All other lines
-// (including operator-added custom ignores) are preserved.
+// reconcile ensures the three approval-ledger ignore lines (approval.db,
+// approval.db-wal, approval.db-shm) are present so the ledger database and its
+// SQLite WAL sidecars are never added, evaluated, or committed by the opnborg
+// commit cycle. This migration matters because older opnborg releases used a
+// glob ("approval.db*") or omitted the sidecars; the canonical form now lists
+// all three files explicitly. All other lines (including operator-added
+// custom ignores) are preserved.
 func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
@@ -99,14 +93,16 @@ func gitEnsureIgnore(config *OPNCall) error {
 	return nil
 }
 
-// reconcileGitignoreApprovalLedger guarantees the .gitignore at ignore carries
-// a line that ignores the security-approval ledger (the main database
-// approval.db and every SQLite WAL sidecar approval.db-wal / approval.db-shm).
-// When the file already contains such a line it is left untouched; otherwise
-// the canonical "approval.db*" glob is appended on its own line. Operator-added
-// custom ignores and the canonical archive/CONFIG/Logs lines are always
-// preserved. The file is only rewritten when its content would change, so a
-// clean .gitignore incurs no write.
+// reconcileGitignoreApprovalLedger guarantees the .gitignore at ignore
+// carries lines that ignore every file of the security-approval ledger: the
+// main database (approval.db) and both SQLite WAL sidecars (approval.db-wal,
+// approval.db-shm). When the file already contains a recognised ignore for
+// the ledger (bare filename, sidecar, or trailing-star glob — see
+// ignoresApprovalLedger) it is left untouched; otherwise the three explicit
+// lines are appended on their own rows. Operator-added custom ignores and the
+// canonical archive/CONFIG/Logs lines are always preserved. The file is only
+// rewritten when its content would change, so a clean .gitignore incurs no
+// write.
 func reconcileGitignoreApprovalLedger(ignore string) error {
 	raw, err := os.ReadFile(ignore)
 	if err != nil {
@@ -115,13 +111,13 @@ func reconcileGitignoreApprovalLedger(ignore string) error {
 	if gitignoreIgnoresApprovalLedger(string(raw)) {
 		return nil
 	}
-	// Ensure the existing content ends with a newline so the appended line
-	// lands on its own row, then append the canonical ledger glob.
+	// Ensure the existing content ends with a newline so the appended lines
+	// land on their own rows, then append the three explicit ledger entries.
 	out := string(raw)
 	if len(out) == 0 || out[len(out)-1] != '\n' {
 		out += "\n"
 	}
-	out += "approval.db*\n"
+	out += "approval.db\napproval.db-wal\napproval.db-shm\n"
 	return os.WriteFile(ignore, []byte(out), 0660)
 }
 
@@ -632,21 +628,24 @@ func gitEnsureAggressiveWindow(repo *git.Repository) error {
 	return repo.SetConfig(cfg)
 }
 
-// gitGC performs the internal go-git equivalent of `git gc --aggressive`: it
-// repacks all reachable objects into a fresh packfile (consolidating loose
-// objects and old packs via OFS deltas, using the aggressive delta window set
-// by gitEnsureAggressiveWindow) and then prunes unreachable loose objects
-// older than the grace window. It runs after every successful commit+push so
-// the on-disk backup store stays compact over time without invoking an
-// external git binary. Both steps are no-ops on storages that do not support
-// packing/loose objects (e.g. the in-memory test backend).
+// gitGC performs the internal go-git equivalent of `git gc --aggressive`:
+// it repacks all reachable objects into a fresh packfile, consolidating loose
+// objects and old packs via OFS deltas using the aggressive delta window set
+// by gitEnsureAggressiveWindow. It runs after every successful commit+push
+// so the on-disk backup store stays compact over time without invoking an
+// external git binary. The repack is a no-op on storages that do not support
+// packing (e.g. the in-memory test backend).
 //
-// gitGC is best-effort: every step logs failures to displayChan and continues
-// rather than aborting the tick. A failed repack or prune never crashes the
-// daemon — the next tick will retry the housekeeping on a fresh repo handle.
-// This sidesteps the known go-git v5.19.x RepackObjects "packfile not found"
-// defect that can surface on a second gc cycle when the in-memory pack index
-// is stale relative to the on-disk state after the previous pack rotation.
+// Pruning of unreachable loose objects is deliberately omitted: go-git's
+// Prune implementation is prone to errors on repos with rotated packfiles,
+// and the repack alone already consolidates every reachable loose object into
+// a packfile. Unreachable objects are harmless — they occupy negligible disk
+// and are never served — so the simpler repack-only design is both safer and
+// sufficient.
+//
+// gitGC is best-effort: a repack failure is logged to displayChan and the
+// tick continues rather than aborting. The next tick will retry the
+// housekeeping on a fresh repo handle.
 func gitGC(repo *git.Repository) error {
 	if err := repo.RepackObjects(&git.RepackConfig{
 		UseRefDeltas: false,
@@ -655,16 +654,6 @@ func gitGC(repo *git.Repository) error {
 			return nil
 		}
 		displayChan <- []byte("[GIT][REPO][GC][REPACK][FAIL] " + err.Error())
-		return nil
-	}
-	if err := repo.Prune(git.PruneOptions{
-		OnlyObjectsOlderThan: time.Now().Add(-_pruneGrace),
-		Handler:              repo.DeleteObject,
-	}); err != nil {
-		if errors.Is(err, git.ErrLooseObjectsNotSupported) {
-			return nil
-		}
-		displayChan <- []byte("[GIT][REPO][GC][PRUNE][FAIL] " + err.Error())
 		return nil
 	}
 	return nil
