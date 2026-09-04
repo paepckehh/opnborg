@@ -83,7 +83,7 @@ func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
 		return reconcileGitignoreApprovalLedger(ignore)
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	if err := os.WriteFile(ignore, []byte(_ignore), 0660); err != nil {
@@ -114,7 +114,7 @@ func reconcileGitignoreApprovalLedger(ignore string) error {
 	// Ensure the existing content ends with a newline so the appended lines
 	// land on their own rows, then append the three explicit ledger entries.
 	out := string(raw)
-	if len(out) == 0 || out[len(out)-1] != '\n' {
+	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
 	out += "approval.db\napproval.db-wal\napproval.db-shm\n"
@@ -139,6 +139,11 @@ func gitignoreIgnoresApprovalLedger(body string) bool {
 	return false
 }
 
+// _approvalLedgerNames lists the ignore patterns that cover the on-disk
+// security-approval ledger. Hoisted out of the per-line hot path so
+// ignoresApprovalLedger does not allocate it for every .gitignore line.
+var _approvalLedgerNames = []string{_approvalDBName, _approvalDBName + "-wal", _approvalDBName + "-shm"}
+
 // ignoresApprovalLedger reports whether a single .gitignore line would ignore
 // the security-approval ledger: the main database file (approval.db) or any of
 // its SQLite WAL sidecars (approval.db-wal, approval.db-shm). A gitignore
@@ -151,21 +156,17 @@ func gitignoreIgnoresApprovalLedger(body string) bool {
 func ignoresApprovalLedger(line string) bool {
 	// A range over SplitSeq yields an empty trailing element for a
 	// newline-terminated input; an empty line never ignores anything.
-	if strings.TrimSpace(line) == "" {
-		return false
-	}
-	if strings.HasPrefix(strings.TrimSpace(line), "#") {
-		return false
-	}
 	p := strings.TrimSpace(line)
+	if p == "" || strings.HasPrefix(p, "#") {
+		return false
+	}
 	p = strings.TrimPrefix(p, "/")
 	if strings.Contains(p, "/") {
 		// An anchored path pattern is out of scope: the ledger lives at the
 		// store root, so a nested ignore never targets it.
 		return false
 	}
-	ledger := []string{_approvalDBName, _approvalDBName + "-wal", _approvalDBName + "-shm"}
-	if slices.Contains(ledger, p) {
+	if slices.Contains(_approvalLedgerNames, p) {
 		return true
 	}
 	// A trailing-* glob anchored to the ledger basename (e.g. "approval.db*")

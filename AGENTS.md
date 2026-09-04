@@ -11,8 +11,6 @@ Reference guide for AI agents working in the `opnborg` repository.
 > 2. **Build** — `CGO_ENABLED=0 go build -o opnborg ./cmd/opnborg` must succeed.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
->    execution (the default); never pass `-p 1`. To iterate on a single failing
->    package, narrow the package list (e.g. `go test ./pkg/...`).
 > 4. **Commit** — `git add . && git commit -m '<message>'`
 > 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.207`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant

@@ -94,7 +94,7 @@ func gatherBackupFolder(config *OPNCall, d *dashboardStats) {
 		return
 	}
 	for _, e := range entries {
-		if !e.IsDir() || e.Name() == ".git" || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		serverDir := filepath.Join(root, e.Name())
@@ -169,7 +169,9 @@ func gatherGitRepo(config *OPNCall, d *dashboardStats) {
 		d.gitLastCommit = commit.Author.When
 		d.gitLastMsg = strings.TrimSpace(commit.Message)
 		if len(d.gitLastMsg) > 80 {
-			d.gitLastMsg = d.gitLastMsg[:77] + "..."
+			// truncateUTF8 keeps the cut on a rune boundary so a model-authored
+			// headline with multi-byte characters never renders as mojibake
+			d.gitLastMsg = truncateUTF8(d.gitLastMsg, 77) + "..."
 		}
 	}
 	// count commits up to a sane cap so a huge history does not stall the page
@@ -228,8 +230,11 @@ func gatherUpstream(config *OPNCall, d *dashboardStats) {
 	trackRef := plumbing.NewRemoteReferenceName(_origin, branch)
 	remoteRef, err := repo.Reference(trackRef, true)
 	if err != nil {
-		// fall back to refs/remotes/origin/HEAD symbolic ref
-		if sym, err2 := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/HEAD"), true); err2 == nil {
+		// fall back to the refs/remotes/origin/HEAD symbolic ref, but only
+		// when it actually points at the local branch: after a branch rename
+		// or a clone-default mismatch origin/HEAD targets a different branch,
+		// and comparing against it would report a misleading divergence.
+		if sym, err2 := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/HEAD"), true); err2 == nil && sym.Target().Short() == branch {
 			remoteRef = sym
 		} else {
 			d.upstreamNever = true
@@ -398,11 +403,9 @@ func getDashboard(config *OPNCall) string {
 		}
 		writeDashRow(&s, "State", status)
 		last := "never"
-		if !d.upstreamLastTS.IsZero() {
-			last = d.upstreamLastTS.UTC().Format(time.RFC3339)
-		}
 		pushState := "<span class=\"dash-muted\">no push attempted yet</span>"
 		if !d.upstreamLastTS.IsZero() {
+			last = d.upstreamLastTS.UTC().Format(time.RFC3339)
 			if d.upstreamLastOK {
 				pushState = "<span class=\"dash-ok\">last push OK</span>"
 			} else {

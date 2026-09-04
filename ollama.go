@@ -8,8 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -260,16 +261,13 @@ func extractServersFromStatus(status git.Status) []string {
 		if idx <= 0 {
 			continue
 		}
-		srv := pth[:idx]
-		if _, hit := seen[srv]; !hit {
-			seen[srv] = struct{}{}
-		}
+		seen[pth[:idx]] = struct{}{}
 	}
-	out := make([]string, 0, len(seen))
-	for srv := range seen {
-		out = append(out, srv)
+	out := slices.Sorted(maps.Keys(seen))
+	if out == nil {
+		// preserve the historical non-nil empty slice for empty inputs
+		out = []string{}
 	}
-	sort.Strings(out)
 	return out
 }
 
@@ -612,15 +610,10 @@ func openaiHealthCheck(config *OPNCall) openaiHealth {
 	}
 	h.APIReady = true
 	h.ModelCount = len(models.Data)
+	model := strings.TrimSpace(config.OpenAI.Model)
+	h.ModelReady = slices.ContainsFunc(models.Data, func(m openaiModelsModel) bool { return m.ID == model })
 	for _, m := range models.Data {
 		h.AvailableModels = append(h.AvailableModels, m.ID)
-	}
-	model := strings.TrimSpace(config.OpenAI.Model)
-	for _, m := range models.Data {
-		if m.ID == model {
-			h.ModelReady = true
-			break
-		}
 	}
 	if !h.ModelReady {
 		h.Err = fmt.Sprintf("model %q not in /models (have %d models)", model, len(models.Data))
@@ -693,9 +686,9 @@ func changeKind(st *git.FileStatus) string {
 		return "renamed"
 	case st.Staging == git.Copied || st.Worktree == git.Copied:
 		return "copied"
-	case st.Worktree == git.Modified, st.Staging == git.Modified:
-		return "modified"
 	default:
+		// every other state (modified in either tree, or mixed) is a change
+		// to an existing file: report it as modified
 		return "modified"
 	}
 }
@@ -849,20 +842,13 @@ func gitDiffText(repo *git.Repository, wtree *git.Worktree) (string, error) {
 	}
 	// Collect and sort changed paths so the diff is deterministic across runs
 	// and across hosts, regardless of map iteration order.
-	paths := make([]string, 0, len(status))
-	for pth := range status {
-		paths = append(paths, pth)
-	}
-	sort.Strings(paths)
+	paths := slices.Sorted(maps.Keys(status))
 	var buf bytes.Buffer
 	var totalIns, totalDel int
 	fs := wtree.Filesystem
 	stats := make([]fileDiffStat, 0, len(paths))
 	for _, pth := range paths {
 		st := status[pth]
-		// Skip deleted-from-worktree files that are also absent from HEAD
-		// (pure index bookkeeping); a real deletion still diffs against the
-		// HEAD blob below.
 		headContent, err := headFileContent(headTree, pth)
 		if err != nil {
 			return "", err
@@ -876,6 +862,12 @@ func gitDiffText(repo *git.Repository, wtree *git.Worktree) (string, error) {
 					return "", rerr
 				}
 				workContent = string(b)
+			} else {
+				// Surface the unreadable worktree file instead of silently
+				// diffing it as fully deleted: the model would otherwise author
+				// a misleading "removed config X" commit message for a file that
+				// is actually intact.
+				displayChan <- []byte("[OLLAMA][DIFF][SKIP-UNREADABLE] " + pth + " " + err.Error())
 			}
 		}
 		diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{

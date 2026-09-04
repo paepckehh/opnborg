@@ -29,7 +29,7 @@ func checkInstallPKG(server string, config *OPNCall, opn *Opnsense) error {
 	var failed []string
 	for _, pkg := range missing {
 		if err := installPKG(config, server, pkg); err != nil {
-			displayChan <- []byte("[SYNC][PKG][FAIL][INSTALL]" + pkg + " -> " + server)
+			displayChan <- []byte("[SYNC][PKG][FAIL][INSTALL] " + pkg + " -> " + server + " " + err.Error())
 			failed = append(failed, pkg)
 			continue
 		}

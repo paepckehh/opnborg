@@ -272,7 +272,7 @@ func TestGetTlsConf(t *testing.T) {
 
 func TestGetLogConf(t *testing.T) {
 	opn := getLogConf([]string{"192.168.0.10", "5140"})
-	d := opn.OPNsense.Syslog.Destinations.Destination
+	d := opn.OPNsense.Syslog.Destinations.Destination[0]
 	if d.Enabled != "1" {
 		t.Errorf("Enabled = %q want 1", d.Enabled)
 	}
@@ -305,31 +305,31 @@ func TestCompareLogConf(t *testing.T) {
 
 	// Each field violation must surface a distinct error.
 	badEnabled := getLogConf(srv)
-	badEnabled.OPNsense.Syslog.Destinations.Destination.Enabled = "0"
+	badEnabled.OPNsense.Syslog.Destinations.Destination[0].Enabled = "0"
 	if err := compareLogConf(server, srv, badEnabled); err == nil {
 		t.Error("expected error for Enabled mismatch")
 	}
 
 	badTransport := getLogConf(srv)
-	badTransport.OPNsense.Syslog.Destinations.Destination.Transport = "tcp"
+	badTransport.OPNsense.Syslog.Destinations.Destination[0].Transport = "tcp"
 	if err := compareLogConf(server, srv, badTransport); err == nil {
 		t.Error("expected error for Transport mismatch")
 	}
 
 	badHost := getLogConf(srv)
-	badHost.OPNsense.Syslog.Destinations.Destination.Hostname = "10.0.0.1"
+	badHost.OPNsense.Syslog.Destinations.Destination[0].Hostname = "10.0.0.1"
 	if err := compareLogConf(server, srv, badHost); err == nil {
 		t.Error("expected error for Hostname mismatch")
 	}
 
 	badPort := getLogConf(srv)
-	badPort.OPNsense.Syslog.Destinations.Destination.Port = "9999"
+	badPort.OPNsense.Syslog.Destinations.Destination[0].Port = "9999"
 	if err := compareLogConf(server, srv, badPort); err == nil {
 		t.Error("expected error for Port mismatch")
 	}
 
 	badRfc := getLogConf(srv)
-	badRfc.OPNsense.Syslog.Destinations.Destination.Rfc5424 = "0"
+	badRfc.OPNsense.Syslog.Destinations.Destination[0].Rfc5424 = "0"
 	if err := compareLogConf(server, srv, badRfc); err == nil {
 		t.Error("expected error for Rfc5424 mismatch")
 	}
@@ -350,7 +350,7 @@ func TestCompareLogConf(t *testing.T) {
 	}
 	for _, c := range cases {
 		opn := getLogConf(srv)
-		c.mut(&opn.OPNsense.Syslog.Destinations.Destination)
+		c.mut(&opn.OPNsense.Syslog.Destinations.Destination[0])
 		err := compareLogConf(server, srv, opn)
 		if err == nil {
 			t.Errorf("%s: expected labelled error, got nil", c.name)
@@ -359,6 +359,34 @@ func TestCompareLogConf(t *testing.T) {
 		if !strings.HasPrefix(err.Error(), c.label+" ") {
 			t.Errorf("%s: error %q does not start with expected label %q", c.name, err.Error(), c.label)
 		}
+	}
+}
+
+// TestCompareLogConfMultipleDestinations guards the repeated <destination>
+// decode: a host carrying an additional unrelated syslog destination must
+// still validate when the opnborg-managed entry matches, and an empty
+// destination list must surface as a labelled mismatch instead of a silent
+// pass.
+func TestCompareLogConfMultipleDestinations(t *testing.T) {
+	const server = "opn01.lan"
+	srv := []string{"192.168.0.10", "5140"}
+
+	// opnborg-managed entry plus an unrelated second destination
+	opn := getLogConf(srv)
+	other := getLogConf([]string{"10.9.9.9", "5514"})
+	opn.OPNsense.Syslog.Destinations.Destination = append(
+		opn.OPNsense.Syslog.Destinations.Destination,
+		other.OPNsense.Syslog.Destinations.Destination[0],
+	)
+	if err := compareLogConf(server, srv, opn); err != nil {
+		t.Errorf("managed entry among multiple destinations must validate, got: %v", err)
+	}
+
+	// empty destination list: every field mismatches, first label surfaces
+	if err := compareLogConf(server, srv, new(Opnsense)); err == nil {
+		t.Error("empty destination list must produce a mismatch error")
+	} else if !strings.HasPrefix(err.Error(), "[TARGET-REMOTE-SYSLOG-SERVER-ENABLED]") {
+		t.Errorf("empty destination list should fail on the first field, got: %v", err)
 	}
 }
 
@@ -750,7 +778,7 @@ func TestMismatchErrFormat(t *testing.T) {
 
 func TestGetLogConfUsesConstants(t *testing.T) {
 	opn := getLogConf([]string{"10.0.0.1", "514"})
-	d := opn.OPNsense.Syslog.Destinations.Destination
+	d := opn.OPNsense.Syslog.Destinations.Destination[0]
 	if d.Uuid != _syslogUUID {
 		t.Errorf("uuid = %q want %q", d.Uuid, _syslogUUID)
 	}
@@ -1264,6 +1292,34 @@ func TestWriteGroupMemberOPNNoMatch(t *testing.T) {
 	}
 }
 
+// TestWriteGroupMemberHostPrefixNoCrossMatch guards the exact-token host
+// matching: the status line for fw10.lan must not satisfy a lookup for the
+// prefix host fw1.lan (a plain substring match would cross-associate the two
+// hive members).
+func TestWriteGroupMemberHostPrefixNoCrossMatch(t *testing.T) {
+	ensureDisplayDrained(t)
+	savedHive := hive
+	t.Cleanup(func() { hive = savedHive })
+	hive = []string{
+		"<div class=\"member-status\">" + _ok + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\"><a href=\"https://fw1.lan/ui/core/dashboard\" target=\"_blank\" rel=\"noopener noreferrer\"><button>[fw1.lan]</button></a></span></div>",
+		"<div class=\"member-status\">" + _ok + "</div><div class=\"member-main\"><span class=\"member-links member-links-ui\"><a href=\"https://fw10.lan/ui/core/dashboard\" target=\"_blank\" rel=\"noopener noreferrer\"><button>[fw10.lan]</button></a></span></div>",
+	}
+	var s strings.Builder
+	writeGroupMember(&s, OPNGroup{OPN: true}, "fw1.lan")
+	got := s.String()
+	if !strings.Contains(got, "[fw1.lan]</button>") {
+		t.Errorf("expected the fw1.lan tile, got %q", got)
+	}
+	if strings.Contains(got, "fw10.lan") {
+		t.Errorf("fw1.lan lookup must not render the fw10.lan tile: %q", got)
+	}
+	var s2 strings.Builder
+	writeGroupMember(&s2, OPNGroup{OPN: true}, "fw10.lan")
+	if !strings.Contains(s2.String(), "[fw10.lan]</button>") {
+		t.Errorf("expected the fw10.lan tile, got %q", s2.String())
+	}
+}
+
 // --- checkSetRequiredUnifi: Desc field -----------------------------------
 
 func TestCheckSetRequiredUnifiWithDesc(t *testing.T) {
@@ -1508,13 +1564,19 @@ func TestIsTargetEnvName(t *testing.T) {
 }
 
 // TestSplitPlugins covers the strings.Split("", ",") == [""] gotcha that used
-// to make checkInstallPKG attempt to install an empty-named package.
+// to make checkInstallPKG attempt to install an empty-named package, plus the
+// whitespace / empty-entry trimming so "os-a, ,os-b" never yields an empty
+// package name.
 func TestSplitPlugins(t *testing.T) {
 	cases := map[string][]string{
-		"":              nil,
-		"   ":           nil,
-		"os-foo":        {"os-foo"},
-		"os-foo,os-bar": {"os-foo", "os-bar"},
+		"":                 nil,
+		"   ":              nil,
+		"os-foo":           {"os-foo"},
+		"os-foo,os-bar":    {"os-foo", "os-bar"},
+		"os-foo, os-bar":   {"os-foo", "os-bar"},
+		" os-foo ,os-bar ": {"os-foo", "os-bar"},
+		" os-foo ,,":       {"os-foo"},
+		",,":               nil,
 	}
 	for in, want := range cases {
 		got := splitPlugins(in)
@@ -6963,6 +7025,7 @@ func resetAuthState(tb testing.TB) {
 	auth.enabled = false
 	auth.hash = ""
 	auth.salt = nil
+	auth.refHash = nil
 	auth.fails = 0
 	auth.lockUntil = time.Time{}
 	auth.lastFail = time.Time{}
@@ -6974,6 +7037,7 @@ func resetAuthState(tb testing.TB) {
 		auth.enabled = false
 		auth.hash = ""
 		auth.salt = nil
+		auth.refHash = nil
 		auth.fails = 0
 		auth.lockUntil = time.Time{}
 		auth.lastFail = time.Time{}
@@ -6993,6 +7057,7 @@ func armTestAuth(tb testing.TB, password string) (hashEnv, saltEnv string) {
 	auth.enabled = true
 	auth.hash = hashEnv
 	auth.salt, _ = base64.StdEncoding.DecodeString(saltEnv)
+	auth.refHash, _ = decodeHashHalf(hashEnv)
 	auth.mu.Unlock()
 	return hashEnv, saltEnv
 }

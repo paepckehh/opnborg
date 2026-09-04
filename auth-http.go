@@ -19,17 +19,21 @@ import (
 //   - POST /auth/logout revokes the session and returns to monitoring mode.
 //   - POST /auth/hash accepts a bootstrap password and returns the
 //     OPN_AUTH_HASH / OPN_AUTH_SALT env lines to copy into the daemon
-//     environment (the authentication tile on the config dashboard). It is
-//     disabled once real credentials are armed, so it can never be abused
-//     to overwrite an existing operator password.
+//     environment (the authentication tile on the config dashboard). The
+//     generator is always available — even when credentials are already
+//     armed — because the displayed values are display-only: nothing is
+//     stored or applied, the operator must manually copy both env vars and
+//     restart the daemon before they take effect.
 //   - GET /auth/state exposes the mode + remaining lock for JS polling.
 //
-// requireAdmin gates mutating action endpoints (/force, /approve,
+// requireAdmin gates the mutating approval endpoints (/approve,
 // /approve-all) and the /files/ static file server: when credentials are
 // armed and the request carries no live admin session, the request is
 // redirected to the index with ?auth=locked so the operator is told to
-// authenticate first. Page-render routes (/, /config, /audit, /progress)
-// are NOT gated: they are always viewable; sensitive sub-features (diffs,
+// authenticate first. /force is intentionally open: it only arms an
+// already-scheduled backup pass and leaks no config data. Page-render
+// routes (/, /config, /audit, /progress) are NOT gated: they are always
+// viewable; sensitive sub-features (diffs,
 // download buttons, approve controls) are locked in the render path when
 // no admin session is present, regardless of whether credentials are
 // configured. When no credentials are configured the mutating-action
@@ -94,7 +98,14 @@ func getLoginHandler() http.Handler {
 		token, wait, err := authCheckPassword(password)
 		if err != nil {
 			displayChan <- []byte("[AUTH][LOGIN][DENIED] wait=" + wait.String())
-			http.Redirect(r, q, "/?auth=fail&wait="+authWaitSeconds(wait)+"&next="+next, http.StatusSeeOther)
+			// The wait parameter is only appended when a lockout is actually
+			// armed so the failure dialog never shows a bogus 1-second
+			// countdown for a not-configured / zero-wait refusal.
+			dest := "/?auth=fail&next=" + next
+			if wait > 0 {
+				dest += "&wait=" + authWaitSeconds(wait)
+			}
+			http.Redirect(r, q, dest, http.StatusSeeOther)
 			return
 		}
 		http.SetCookie(r, &http.Cookie{
@@ -102,6 +113,7 @@ func getLoginHandler() http.Handler {
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   authCookieSecure(),
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   int(_authSessionTTL.Seconds()),
 		})
@@ -123,6 +135,7 @@ func getLogoutHandler() http.Handler {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   authCookieSecure(),
 			MaxAge:   -1,
 		})
 		http.Redirect(r, q, "/", http.StatusSeeOther)
@@ -167,7 +180,7 @@ func getAuthHashHandler() http.Handler {
 			}
 			pw := q.FormValue("password")
 			pw2 := q.FormValue("password2")
-			if pw == "" || len(pw) < 5 {
+			if len(pw) < 5 {
 				writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 5 characters)", armed), r, q, false)
 				return
 			}
@@ -182,6 +195,13 @@ func getAuthHashHandler() http.Handler {
 		}
 	}
 	return http.HandlerFunc(h)
+}
+
+// authCookieSecure reports whether the session cookie should carry the
+// Secure flag: the WebUI is serving TLS (OPN_HTTPD_CACERT configured), so
+// the token must never be offered over a plain-HTTP probe of the same host.
+func authCookieSecure() bool {
+	return _cfg != nil && _cfg.Httpd.CAcert != ""
 }
 
 // sanitizeAuthNext constrains the post-login redirect target to a small
@@ -201,11 +221,7 @@ func sanitizeAuthNext(next string) string {
 // authWaitSeconds renders a wait duration as whole seconds for the redirect
 // query string (minimum 1 so the dialog always shows a live countdown).
 func authWaitSeconds(d time.Duration) string {
-	s := int(d.Seconds())
-	if s < 1 {
-		s = 1
-	}
-	return strconv.Itoa(s)
+	return strconv.Itoa(max(int(d.Seconds()), 1))
 }
 
 // boolJSON renders a bool as a JSON literal.
@@ -317,7 +333,9 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 		"for the new credentials to take effect. Until then the current configuration remains active." +
 		"</div>")
 	if errText != "" {
-		s.WriteString("<div class=\"auth-gen-err\">" + html.EscapeString(errText) + "</div>")
+		s.WriteString("<div class=\"auth-gen-err\">")
+		s.WriteString(html.EscapeString(errText))
+		s.WriteString("</div>")
 	}
 	if hashEnv != "" {
 		if armed {
@@ -330,8 +348,12 @@ func getAuthHashHTML(hashEnv, saltEnv, errText string, armed bool) string {
 		s.WriteString("<p class=\"cfg-intro\">Derivation complete (Argon2id, time=8, memory=64 MiB, threads=1, keylen=64). " +
 			"Add both environment variables to your opnborg environment (e.g. your <code>.env</code> file or systemd unit) and restart the daemon to arm admin mode:</p>")
 		s.WriteString("<div class=\"auth-env-box\">")
-		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">" + html.EscapeString(_envAuthHash+"="+hashEnv) + "</code></div>")
-		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">" + html.EscapeString(_envAuthSalt+"="+saltEnv) + "</code></div>")
+		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">")
+		s.WriteString(html.EscapeString(_envAuthHash + "=" + hashEnv))
+		s.WriteString("</code></div>")
+		s.WriteString("<div class=\"auth-env-box-line\"><code class=\"auth-env-box-code\">")
+		s.WriteString(html.EscapeString(_envAuthSalt + "=" + saltEnv))
+		s.WriteString("</code></div>")
 		s.WriteString("<div style=\"text-align:right;margin-top:.4rem\"><button type=\"button\" class=\"auth-copy-btn\" onclick=\"copyEnvVars(this)\">&#x2398; Copy</button></div>")
 		s.WriteString("</div>")
 		s.WriteString("<p class=\"cfg-intro\">Keep both values secret. After the restart the nav-bar [ Authenticate ] button unlocks admin mode with the password you entered above.</p>")
@@ -387,7 +409,8 @@ func getBodyHead(q *http.Request) string {
 	if isAdmin {
 		modeBox = "<div class=\"mode-box mode-admin\" title=\"admin mode: authenticated session, config downloads and audit approvals unlocked\">ADMIN</div>"
 	} else if armed && lock > 0 {
-		modeBox = "<div class=\"mode-box mode-lock\" title=\"login locked after failed attempts (shared across all sessions)\" id=\"auth-lock\" data-wait=\"" + strconv.Itoa(int(lock.Seconds())) + "\">LOCKED " + strconv.Itoa(int(lock.Seconds())) + "s</div>"
+		lockSec := strconv.Itoa(int(lock.Seconds()))
+		modeBox = "<div class=\"mode-box mode-lock\" title=\"login locked after failed attempts (shared across all sessions)\" id=\"auth-lock\" data-wait=\"" + lockSec + "\">LOCKED " + lockSec + "s</div>"
 	}
 
 	// auth action button

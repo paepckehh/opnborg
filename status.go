@@ -13,8 +13,27 @@ const (
 	_fwup = "/ui/core/firmware#status"
 	_plug = "/ui/core/firmware#plugins"
 	_srvc = "/ui/core/service"
-	_nwin = "target=\"_blank\""
+	_nwin = "target=\"_blank\" rel=\"noopener noreferrer\""
 )
+
+// _stateSVGReplacer strips any status SVG from a previously rendered status
+// tile so the failure path can re-render it with the failure indicator while
+// preserving the meta boxes.
+var _stateSVGReplacer = strings.NewReplacer(
+	_ok, "",
+	_na, "",
+	_fail, "",
+	_degraded, "",
+	_unifi, "",
+)
+
+// failTile re-renders a stripped status tile with the failure indicator
+// prefixed, preserving whatever meta boxes the tile already carried.
+func failTile(status string) string {
+	status = _stateSVGReplacer.Replace(status)
+	status = strings.Replace(status, "<div class=\"member-status\"></div>", "", 1)
+	return "<div class=\"member-status\">" + _fail + "</div>" + status
+}
 
 // setOPNStatus sets the hive member server status
 func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.Time, degraded, ok bool) {
@@ -48,10 +67,7 @@ func setOPNStatus(config *OPNCall, server, tag, notice string, id int, ts time.T
 	}
 	hiveMutex.Lock()
 	defer hiveMutex.Unlock()
-	status := hive[id]
-	status = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(status, _ok, ""), _na, ""), _fail, ""), _degraded, "")
-	status = strings.Replace(status, "<div class=\"member-status\"></div>", "", 1)
-	status = "<div class=\"member-status\">" + _fail + "</div>" + status
+	status := failTile(hive[id])
 	if notice != "" {
 		status += "<div class=\"meta-box meta-err\"><span class=\"meta-label\">Error</span><span class=\"meta-value\">" + html.EscapeString(notice) + "</span></div>"
 	}
@@ -97,9 +113,12 @@ func setUnifiStatus(config *OPNCall, server, tag, notice string, ts time.Time, r
 	}
 	// clean status: strip any state svg, drop the now-empty status wrapper, and
 	// re-render with the failure indicator while preserving the meta boxes.
-	unifiStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiStatus, _unifi, ""), _na, ""), _fail, ""), _degraded, "")
-	unifiStatus = strings.Replace(unifiStatus, "<div class=\"member-status\"></div>", "", 1)
-	unifiStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiStatus
+	// The detailed failure reason carried in notice is rendered as an error
+	// meta box, mirroring the OPN hive tile.
+	unifiStatus = failTile(unifiStatus)
+	if notice != "" {
+		unifiStatus += "<div class=\"meta-box meta-err\"><span class=\"meta-label\">Error</span><span class=\"meta-value\">" + html.EscapeString(notice) + "</span></div>"
+	}
 }
 
 // setUnifiWatchStatus renders the Unifi autoBackup folder-watch sync tile.
@@ -128,9 +147,7 @@ func setUnifiWatchStatus(config *OPNCall, responsive, syncOK bool) {
 	}
 
 	if !responsive {
-		unifiWatchStatus = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(unifiWatchStatus, _unifi, ""), _ok, ""), _na, ""), _fail, "")
-		unifiWatchStatus = strings.Replace(unifiWatchStatus, "<div class=\"member-status\"></div>", "", 1)
-		unifiWatchStatus = "<div class=\"member-status\">" + _fail + "</div>" + unifiWatchStatus
+		unifiWatchStatus = failTile(unifiWatchStatus)
 		if unifiWatchStatus == "<div class=\"member-status\">"+_fail+"</div>" {
 			reason := config.Unifi.Watch.SetupErr
 			if reason == "" {

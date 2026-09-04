@@ -57,11 +57,21 @@ func srv(config *OPNCall) error {
 			now, _, _ := time.Now().Clock()
 			// check for day rollover, perform unifi backup/export
 			if now < last {
+				// Non-blocking pokes: a wedged unifi goroutine must never stall
+				// this timer (and with it the whole OPN backup pacing). When a
+				// pass is already queued the duplicate is dropped, mirroring the
+				// /force handler semantics.
 				if unifiBackupEnable.Load() {
-					updateUnifiBackup <- true
+					select {
+					case updateUnifiBackup <- true:
+					default:
+					}
 				}
 				if unifiExportEnable.Load() {
-					updateUnifiExport <- true
+					select {
+					case updateUnifiExport <- true:
+					default:
+					}
 				}
 			}
 			last, _, _ = time.Now().Clock()
@@ -120,10 +130,13 @@ func srv(config *OPNCall) error {
 		// later; otherwise a targets string like "a,,b" would shift every
 		// status tile and eventually panic on a hive index out of range.
 		servers = nil
+		hiveMutex.Lock()
 		for server := range strings.SplitSeq(config.Targets, ",") {
 			host, tag, valid := parseServerTag(server)
 			if !valid {
+				hiveMutex.Unlock()
 				displayChan <- []byte("[ERROR][CONFIGURATION] Line: " + server)
+				hiveMutex.Lock()
 				continue
 			}
 			hive = append(hive, "<div class=\"member-status\">"+_na+"</div><div class=\"member-main\"><span class=\"member-meta\">Member: "+html.EscapeString(host)+" Version: n/a Last Seen: n/a</span></div>")
@@ -132,6 +145,11 @@ func srv(config *OPNCall) error {
 			}
 			servers = append(servers, server)
 		}
+		// The httpd goroutine (started above) already serves getHive(), which
+		// reads the hive slice under hiveMutex; the init appends must take the
+		// same lock or a request racing the append can read a reallocating
+		// slice header.
+		hiveMutex.Unlock()
 	}
 	displayChan <- []byte("[SERVICE][OPN-BACKUP-AND-MONITORING]" + state)
 

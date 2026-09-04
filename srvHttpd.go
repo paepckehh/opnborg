@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 // httpd spinup the http internal web server
@@ -16,12 +17,14 @@ func startWeb(c *OPNCall) {
 
 	// create store structure
 	if err := os.MkdirAll(c.Path, 0770); err != nil {
+		displayChan <- []byte("[HTTPD-SRV][FATAL][FAIL:UNABLE-TO-CREATE-FILE-STORAGE] " + err.Error())
 		fmt.Println(err)
 		return
 	}
 
 	// change thread into store-root
 	if err := os.Chdir(c.Path); err != nil {
+		displayChan <- []byte("[HTTPD-SRV][FATAL][FAIL:UNABLE-TO-CHDIR-STORE-ROOT] " + err.Error())
 		fmt.Println(err)
 		return
 	}
@@ -29,6 +32,7 @@ func startWeb(c *OPNCall) {
 	// get listener, bind ports
 	listener, err := getHTTPTLS(c)
 	if err != nil {
+		displayChan <- []byte("[HTTPD-SRV][FATAL][FAIL:LISTENER] " + err.Error())
 		fmt.Println(err)
 		return
 	}
@@ -51,9 +55,12 @@ func startWeb(c *OPNCall) {
 	mux.Handle("/auth-hash", getAuthHashHandler())
 	mux.Handle("/favicon.ico", getFavIconHandler())
 
-	// httpsrv
+	// httpsrv. Header-read and idle timeouts bound slow/malicious clients so
+	// a Slowloris-style connection can never pin the daemon's file descriptors.
 	httpsrv := &http.Server{
-		Handler: mux,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// info

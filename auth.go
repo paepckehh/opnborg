@@ -71,6 +71,7 @@ type authState struct {
 	enabled   bool                 // OPN_AUTH_HASH + OPN_AUTH_SALT configured
 	hash      string
 	salt      []byte
+	refHash   []byte    // decoded reference key (computed once at authInit)
 	fails     int       // global failed-login counter (all sessions)
 	lockUntil time.Time // global lockout deadline (all sessions)
 	lastFail  time.Time // idle window start for the 6h counter reset
@@ -113,6 +114,17 @@ func authInit() {
 	auth.enabled = true
 	auth.hash = hash
 	auth.salt = saltBytes
+	// Decode the reference key once here so the login path never has to
+	// re-decode (and can derive the candidate outside the mutex).
+	if ref, err := decodeHashHalf(hash); err == nil {
+		auth.refHash = ref
+	} else {
+		auth.enabled = false
+		auth.hash = ""
+		auth.salt = nil
+		displayChan <- []byte("[AUTH][DISABLED][INVALID-" + _envAuthHash + "] " + err.Error())
+		return
+	}
 	displayChan <- []byte("[AUTH][ENABLED] admin mode credentials armed, monitoring mode active until login")
 }
 
@@ -185,25 +197,50 @@ func authCredentialsEnabled() bool {
 // and returns its token. On failure it bumps the global fail counter and
 // arms the shared lockout; the returned error carries the remaining wait so
 // the login dialog can display it.
+//
+// The expensive Argon2id derivation (~seconds, 64 MiB) deliberately runs
+// OUTSIDE auth.mu: every page render and the 1 Hz /auth/state poller take
+// the same mutex, so deriving under the lock would freeze the whole WebUI
+// for the duration of every login attempt. The state snapshot (salt,
+// reference key, lockout) is taken under the lock, the candidate key is
+// derived unlocked, and the compare + bookkeeping re-take the lock.
 func authCheckPassword(password string) (token string, wait time.Duration, err error) {
 	auth.mu.Lock()
-	defer auth.mu.Unlock()
 	if !auth.enabled {
+		auth.mu.Unlock()
 		return "", 0, errors.New("admin authentication is not configured (set OPN_AUTH_HASH and OPN_AUTH_SALT)")
 	}
 	// global lockout: every session shares the penalty window
 	if remain := time.Until(auth.lockUntil); remain > 0 {
+		auth.mu.Unlock()
 		return "", remain, errors.New("login locked, please wait")
 	}
 	// 6h idle reset of the global fail counter
 	if !auth.lastFail.IsZero() && time.Since(auth.lastFail) >= _authFailWindow {
 		auth.fails = 0
 	}
-	refHash, decErr := decodeHashHalf(auth.hash)
-	if decErr != nil {
-		return "", 0, errors.New("admin credential hash is invalid")
+	salt, refHash := auth.salt, auth.refHash
+	if refHash == nil && auth.hash != "" {
+		// State was armed outside authInit (e.g. a test helper): decode the
+		// reference key here. This is a cheap base64 decode, not the
+		// expensive Argon2 derivation, so keeping it under the lock is fine.
+		refHash, _ = decodeHashHalf(auth.hash)
 	}
-	candidate := authArgonDerive(password, auth.salt)
+	auth.mu.Unlock()
+
+	// derive the candidate key outside the lock (the expensive step)
+	candidate := authArgonDerive(password, salt)
+
+	auth.mu.Lock()
+	defer auth.mu.Unlock()
+	if !auth.enabled {
+		return "", 0, errors.New("admin authentication is not configured (set OPN_AUTH_HASH and OPN_AUTH_SALT)")
+	}
+	// a concurrent failed attempt may have armed a longer lockout while this
+	// derivation ran; honour it instead of counting this attempt on top.
+	if remain := time.Until(auth.lockUntil); remain > 0 {
+		return "", remain, errors.New("login locked, please wait")
+	}
 	if subtle.ConstantTimeCompare(candidate, refHash) != 1 {
 		auth.fails++
 		auth.lastFail = time.Now()
@@ -225,16 +262,15 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 }
 
 // authArmWait computes the global lockout for the n-th consecutive failure:
-// 10s, 20s, 40s, ... (doubling).
+// 10s, 20s, 40s, ... (doubling). The shift is capped so an implausible fail
+// count can never overflow the duration into a negative (past-oriented)
+// deadline, which would silently disable the lockout.
 func authArmWait(fails int) time.Duration {
 	if fails < 1 {
 		return 0
 	}
-	seconds := _authBaseWaitSeconds
-	for i := 1; i < fails; i++ {
-		seconds *= 2
-	}
-	return time.Duration(seconds) * time.Second
+	shift := min(fails-1, 20)
+	return time.Duration(_authBaseWaitSeconds<<shift) * time.Second
 }
 
 // authArmWaitLocked stores the lockout deadline for n accumulated failures.
@@ -249,10 +285,7 @@ func authArmWaitLocked(fails int) time.Duration {
 func authRemainingLock() (time.Duration, int) {
 	auth.mu.Lock()
 	defer auth.mu.Unlock()
-	remain := time.Until(auth.lockUntil)
-	if remain < 0 {
-		remain = 0
-	}
+	remain := max(time.Until(auth.lockUntil), 0)
 	return remain, auth.fails
 }
 
@@ -262,11 +295,11 @@ func authRemainingLock() (time.Duration, int) {
 func authLogout(token string) {
 	auth.mu.Lock()
 	delete(auth.sessions, token)
-	remaining := len(auth.sessions)
+	// mirror while still holding the lock so a login minting a fresh session
+	// between unlock and the Store can never leave a live admin session with
+	// adminEnabled == false (greyed-out download buttons for an admin).
+	adminEnabled.Store(len(auth.sessions) > 0)
 	auth.mu.Unlock()
-	if remaining == 0 {
-		adminEnabled.Store(false)
-	}
 }
 
 // authSessionAdmin reports whether the request's session cookie carries a
@@ -285,6 +318,10 @@ func authSessionAdmin(token string) bool {
 	}
 	if time.Now().After(exp) {
 		delete(auth.sessions, token)
+		// mirror the surviving-session count so an expired last session
+		// clears adminEnabled and the render path stops offering unlocked
+		// download buttons that /files/ would correctly refuse.
+		adminEnabled.Store(len(auth.sessions) > 0)
 		return false
 	}
 	auth.sessions[token] = time.Now().Add(_authSessionTTL)

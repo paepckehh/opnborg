@@ -7,7 +7,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -307,7 +307,7 @@ func gatherAuditCommits(config *OPNCall, since time.Time) ([]auditCommit, error)
 		if err != nil {
 			// Only io.EOF ends the log walk; any other error (object store
 			// failure) must surface so the window is not silently truncated.
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				return nil, err
 			}
 			break
@@ -408,13 +408,14 @@ func commitDiffText(c *object.Commit) (string, bool, error) {
 	return capDiff(diff)
 }
 
-// capDiff truncates a unified diff to _auditDiffCap bytes and appends a
-// visible truncation marker when it overflows.
+// capDiff truncates a unified diff to _auditDiffCap bytes without splitting
+// a multi-byte UTF-8 rune at the cut point, and appends a visible truncation
+// marker when it overflows.
 func capDiff(diff string) (string, bool, error) {
 	if len(diff) <= _auditDiffCap {
 		return diff, false, nil
 	}
-	return diff[:_auditDiffCap] + "\n--- DIFF TRUNCATED ---\n", true, nil
+	return truncateUTF8(diff, _auditDiffCap) + "\n--- DIFF TRUNCATED ---\n", true, nil
 }
 
 // shortHash returns the 7-character short form of a git hash.
@@ -503,9 +504,6 @@ func lastThirdLines(msg string) string {
 	start := n - n/3
 	if start >= n {
 		start = n - 1
-	}
-	if start < 0 {
-		start = 0
 	}
 	return strings.Join(lines[start:], "\n")
 }
@@ -693,7 +691,7 @@ func extractPerformerFromDiff(diff string) string {
 		seen[v] = struct{}{}
 		out = append(out, v)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return strings.Join(out, ", ")
 }
 
@@ -982,9 +980,6 @@ func highlightAuditTagLine(body string) string {
 	tailStart := n - n/3
 	if tailStart >= n {
 		tailStart = n - 1
-	}
-	if tailStart < 0 {
-		tailStart = 0
 	}
 	for i, line := range lines {
 		allowLoose := i >= tailStart

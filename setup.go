@@ -268,13 +268,13 @@ func Setup() (*OPNCall, error) {
 		}
 	}
 
-	// unifi
+	// unifi (the optional #<asset-tag> suffix is parsed through
+	// parseServerTag, the single source of truth for the host#tag format)
 	if config.Unifi.WebUI, err = checkURL("OPN_UNIFI_WEBUI"); err != nil {
 		return config, err
 	}
-	s := strings.Split(os.Getenv("OPN_UNIFI_WEBUI"), "#")
-	if len(s) > 1 {
-		config.Unifi.Tag = s[1]
+	if _, tag, valid := parseServerTag(os.Getenv("OPN_UNIFI_WEBUI")); valid {
+		config.Unifi.Tag = tag
 	}
 	unifiBackupEnable.Store(false)
 	unifiExportEnable.Store(false)
@@ -297,17 +297,16 @@ func Setup() (*OPNCall, error) {
 			if _, ok := os.LookupEnv("OPN_UNIFI_EXPORT"); ok {
 				unifiExportEnable.Store(true)
 				config.Unifi.Export.Enable = true
-				if config.Unifi.Export.URI, err = url.Parse("mongodb://127.0.0.1:27117"); err != nil {
-					panic(err) // unreachable internal error in default mongodb uri
+				// default to the co-located controller mongodb; only override
+				// when OPN_UNIFI_MONGODB_URI is set. A parse failure of either
+				// form is a configuration error, never a panic (a panic in a
+				// long-running daemon is hostile even when unreachable).
+				mongoURI := "mongodb://127.0.0.1:27117"
+				if isEnv("OPN_UNIFI_MONGODB_URI") {
+					mongoURI = os.Getenv("OPN_UNIFI_MONGODB_URI")
 				}
-				// Only override the default when the env var is set; checkURL
-				// returns (nil, nil) when the var is absent, which would
-				// otherwise wipe the default and cause a nil-pointer panic in
-				// srvUnifiExport when it calls URI.String().
-				if _, ok := os.LookupEnv("OPN_UNIFI_MONGODB_URI"); ok {
-					if config.Unifi.Export.URI, err = checkURL("OPN_UNIFI_MONGODB_URI"); err != nil {
-						return config, err
-					}
+				if config.Unifi.Export.URI, err = url.Parse(mongoURI); err != nil {
+					return config, fmt.Errorf("env variable 'OPN_UNIFI_MONGODB_URI' parse error: %w", err)
 				}
 				config.Unifi.Export.Format = "csv"
 				if d := os.Getenv("OPN_UNIFI_FORMAT"); d == "json" {
@@ -391,9 +390,6 @@ func checkSetRequiredOPN() bool {
 	}
 
 	env := os.Environ()
-	if len(env) < 2 {
-		return false
-	}
 	sort.Strings(env)
 	var members []string
 	for _, value := range env {
@@ -443,14 +439,15 @@ func checkSetRequiredUnifi() bool {
 		return false
 	}
 
-	// add unifi group
+	// add unifi group (a URL hostname never carries a comma, so the
+	// controller is always the group's single member)
 	tg = append(tg, OPNGroup{
 		Name:   "UNIFI CONTROLLER",
 		OPN:    false,
 		Unifi:  true,
 		Desc:   os.Getenv("OPN_UNIFI_BACKUP_DESC"),
 		ImgURL: os.Getenv("OPN_UNIFI_BACKUP_IMGURL"),
-		Member: strings.Split(unifiURL.Hostname(), ","),
+		Member: []string{unifiURL.Hostname()},
 	})
 	return true
 }

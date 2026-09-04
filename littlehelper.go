@@ -12,11 +12,14 @@ import (
 // Display IO
 //
 
-// outSlice write messages to stdout
+// outSlice write messages to stdout in a single write so the display
+// engine never interleaves partial lines under concurrent producers.
 func outSlice(msg []byte, config *OPNCall) {
-	_, _ = os.Stdout.Write([]byte(config.AppName))
-	_, _ = os.Stdout.Write(msg)
-	_, _ = os.Stdout.Write([]byte("\n"))
+	out := make([]byte, 0, len(config.AppName)+len(msg)+1)
+	out = append(out, config.AppName...)
+	out = append(out, msg...)
+	out = append(out, '\n')
+	_, _ = os.Stdout.Write(out)
 }
 
 // displayChan channel for the display engine

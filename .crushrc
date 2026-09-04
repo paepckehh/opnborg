@@ -10,9 +10,12 @@ provider add aiworker02 --type omlx --base-url "http://10.20.6.242:11434/v1" --a
 provider add aiworker03 --type omlx --base-url "http://10.20.6.243:11434/v1" --api-key "!!Start!!Fake!!" 
 provider add aiworker04 --type omlx --base-url "http://10.20.6.244:11434/v1" --api-key "!!Start!!Fake!!" 
 #
+models add small aiworker04 
+models add large aiworker04 
+#
 permissions allow view ls grep edit write multiedit bash rg jq python python3 fetch curl agentic_fetch allow lsp lsp_replace lsp_replace_symbol 
 #
-lsp add go --command "/run/current-system/sw/bin/gopls" --env "GOTOOLCHAIN" "go1.26.5"
+lsp add go --command "/run/current-system/sw/bin/gopls" --env "GOTOOLCHAIN" "go1.26.7"
 lsp add typescript --command "/run/current-system/sw/bin/typescript-language-server" --args --stdio
 # lsp add nix --command "/run/current-system/sw/bin/nil"
 #

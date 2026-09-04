@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,25 +40,29 @@ func srvUnifiWatch(config *OPNCall) {
 	// setup
 	displayChan <- []byte("[UNIFI][WATCH][START][SOURCE] " + config.Unifi.Watch.Path)
 
-	// initial sync so the store reflects the current source state immediately
-	syncUnifiWatch(config)
-
-	// set status once from the initial pass (degraded if the sync failed)
-	setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
-
-	// setup fsnotify watcher
+	// setup fsnotify watcher and register the source folder FIRST, then run
+	// the initial sync: with the watcher armed up front, any .unf file the
+	// controller writes during the initial pass is buffered as an event and
+	// picked up by the debounce instead of being invisible until the next
+	// controller backup.
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		displayChan <- []byte("[UNIFI][WATCH][ERROR][WATCHER-SETUP-FAIL] " + err.Error())
-		setUnifiWatchStatus(config, true, false)
+		setUnifiWatchStatus(config, false, false)
 		return
 	}
 	defer watcher.Close()
 	if err := watcher.Add(config.Unifi.Watch.Path); err != nil {
 		displayChan <- []byte("[UNIFI][WATCH][ERROR][WATCHER-ADD-FAIL] " + err.Error())
-		setUnifiWatchStatus(config, true, false)
+		setUnifiWatchStatus(config, false, false)
 		return
 	}
+
+	// initial sync so the store reflects the current source state immediately
+	syncUnifiWatch(config)
+
+	// set status once from the initial pass (degraded if the sync failed)
+	setUnifiWatchStatus(config, true, lastUnifiWatchSyncOK(config))
 
 	// debounce rapid event bursts (a controller backup run emits several
 	// create/write events in quick succession) into a single sync pass.
@@ -156,7 +160,7 @@ func syncUnifiWatch(config *OPNCall) {
 		return
 	}
 	// oldest -> newest so the newest file wins the current.unf pointer
-	sort.Slice(files, func(i, j int) bool { return files[i].mtime.Before(files[j].mtime) })
+	slices.SortFunc(files, func(a, b candidate) int { return a.mtime.Compare(b.mtime) })
 
 	// baseline: the sha256 of the existing current.unf (if any) so we only
 	// checkin files that actually differ from what is already stored.
@@ -165,7 +169,7 @@ func syncUnifiWatch(config *OPNCall) {
 	// sha256.db (plus current.unf) so re-sync passes skip files already
 	// archived rather than creating duplicate archive entries.
 	archived := archivedSums(config, _uniWatch)
-	archived[currentSum] = true
+	archived[currentSum] = struct{}{}
 
 	synced, skipped := 0, 0
 	lastFile := ""
@@ -181,7 +185,7 @@ func syncUnifiWatch(config *OPNCall) {
 			displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
 			continue
 		}
-		if len(data) < 1024 {
+		if len(data) < _minBackupBytes {
 			reason := "BACKUP-FILE-TOO-SMALL: " + src + " (" + strconv.Itoa(len(data)) + " bytes)"
 			if firstErr == "" {
 				firstErr = reason
@@ -190,7 +194,7 @@ func syncUnifiWatch(config *OPNCall) {
 			continue
 		}
 		sum := sha256.Sum256(data)
-		if archived[sum] {
+		if _, dup := archived[sum]; dup {
 			skipped++
 			lastFile = f.name
 			continue
@@ -205,8 +209,7 @@ func syncUnifiWatch(config *OPNCall) {
 			displayChan <- []byte("[UNIFI][WATCH][ERROR][" + reason + "]")
 			continue
 		}
-		archived[sum] = true
-		currentSum = sum
+		archived[sum] = struct{}{}
 		synced++
 		lastFile = f.name
 	}
@@ -268,8 +271,8 @@ func archivedCount(config *OPNCall, server string) int {
 // against the full archive history (not only current.<ext>) so re-sync passes
 // skip files that are already stored instead of creating duplicate archive
 // entries. The map is empty when no archive exists yet.
-func archivedSums(config *OPNCall, server string) map[[32]byte]bool {
-	out := make(map[[32]byte]bool)
+func archivedSums(config *OPNCall, server string) map[[32]byte]struct{} {
+	out := make(map[[32]byte]struct{})
 	data, err := os.ReadFile(filepath.Join(config.Path, server, _hashFile))
 	if err != nil {
 		return out
@@ -285,7 +288,7 @@ func archivedSums(config *OPNCall, server string) map[[32]byte]bool {
 		}
 		var sum [32]byte
 		copy(sum[:], raw)
-		out[sum] = true
+		out[sum] = struct{}{}
 	}
 	return out
 }

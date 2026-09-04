@@ -37,14 +37,12 @@ func getForceHandler() http.Handler {
 			}
 		}
 		if unifiExportEnable.Load() {
-			unifiExportNow.Store(true)
 			select {
 			case updateUnifiExport <- true:
 			default:
 			}
 		}
 		if unifiWatchEnable.Load() {
-			unifiWatchNow.Store(true)
 			select {
 			case updateUnifiWatch <- true:
 			default:
@@ -76,7 +74,7 @@ func getIndexHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
 		r = headHTML(r)
 		switch q.Method {
-		case "GET":
+		case http.MethodGet:
 			writeTransportCompressedPage(getStartHTML(q), r, q, true)
 		default:
 			inf := "Error: Method Not Allowed (405) [" + q.Method + "]"
@@ -125,11 +123,14 @@ func headHTML(r http.ResponseWriter) http.ResponseWriter {
 	return r
 }
 
-// addSecurityHeader ...
+// addSecurityHeader stamps the baseline browser hardening headers onto every
+// page-render route. The WebUI is same-origin only (no external subresources),
+// so framing is denied entirely and no referrer information leaks out.
 func addSecurityHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
-		// w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, req)
 	})
 }
@@ -267,15 +268,14 @@ func writeGroupHeader(s *strings.Builder, grp OPNGroup) {
 // status line for OPN groups or the shared unifi status for Unifi groups.
 func writeGroupMember(s *strings.Builder, grp OPNGroup, srv string) {
 	if grp.OPN {
-		target := strings.Split(srv, "#")
+		host, _, valid := parseServerTag(srv)
 		// Guard against empty member entries (e.g. trailing comma in
-		// OPN_TARGETS): strings.Contains(line, "") is always true and would
-		// otherwise render the first hive slot for every empty member.
-		if len(target) == 0 || target[0] == "" {
+		// OPN_TARGETS): an empty host would match the first hive line.
+		if !valid || host == "" {
 			return
 		}
 		for _, line := range hive {
-			if strings.Contains(line, target[0]) {
+			if hiveLineForHost(line, host) {
 				s.WriteString(line)
 				return
 			}
@@ -289,6 +289,41 @@ func writeGroupMember(s *strings.Builder, grp OPNGroup, srv string) {
 		unifiMutex.Unlock()
 		s.WriteString(status)
 	}
+}
+
+// hiveLineForHost reports whether a hive status line belongs to the given
+// host. A plain substring match would mis-associate fw1 with the status line
+// of fw10, so the match requires the host token to be delimited by non-host
+// characters (or the string boundaries) on both sides. This accepts both the
+// initial "Member: <host> Version:" tile and the live ">[<host>]</button>"
+// rendering emitted by setOPNStatus.
+func hiveLineForHost(line, host string) bool {
+	token := html.EscapeString(host)
+	for off := 0; off < len(line); {
+		i := strings.Index(line[off:], token)
+		if i < 0 {
+			return false
+		}
+		i += off
+		end := i + len(token)
+		if (i == 0 || !isHostByte(line[i-1])) && (end == len(line) || !isHostByte(line[end])) {
+			return true
+		}
+		off = end
+	}
+	return false
+}
+
+// isHostByte reports whether b can appear inside a host name, making it part
+// of the token rather than a delimiter.
+func isHostByte(b byte) bool {
+	switch {
+	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
+		return true
+	case b == '.' || b == '-' || b == '_':
+		return true
+	}
+	return false
 }
 
 // naviLink describes a single top-navigation entry. An empty suffix is

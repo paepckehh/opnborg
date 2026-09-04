@@ -28,14 +28,18 @@ func getSyncPKG() string {
 	return syncPKG
 }
 
-// splitPlugins splits a comma-separated plugin list while avoiding the
-// strings.Split("", ",") == [""] gotcha: an empty input yields no entries.
+// splitPlugins splits a comma-separated plugin list, trimming the whitespace
+// around each entry and skipping empties (the strings.Split("", ",") ==
+// [""] gotcha and malformed lists like "os-a, ,os-b" never yield an empty
+// package name checkInstallPKG would try to install).
 func splitPlugins(plugins string) []string {
-	plugins = strings.TrimSpace(plugins)
-	if plugins == "" {
-		return nil
+	var out []string
+	for p := range strings.SplitSeq(plugins, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
 	}
-	return strings.Split(plugins, ",")
+	return out
 }
 
 // readMasterConf

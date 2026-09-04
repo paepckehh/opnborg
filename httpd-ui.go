@@ -17,14 +17,14 @@ const (
 	_bodyStart = "<body>" + _lf
 	_bodyEnd   = "</body>" + _lf
 
-	// _bodyHeadStatic is the legacy header for pages that do not carry a live
+	// _bodyHead is the legacy header for pages that do not carry a live
 	// request (kept for test + placeholder rendering paths).
 	_bodyHead   = "<header class=\"app-header\"><h1>" + _app + "</h1><div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ " + SemVer + " ]</a></div></header>" + _lf
 	_bodyFooter = "<footer><div class=\"footer-links\"><a href=\"https://paepcke.de/opnborg\">" + _git + "</a><a href=\"https://infosec.exchange/@paepcke\">" + _social + "</a></div><div class=\"footer-sponsor\">SPONSORED-BY: <a href=\"https://pvz.digital\">pvz.digital</a> <a href=\"https://debitor.de\">debitor.de</a></div><div class=\"footer-tag\">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</div></footer>" + _lf
 
 	_forceInfo    = "<div class=\"force-info\"><h2>[ performing backup ]</h2><p>wait for redirect</p></div>"
 	_forceButton  = "<a href=\"/force\" class=\"btn btn-force\">[ Backup NOW ]</a>"
-	_configButton = "<a href=\"/config\" class=\"btn btn-force\" target=\"_blank\">[ Config Dashboard ]</a>"
+	_configButton = "<a href=\"/config\" class=\"btn btn-force\" target=\"_blank\" rel=\"noopener noreferrer\">[ Config Dashboard ]</a>"
 
 	// _forceDashboard is the animated forced-backup progress screen. It
 	// replaces the static "wait for redirect" page and streams the live log
@@ -36,7 +36,7 @@ const (
 	_forceDashboard = `<section class="force-dash" id="force-dash">
 <div class="fd-orbit"><div class="fd-radar"></div><div class="fd-ring"><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span><span class="fd-orb"></span></div><div class="fd-core"></div></div>
 <div class="force-dash-inner">
-<div class="fd-status"><span class="fd-tag" id="fd-status-tag">[ performing backup ]</span><span class="fd-elapsed" id="fd-elapsed">00:00</span></div>
+<div class="fd-status"><span class="fd-tag" id="fd-status-tag" role="status">[ performing backup ]</span><span class="fd-elapsed" id="fd-elapsed">00:00</span></div>
 <div class="fd-progress"><div class="fd-progress-bar" id="fd-progress-bar"></div><div class="fd-progress-pct" id="fd-progress-pct">0%</div></div>
 <div class="fd-stats">
 <div class="fd-stat"><span class="fd-stat-n" id="fd-lines">0</span><span class="fd-stat-l">log lines</span></div>
@@ -46,7 +46,7 @@ const (
 </div>
 <div class="fd-console-wrap">
 <div class="fd-console-head">live backup stream</div>
-<div class="fd-console" id="fd-console"><div class="fd-line fd-muted">waiting for backup pass to start...</div></div>
+<div class="fd-console" id="fd-console" role="log" aria-live="polite"><div class="fd-line fd-muted">waiting for backup pass to start...</div></div>
 </div>
 <div class="fd-hint" id="fd-hint">redirecting back to the hive view when the pass completes</div>
 </div>
@@ -56,7 +56,7 @@ const (
 <div class="fd-done-ring"></div>
 <div class="fd-done-title" id="fd-done-title">backup complete</div>
 <div class="fd-done-summary" id="fd-done-summary"></div>
-<div class="fd-done-hint" id="fd-done-hint">returning to the hive view in <span id="fd-countdown">6</span>s &#8212; click anywhere to extend</div>
+<div class="fd-done-hint" id="fd-done-hint">returning to the hive view in <span id="fd-countdown">6</span>s &#8212; click anywhere to extend, or <button type="button" class="btn btn-force fd-stay-btn" id="fd-stay">[ Stay ]</button> to keep this page</div>
 </section>
 <style>
 .force-dash{position:relative;max-width:920px;margin:1.5rem auto;padding:1.25rem;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 0 0 1px rgba(74,158,255,.05),0 8px 32px rgba(0,0,0,.35);overflow:hidden}
@@ -96,7 +96,7 @@ const (
 .fd-console{height:300px;overflow-y:auto;padding:.5rem .7rem;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.45;position:relative}
 .fd-console::after{content:"";position:absolute;left:0;right:0;height:14px;background:linear-gradient(transparent,rgba(74,158,255,.07),transparent);animation:fd-scan 3.4s linear infinite;pointer-events:none}
 .fd-done .fd-console::after{background:linear-gradient(transparent,rgba(63,185,80,.07),transparent)}
-.fd-line{white-space:pre-wrap;word-break:break-all;padding:.1rem 0;border-bottom:1px solid rgba(255,255,255,.02);animation:fd-in .25s ease-out}
+.fd-line{white-space:pre-wrap;overflow-wrap:anywhere;padding:.1rem 0;border-bottom:1px solid rgba(255,255,255,.02);animation:fd-in .25s ease-out}
 .fd-muted{color:var(--muted);font-style:italic}
 .fd-ok{color:var(--ok)}
 .fd-err{color:var(--err)}
@@ -115,6 +115,7 @@ const (
 .fd-done-hint{color:var(--muted);font-size:.8rem}
 .fd-done-hint #fd-countdown{color:var(--ok);font-weight:700;font-size:1rem}
 .fd-extend-flash{animation:fd-extend .4s ease-out}
+.fd-stay-btn{padding:.15rem .6rem;font-size:.72rem;margin:0 .2rem}
 .fd-done-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .fd-done-confetti span{position:absolute;top:-12px;width:7px;height:12px;border-radius:2px;opacity:0;animation:fd-confetti 2.2s ease-in forwards}
 .fd-done-confetti span:nth-child(1){left:8%;background:var(--accent);animation-delay:.05s}
@@ -131,7 +132,6 @@ const (
 .fd-done-confetti span:nth-child(12){left:74%;background:var(--accent);animation-delay:.3s}
 @keyframes fd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
 @keyframes fd-glow{0%,100%{opacity:.55}50%{opacity:1}}
-@keyframes fd-bounce{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-8px);opacity:1}}
 @keyframes fd-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 @keyframes fd-blink{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes fd-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
@@ -145,12 +145,16 @@ const (
 @keyframes fd-extend{0%{transform:scale(1)}40%{transform:scale(1.12);color:var(--accent)}100%{transform:scale(1)}}
 @keyframes fd-confetti{0%{opacity:0;transform:translateY(0) rotate(0deg)}10%{opacity:1}100%{opacity:0;transform:translateY(320px) rotate(540deg)}}
 @media(max-width:640px){.fd-stats{grid-template-columns:repeat(2,1fr)}.fd-console{height:240px}}
+@media (prefers-reduced-motion: reduce){.force-dash,.force-dash *,.force-dash *::before,.force-dash *::after,.fd-done-box, .fd-done-box *,.fd-done-box *::before,.fd-done-box *::after{animation:none!important;transition:none!important}}
 </style>
 <script>
 (function(){
   const FORCE=%FORCE%;
   const POLL_MS=800;
-  const MAX_WAIT_MS=180000;
+  // 25 minutes covers a worst-case pass with model-assisted commit review
+  // (up to 5 model retries at 240s timeout each); the timeout is re-armed
+  // on every poll that observes a busy pass, so a live pass never times out.
+  const MAX_WAIT_MS=1500000;
   const HOLD_MS=6000;
   const CLICK_EXTEND_MS=4000;
   const el={
@@ -171,8 +175,8 @@ const (
     doneHint:document.getElementById('fd-done-hint'),
     countdown:document.getElementById('fd-countdown')
   };
-  let since=0, lineCount=0, srvCount=0, chCount=0, erCount=0, seen=new Set(), sawBusy=false, done=false, redirected=false;
-  let holdDeadline=0, countdownTimer=null, fakePct=0;
+  let since=0, lineCount=0, srvCount=0, chCount=0, erCount=0, seen=new Set(), seenSrv=new Set(), sawBusy=false, done=false, redirected=false;
+  let holdDeadline=0, countdownTimer=null, fakeTimer=null, fakePct=0;
   const esc=(s)=>s.replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   function classify(msg){
     if(/ERROR|FAIL|UNABLE/.test(msg))return'fd-err';
@@ -207,7 +211,7 @@ const (
   function setStats(lines){
     for(const m of lines){
       if(/\[BACKUP\]\[START\]\[SERVER\]|\[BACKUP\]\[SERVER\]\[NO-CHANGE\]|\[BACKUP\]\[OK\]|\[BACKUP\]\[ERROR\]/.test(m.msg)){
-        const mm=/SERVER\] ([^ ]+)/.exec(m.msg);if(mm&&!seen.has(mm[1]+'$')){seen.add(mm[1]+'$');srvCount++;}
+        const mm=/SERVER\] ([^ ]+)/.exec(m.msg);if(mm&&!seenSrv.has(mm[1])){seenSrv.add(mm[1]);srvCount++;}
       }
       if(/OK|SUCCESS|STORE-CHECKIN/.test(m.msg))chCount++;
       if(/ERROR|FAIL/.test(m.msg))erCount++;
@@ -233,8 +237,15 @@ const (
     el.bar.style.inset='0 0 0 0';
     renderSummary();
     el.overlay.classList.add('fd-show');
+    if(fakeTimer){clearInterval(fakeTimer);fakeTimer=null;}
     countdownTimer=setInterval(updateCountdown,200);
     updateCountdown();
+  }
+  function stay(){
+    holdDeadline=Infinity;
+    if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+    el.countdown.textContent='\u221E';
+    el.doneHint.classList.add('fd-extend-flash');
   }
   function updateCountdown(){
     const remain=Math.max(0,Math.ceil((holdDeadline-Date.now())/1000));
@@ -245,14 +256,16 @@ const (
       window.location.href='/';
     }
   }
-  window.addEventListener('click',function(){
-    if(!done)return;
+  window.addEventListener('click',function(e){
+    if(!done||holdDeadline===Infinity)return;
     holdDeadline=Math.max(holdDeadline,Date.now())+CLICK_EXTEND_MS;
     el.doneHint.classList.remove('fd-extend-flash');
     void el.doneHint.offsetWidth;
     el.doneHint.classList.add('fd-extend-flash');
   });
-  setInterval(function(){
+  const stayBtn=document.getElementById('fd-stay');
+  if(stayBtn)stayBtn.addEventListener('click',function(e){e.stopPropagation();stay();});
+  fakeTimer=setInterval(function(){
     if(done){return;}
     if(fakePct<92){fakePct+=(92-fakePct)*0.05+0.15;}
     el.pct.textContent=Math.round(fakePct)+'%';
@@ -267,13 +280,16 @@ const (
       for(const l of d.lines||[]){if(l.seq>since){since=l.seq;fresh.push(l);}addLine(l);}
       setStats(fresh);
       el.elapsed.textContent=fmtMs(d.elapsed_ms||0);
-      if(d.busy)sawBusy=true;
+      if(d.busy){sawBusy=true;armTimeout();}
       if(sawBusy&&!d.busy){finish();return;}
       if(FORCE>0&&d.armed_for===FORCE&&!d.busy){finish();return;}
     }catch(e){/* transient */}
     setTimeout(poll,POLL_MS);
   }
-  setTimeout(()=>{if(!done){el.status.textContent='[ backup timed out ]';el.hint.textContent='timeout: redirecting back to the hive view';finish();}},MAX_WAIT_MS);
+  let timeoutID=null;
+  function onTimeout(){if(!done){el.status.textContent='[ backup timed out ]';el.hint.textContent='timeout: redirecting back to the hive view';finish();}}
+  function armTimeout(){if(timeoutID)clearTimeout(timeoutID);timeoutID=setTimeout(onTimeout,MAX_WAIT_MS);}
+  armTimeout();
   poll();
 })();
 </script>`
@@ -480,7 +496,6 @@ footer{margin-top:2rem;padding:1.2rem 1.1rem;border-top:1px solid var(--border);
 .tile-actions .btn-force{margin:0}
 .audit-page{margin:1.5rem 0;padding:1.1rem;background:var(--card);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow),var(--glow)}
 .audit-page h2{margin-bottom:.6rem}
-nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.14);box-shadow:0 0 16px rgba(74,158,255,.3);color:var(--accent-2)}
 .audit-list{display:flex;flex-direction:column;gap:.6rem;margin-top:.85rem}
 .audit-commit{background:var(--card-2);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;backdrop-filter:var(--glass-2);-webkit-backdrop-filter:var(--glass-2);transition:border-color .25s,box-shadow .25s}
 .audit-commit[open]{border-color:var(--accent);box-shadow:0 0 18px rgba(74,158,255,.22)}
@@ -611,5 +626,5 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .meta-approved .meta-label{opacity:.9}
 @media(max-width:640px){.approve-all-form{margin-left:0;width:100%}.btn-approve-all{width:100%}.meta-approved{width:auto}}
 @media(max-width:960px){.atd-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:640px){.member-row{flex-direction:column;align-items:flex-start}.member-main{flex-direction:column;align-items:flex-start}.meta-box{width:100%}.dashboard-grid{grid-template-columns:1fr}.raw-env-grid{grid-template-columns:1fr}.audit-stats{margin-left:0}.atd-grid{grid-template-columns:repeat(2,1fr)}.atd-legend{margin-left:0}.atd-reset{margin-left:0}.audit-sev-badge{margin-left:0}}
+@media(max-width:640px){.audit-stats{margin-left:0}.atd-grid{grid-template-columns:repeat(2,1fr)}.atd-legend{margin-left:0}.atd-reset{margin-left:0}.audit-sev-badge{margin-left:0}}
 </style>`

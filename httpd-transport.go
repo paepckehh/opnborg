@@ -24,7 +24,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 		// read cert & key from file
 		key, err := tls.LoadX509KeyPair(config.Httpd.CAcert, config.Httpd.CAkey)
 		if err != nil {
-			return listen, err
+			return nil, err
 		}
 
 		// create cert pool
@@ -33,9 +33,13 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 		if config.Httpd.CAClient != "" {
 			cert, err := os.ReadFile(config.Httpd.CAClient)
 			if err != nil {
-				return listen, err
+				return nil, err
 			}
-			caClient.AppendCertsFromPEM(cert)
+			// a client CA file without a single parsable certificate would arm
+			// mTLS with an empty pool (every client rejected) with no hint why
+			if !caClient.AppendCertsFromPEM(cert) {
+				return nil, errors.New("httpd TLS: no valid PEM certificates in " + config.Httpd.CAClient)
+			}
 			clientAuthMode = tls.RequireAndVerifyClientCert
 		}
 
@@ -50,7 +54,7 @@ func getHTTPTLS(config *OPNCall) (listen net.Listener, err error) {
 			CurvePreferences:       []tls.CurveID{tls.X25519},
 			NextProtos:             []string{"http/1.1"},
 			SessionTicketsDisabled: true,
-			Renegotiation:          0,
+			Renegotiation:          tls.RenegotiateNever,
 		}
 		return tls.Listen("tcp", config.Httpd.Server, tlsConf)
 	}

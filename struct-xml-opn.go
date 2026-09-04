@@ -594,8 +594,11 @@ type Opnsense struct {
 				Maxfilesize string `xml:"maxfilesize"`
 			} `xml:"general"`
 			Destinations struct {
-				Text        string            `xml:",chardata"`
-				Destination SyslogDestination `xml:"destination"`
+				Text string `xml:",chardata"`
+				// OPNsense stores every configured remote-syslog destination as
+				// its own repeated <destination> child; a single struct field
+				// would silently collapse them into a franken-entry.
+				Destination []SyslogDestination `xml:"destination"`
 			} `xml:"destinations"`
 		} `xml:"Syslog"`
 		OpenVPN struct {

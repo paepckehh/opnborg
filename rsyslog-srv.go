@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// httpd spinup the internal rsyslog server
+// startRSysLog spin up the internal rsyslog server
 func startRSysLog(config *OPNCall) {
 
 	// create store structure
@@ -43,6 +43,9 @@ func startRSysLog(config *OPNCall) {
 		return
 	}
 	if err := server.Boot(); err != nil {
+		// release the already-bound UDP socket so a retry or a config fix
+		// can rebind the same port
+		_ = server.Kill()
 		displayChan <- []byte("[RSYSLOG][SPIN-UP-LOG-SERVER][FAIL] server " + err.Error())
 		return
 	}

@@ -7,13 +7,13 @@ import (
 )
 
 // global exported consts
-const SemVer = "v0.1.215"
+const SemVer = "v0.1.216"
 
 // global var
 var (
 	tg                                                         []OPNGroup
 	unifiBackupEnable, unifiExportEnable, unifiWatchEnable     atomic.Bool
-	unifiBackupNow, unifiExportNow, unifiWatchNow              atomic.Bool
+	unifiBackupNow                                             atomic.Bool
 	reviewPending                                              atomic.Bool
 	sleep, pkgmaster, pkghost                                  string
 	wazuhWebUI, unifiWebUI, prometheusWebUI                    *url.URL

@@ -17,6 +17,11 @@ const (
 	_current  = "CONFIG-CURRENT"
 	_last     = "CONFIG-LAST"
 	_hashFile = "sha256.db"
+
+	// _minBackupBytes is the lower bound a downloaded Unifi .unf backup must
+	// reach before it is accepted into the store; anything smaller is an
+	// error page or an empty placeholder, never a valid backup.
+	_minBackupBytes = 1024
 )
 
 // logBackupErr reports a backup-store failure to the display engine. It

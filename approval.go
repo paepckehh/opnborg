@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -88,9 +89,11 @@ type approvalState struct {
 // approvalDBOpen, called after gitInit at startup and lazily from the httpd
 // approve handlers) and reused for the lifetime of the process. A dedicated
 // mutex guards the open so the httpd goroutine and the backup workers never
-// race on initialisation; all subsequent SQL access is serialised by the same
-// mutex because SQLite (and the audit UI) does not benefit from concurrent
-// writes here and the ledger is tiny.
+// race on initialisation or on a close-and-reopen. Concurrent SQL access is
+// safe by construction, NOT by this mutex: the pool is capped at a single
+// connection (SetMaxOpenConns(1)) with a busy timeout, serialising every
+// statement. Raising that pool limit without revisiting this design would
+// expose the ledger to SQLITE_BUSY-style write contention.
 var (
 	approvalDB   *sql.DB
 	approvalDBMu sync.Mutex
@@ -119,14 +122,8 @@ func approvalDBOpen(storePath string) (*sql.DB, error) {
 func approvalDBHandle(storePath string) (*sql.DB, error) {
 	approvalDBMu.Lock()
 	defer approvalDBMu.Unlock()
-	if approvalDB != nil {
-		if approvalDBAt == filepath.Join(storePath, _approvalDBName) {
-			return approvalDB, nil
-		}
-		_ = approvalDB.Close()
-		approvalDB = nil
-		approvalDBAt = ""
-	}
+	// approvalDBOpenLocked already implements the whole reuse / path-mismatch
+	// / reopen sequence, so this is a pure critical-section wrapper.
 	return approvalDBOpenLocked(storePath)
 }
 
@@ -203,6 +200,13 @@ func approvalBackfillFromHistory(config *OPNCall) {
 	for {
 		c, err := iter.Next()
 		if err != nil {
+			// Only io.EOF ends the log walk; any other error (corrupt object,
+			// I/O failure) must surface, otherwise the backfill silently
+			// truncates and security-relevant commits stay untracked.
+			if !errors.Is(err, io.EOF) {
+				displayChan <- []byte("[APPROVAL][BACKFILL][FAIL] " + err.Error())
+				return
+			}
 			break
 		}
 		if n >= _auditCap {
@@ -326,17 +330,11 @@ func approvalApproveAll(config *OPNCall, sourceIP, xForwardedFor, remoteUser str
 		return 0, err
 	}
 	ts := time.Now().UTC().Format(time.RFC3339)
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	res, err := tx.Exec(`UPDATE approval SET approved = 1, true_timestamp = ?, source_ip = ?, x_forwarded_for = ?, remote_user = ? WHERE approved = 0`,
+	// A single UPDATE is already atomic; the connection pool holds exactly
+	// one connection, so an explicit transaction adds nothing here.
+	res, err := db.Exec(`UPDATE approval SET approved = 1, true_timestamp = ?, source_ip = ?, x_forwarded_for = ?, remote_user = ? WHERE approved = 0`,
 		ts, sourceIP, xForwardedFor, remoteUser)
 	if err != nil {
-		_ = tx.Rollback()
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()

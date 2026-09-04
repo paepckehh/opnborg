@@ -35,15 +35,16 @@ func checkRSysLogConfig(server string, config *OPNCall, opn *Opnsense) error {
 	if len(srv) != 2 || srv[0] == "" || srv[1] == "" {
 		return errors.New("[TARGET-REMOTE-SYSLOG-SERVER][MISSING-HOST:PORT] " + config.RSysLog.Server)
 	}
-	_ = getLogConf(srv) // ensure the configured values compile to a valid object
 	return compareLogConf(server, srv, opn)
 }
 
 // compareLogConf compares the live syslog destination on the target against
-// the opnborg-managed default. Each mismatch returns a labelled error so the
-// caller can surface which field drifted.
+// the opnborg-managed default. The opnborg-managed entry is located via
+// managedLogDestination (matching the configured host:port), so a host with
+// additional unrelated destinations still validates correctly. Each mismatch
+// returns a labelled error so the caller can surface which field drifted.
 func compareLogConf(server string, srv []string, opn *Opnsense) error {
-	d := opn.OPNsense.Syslog.Destinations.Destination
+	d := managedLogDestination(opn, srv)
 	if d.Enabled != _syslogEnabled {
 		return mismatchErr("[TARGET-REMOTE-SYSLOG-SERVER-ENABLED]", server, d.Enabled, _syslogEnabled)
 	}
@@ -62,6 +63,25 @@ func compareLogConf(server string, srv []string, opn *Opnsense) error {
 	return nil
 }
 
+// managedLogDestination selects the syslog destination entry the
+// opnborg-managed remote-syslog server owns: the entry whose hostname and
+// port match the configured listener. When no entry matches (or the list is
+// empty) the first entry is returned so the mismatch surfaces as a labelled
+// field error instead of a silent pass; a completely empty list yields a
+// zero entry whose every field mismatches.
+func managedLogDestination(opn *Opnsense, srv []string) *SyslogDestination {
+	dests := opn.OPNsense.Syslog.Destinations.Destination
+	for i := range dests {
+		if dests[i].Hostname == srv[0] && dests[i].Port == srv[1] {
+			return &dests[i]
+		}
+	}
+	if len(dests) > 0 {
+		return &dests[0]
+	}
+	return &SyslogDestination{}
+}
+
 // mismatchErr builds the labelled error string used by compareLogConf, keeping
 // the historical "<label> <server> -> have: <have> need: <want>" diagnostic
 // format intact while removing the inline duplication.
@@ -72,17 +92,18 @@ func mismatchErr(label, server, have, want string) error {
 // getLogConf return an OPNSense RSysLog Configuration Object
 func getLogConf(srv []string) *Opnsense {
 	opn := new(Opnsense)
-	d := &opn.OPNsense.Syslog.Destinations.Destination
-	d.Uuid = _syslogUUID
-	d.Enabled = _syslogEnabled
-	d.Transport = _syslogTransport
-	d.Level = _syslogLevel
-	d.Hostname = srv[0]
-	d.Port = srv[1]
-	d.Certificate = ""
-	d.Rfc5424 = _syslogRfc5424
-	d.Description = _syslogDesc
-	d.Facility = _syslogFacility
-	d.Program = _syslogProgram
+	opn.OPNsense.Syslog.Destinations.Destination = append(opn.OPNsense.Syslog.Destinations.Destination, SyslogDestination{
+		Uuid:        _syslogUUID,
+		Enabled:     _syslogEnabled,
+		Transport:   _syslogTransport,
+		Level:       _syslogLevel,
+		Hostname:    srv[0],
+		Port:        srv[1],
+		Certificate: "",
+		Rfc5424:     _syslogRfc5424,
+		Description: _syslogDesc,
+		Facility:    _syslogFacility,
+		Program:     _syslogProgram,
+	})
 	return opn
 }
