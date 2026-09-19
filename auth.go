@@ -56,7 +56,21 @@ const (
 	// _authBaseWaitSeconds is the lockout wait for the FIRST failed
 	// attempt; every further failure doubles it (10s, 20s, 40s, ...).
 	_authBaseWaitSeconds = 10
+
+	// _authMaxPasswordLen bounds the password input before the expensive
+	// Argon2id derivation runs. No legitimate admin password reaches this
+	// size; the cap keeps a hostile client from feeding multi-megabyte form
+	// values into the KDF (cost scales with input length).
+	_authMaxPasswordLen = 1024
 )
+
+// _authDeriveSem bounds concurrent Argon2id derivations (login attempts and
+// /auth-hash generator requests) to a single lane. The fixed-parameter
+// derivation costs ~64 MiB of memory and roughly a second of CPU, so
+// unbounded concurrent derivations would let any network client multiply
+// that cost into memory exhaustion, and parallel login attempts would each
+// derive before the shared lockout is armed, defeating the doubling backoff.
+var _authDeriveSem = make(chan struct{}, 1)
 
 // OPN_AUTH env var names (see README.md).
 const (
@@ -180,6 +194,11 @@ func authArgonDerive(password string, salt []byte) []byte {
 // bytes). decodeHashHalf still accepts the legacy "<base64>$<base64>" format
 // (key encoded twice) for credentials already armed in the field.
 func generateAuthCredentials(password string) (hashEnv, saltEnv string) {
+	// single-lane derivation (see _authDeriveSem): the generator endpoint is
+	// reachable without authentication, so concurrent requests must never
+	// run side by side.
+	_authDeriveSem <- struct{}{}
+	defer func() { <-_authDeriveSem }()
 	salt := make([]byte, _authArgonSaltLen)
 	_, _ = rand.Read(salt)
 	key := authArgonDerive(password, salt)
@@ -203,8 +222,13 @@ func authCredentialsEnabled() bool {
 // the same mutex, so deriving under the lock would freeze the whole WebUI
 // for the duration of every login attempt. The state snapshot (salt,
 // reference key, lockout) is taken under the lock, the candidate key is
-// derived unlocked, and the compare + bookkeeping re-take the lock.
+// derived unlocked in a single lane (_authDeriveSem) with the lockout
+// re-checked once the lane is acquired, and the compare + bookkeeping
+// re-take the lock. Log lines are emitted only after the lock is released.
 func authCheckPassword(password string) (token string, wait time.Duration, err error) {
+	if len(password) > _authMaxPasswordLen {
+		return "", 0, errors.New("password too long")
+	}
 	auth.mu.Lock()
 	if !auth.enabled {
 		auth.mu.Unlock()
@@ -228,23 +252,46 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 	}
 	auth.mu.Unlock()
 
-	// derive the candidate key outside the lock (the expensive step)
+	// Single-lane derivation (see _authDeriveSem). Once the lane is acquired
+	// the lockout is re-checked: parallel attempts queued behind a failed one
+	// must be refused without burning a 64 MiB derivation each, otherwise a
+	// burst of concurrent guesses would defeat the shared doubling backoff.
+	_authDeriveSem <- struct{}{}
+	auth.mu.Lock()
+	if !auth.enabled {
+		auth.mu.Unlock()
+		<-_authDeriveSem
+		return "", 0, errors.New("admin authentication is not configured (set OPN_AUTH_HASH and OPN_AUTH_SALT)")
+	}
+	if remain := time.Until(auth.lockUntil); remain > 0 {
+		auth.mu.Unlock()
+		<-_authDeriveSem
+		return "", remain, errors.New("login locked, please wait")
+	}
+	auth.mu.Unlock()
 	candidate := authArgonDerive(password, salt)
+	<-_authDeriveSem
 
 	auth.mu.Lock()
-	defer auth.mu.Unlock()
 	if !auth.enabled {
+		auth.mu.Unlock()
 		return "", 0, errors.New("admin authentication is not configured (set OPN_AUTH_HASH and OPN_AUTH_SALT)")
 	}
 	// a concurrent failed attempt may have armed a longer lockout while this
 	// derivation ran; honour it instead of counting this attempt on top.
 	if remain := time.Until(auth.lockUntil); remain > 0 {
+		auth.mu.Unlock()
 		return "", remain, errors.New("login locked, please wait")
 	}
 	if subtle.ConstantTimeCompare(candidate, refHash) != 1 {
 		auth.fails++
 		auth.lastFail = time.Now()
 		wait = authArmWaitLocked(auth.fails)
+		auth.mu.Unlock()
+		// The log line is sent AFTER releasing auth.mu: the display channel
+		// has a small buffer drained by a single stdout writer, and sending
+		// under the lock would block every authIsAdmin caller (i.e. every
+		// page render and /auth/state poll) whenever stdout back-pressures.
 		displayChan <- []byte("[AUTH][LOGIN][FAIL] failed attempts=" + strconv.Itoa(auth.fails) + " global lock=" + wait.String())
 		return "", wait, errors.New("invalid password")
 	}
@@ -257,6 +304,8 @@ func authCheckPassword(password string) (token string, wait time.Duration, err e
 	token = base64.RawURLEncoding.EncodeToString(tokenRaw)
 	auth.sessions[token] = time.Now().Add(_authSessionTTL)
 	adminEnabled.Store(true)
+	auth.mu.Unlock()
+	// sent outside the lock, mirroring the failure path above
 	displayChan <- []byte("[AUTH][LOGIN][OK] admin mode session unlocked (ttl " + _authSessionTTL.String() + ")")
 	return token, 0, nil
 }

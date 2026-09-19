@@ -31,6 +31,15 @@ const (
 	// still bounding a wedged server, and pairs with _ollamaMaxRetries so
 	// a single wedged call never blocks the loop for the full retry budget.
 	_ollamaTimeout = 240 * time.Second
+	// _ollamaMaxResponseBytes caps how many bytes of a model-server
+	// response body are read. The endpoints here are operator-configured,
+	// but a wedged or hostile endpoint could trickle an arbitrarily large
+	// body for the full timeout window (per retry attempt) and exhaust the
+	// daemon's memory. Legitimate responses (a commit message, a model
+	// list) are a few kilobytes, so the cap is never reached in practice;
+	// an oversized body simply fails the JSON decode and falls back to the
+	// default commit message.
+	_ollamaMaxResponseBytes = 4 << 20 // 4 MiB
 	// _ollamaMaxRetries bounds how many times opnborg retries a single diff
 	// summarisation call when the Ollama daemon times out, returns an error
 	// HTTP status, or delivers an empty response. Each attempt is announced
@@ -305,7 +314,7 @@ func ollamaGenerate(config *OPNCall, prompt string) (string, error) {
 		return "", fmt.Errorf("ollama %s: HTTP %s", endpoint, resp.Status)
 	}
 	displayChan <- fmt.Appendf(nil, "[OLLAMA][RECV] HTTP %s, reading body", resp.Status)
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, _ollamaMaxResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("ollama read: %w", err)
 	}
@@ -377,7 +386,7 @@ func openaiGenerate(config *OPNCall, prompt string) (string, error) {
 		return "", fmt.Errorf("openai %s: HTTP %s", endpoint, resp.Status)
 	}
 	displayChan <- fmt.Appendf(nil, "[OPENAI][RECV] HTTP %s, reading body", resp.Status)
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, _ollamaMaxResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("openai read: %w", err)
 	}
@@ -492,7 +501,7 @@ func ollamaHealthCheck(config *OPNCall) ollamaHealth {
 		h.Err = fmt.Sprintf("api: HTTP %s", resp.Status)
 		return h
 	}
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, _ollamaMaxResponseBytes))
 	if err != nil {
 		h.Err = fmt.Sprintf("read body: %v", err)
 		return h
@@ -598,7 +607,7 @@ func openaiHealthCheck(config *OPNCall) openaiHealth {
 		h.Err = fmt.Sprintf("api: HTTP %s", resp.Status)
 		return h
 	}
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, _ollamaMaxResponseBytes))
 	if err != nil {
 		h.Err = fmt.Sprintf("read body: %v", err)
 		return h

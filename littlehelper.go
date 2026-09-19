@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -45,16 +46,20 @@ func startLog(config *OPNCall) {
 // Little Helper
 //
 
-// checkURL
+// checkURL parses the URL carried by the given env var. A set-but-empty (or
+// whitespace-only) value is treated as unset: url.Parse("") happily returns
+// a non-nil empty URL, which downstream nil-checks treat as a configured
+// feature and every request built from it fails.
 func checkURL(env string) (*url.URL, error) {
-	if _, ok := os.LookupEnv(env); ok {
-		out, err := url.Parse(os.Getenv(env))
-		if err != nil {
-			return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
-		}
-		return out, nil
+	val, ok := os.LookupEnv(env)
+	if !ok || strings.TrimSpace(val) == "" {
+		return nil, nil
 	}
-	return nil, nil
+	out, err := url.Parse(val)
+	if err != nil {
+		return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
+	}
+	return out, nil
 }
 
 // checkPreURL check prefixed url

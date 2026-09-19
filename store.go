@@ -44,6 +44,44 @@ func lastSum(config *OPNCall, server string) [32]byte {
 	return sha256.Sum256(data)
 }
 
+// writeAtomic writes data to path through a temporary file created in tmpDir
+// and a final rename (which may cross directories but must stay on the same
+// filesystem, so tmpDir is always a subdir of the store tree). The storage
+// tree is read concurrently by the httpd file server (current.xml/current.unf
+// downloads) and by go-git staging during gitCheckIn, so a truncate-in-place
+// os.WriteFile would let a reader observe a partially written (or empty)
+// backup; the rename makes the new content appear atomically. tmpDir is the
+// gitignored .archive subtree so a temp file orphaned by a crash can never
+// surface in the git worktree status and enter a commit.
+func writeAtomic(tmpDir, path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(tmpDir, ".store-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		// empty tmpName marks a successful rename: nothing left to clean up.
+		if tmpName != "" {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	tmpName = ""
+	return nil
+}
+
 // checkIntoStore writes a new backup payload into the per-server archive tree,
 // rotates the current.xml/CONFIG-CURRENT/CONFIG-LAST pointers, and appends the
 // SHA-256 entry to sha256.db. All paths are resolved against config.Path so
@@ -72,20 +110,40 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	name := ts.UTC().Format("20060102T150405.000Z") + "-" + server + ext
 	archiveRel := filepath.Join(store, name) // relative to serverRoot
 	archiveAbs := filepath.Join(serverRoot, archiveRel)
-	if err := os.WriteFile(archiveAbs, serverXML, 0660); err != nil {
+	if err := writeAtomic(fullPath, archiveAbs, serverXML, 0660); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-FILE", server)
 		return err
 	}
 
-	// refresh the regular current.<ext> file (served by the WebUI /files/ handler)
+	// refresh the regular current.<ext> file (served by the WebUI /files/
+	// handler and hashed by lastSum). Written atomically: the rename replaces
+	// any previous file in one step, so readers never see a partial write or
+	// a missing-file window.
 	currentFile := filepath.Join(serverRoot, "current"+ext)
-	_ = os.Remove(currentFile)
-	if err := os.WriteFile(currentFile, serverXML, 0660); err != nil {
+	if err := writeAtomic(fullPath, currentFile, serverXML, 0660); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-CREATE-CURRENT-FILE", archiveRel)
 		return err
 	}
 
-	// append the sha256.db entry
+	// rotate the CONFIG-LAST / CONFIG-CURRENT symlinks. The symlink target
+	// stays relative (archiveRel) so the store tree is portable. Remove
+	// pre-existing links before rename/create to avoid EEXIST on filesystems
+	// that do not overwrite symlinks in place.
+	currentLink := filepath.Join(serverRoot, _current)
+	lastLink := filepath.Join(serverRoot, _last)
+	_ = os.Remove(lastLink)
+	_ = os.Rename(currentLink, lastLink)
+	if err := os.Symlink(archiveRel, currentLink); err != nil {
+		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK", server)
+		return err
+	}
+
+	// append the sha256.db entry. This runs last, after the archive file,
+	// the current.<ext> file, and the symlink rotation have all succeeded:
+	// the hash log doubles as the "already archived" dedup set for the
+	// unifi autoBackup watch sync, so recording a payload whose rotation
+	// failed would make every later pass skip re-checking it in while
+	// CONFIG-CURRENT keeps pointing at the older payload.
 	logEntry := name + _tab + base64.StdEncoding.EncodeToString(sum[:]) + _linefeed
 	hashPath := filepath.Join(serverRoot, _hashFile)
 	hashFile, err := os.OpenFile(hashPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0660)
@@ -100,19 +158,6 @@ func checkIntoStore(config *OPNCall, server, ext string, serverXML []byte, ts ti
 	}
 	if err := hashFile.Close(); err != nil {
 		logBackupErr("FAIL:UNABLE-TO-SAVE-HASHSHUM-FILE", server)
-		return err
-	}
-
-	// rotate the CONFIG-LAST / CONFIG-CURRENT symlinks. The symlink target
-	// stays relative (archiveRel) so the store tree is portable. Remove
-	// pre-existing links before rename/create to avoid EEXIST on filesystems
-	// that do not overwrite symlinks in place.
-	currentLink := filepath.Join(serverRoot, _current)
-	lastLink := filepath.Join(serverRoot, _last)
-	_ = os.Remove(lastLink)
-	_ = os.Rename(currentLink, lastLink)
-	if err := os.Symlink(archiveRel, currentLink); err != nil {
-		logBackupErr("FAIL:UNABLE-TO-CREATE-ARCHIVE-SYMLINK", server)
 		return err
 	}
 	return nil

@@ -147,6 +147,16 @@ func Setup() (*OPNCall, error) {
 	config.Git.Enable = isEnv("OPN_GIT_ENABLE")
 	config.Git.Upstream = os.Getenv("OPN_GIT_UPSTREAM")
 	config.Git.SSHKey = os.Getenv("OPN_GIT_SSH_KEY")
+	// Resolve a relative SSH key path against the startup working directory
+	// once, up front: gitInit/gitCheckIn chdir the process into config.Path
+	// and never restore it, so a relative OPN_GIT_SSH_KEY that validates at
+	// startup would later be resolved against the store root and every
+	// upstream push would fail with "no such file".
+	if config.Git.SSHKey != "" {
+		if abs, absErr := filepath.Abs(config.Git.SSHKey); absErr == nil {
+			config.Git.SSHKey = abs
+		}
+	}
 	config.Git.SSHHostKey = os.Getenv("OPN_GIT_SSH_HOSTKEY")
 	if err := validateGitConfig(config); err != nil {
 		return nil, err
@@ -275,6 +285,15 @@ func Setup() (*OPNCall, error) {
 	}
 	if _, tag, valid := parseServerTag(os.Getenv("OPN_UNIFI_WEBUI")); valid {
 		config.Unifi.Tag = tag
+		// Strip the "#<asset-tag>" fragment from the parsed URL: the tag
+		// rides in config.Unifi.Tag (rendered in the status tiles and the
+		// config dashboard), while WebUI.String() is used verbatim to build
+		// request paths (".../api/login"). With the fragment left in place
+		// every request would target the wrong path and the whole unifi
+		// backup feature would fail while the tag syntax is documented.
+		if tag != "" && config.Unifi.WebUI != nil {
+			config.Unifi.WebUI.Fragment = ""
+		}
 	}
 	unifiBackupEnable.Store(false)
 	unifiExportEnable.Store(false)

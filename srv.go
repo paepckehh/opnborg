@@ -48,15 +48,19 @@ func srv(config *OPNCall) error {
 
 	// arm background timer
 	go func() {
-		// intit daily clock
-		last, _, _ := time.Now().Clock()
+		// init daily clock: track the calendar day (not the clock hour) so a
+		// tick interval that is a whole multiple of 24h still detects the
+		// day rollover. The previous hour-only comparison (now < last) never
+		// fired for e.g. OPN_SLEEP=86400 because every tick sampled the same
+		// hour, silently disabling the daily unifi backup/export re-trigger.
+		lastDay := time.Now().Format("2006-01-02")
 		// loop forever
 		for {
 			time.Sleep(time.Duration(config.Sleep) * time.Second)
 			updateOPN <- true
-			now, _, _ := time.Now().Clock()
+			day := time.Now().Format("2006-01-02")
 			// check for day rollover, perform unifi backup/export
-			if now < last {
+			if day != lastDay {
 				// Non-blocking pokes: a wedged unifi goroutine must never stall
 				// this timer (and with it the whole OPN backup pacing). When a
 				// pass is already queued the duplicate is dropped, mirroring the
@@ -74,7 +78,7 @@ func srv(config *OPNCall) error {
 					}
 				}
 			}
-			last, _, _ = time.Now().Clock()
+			lastDay = day
 		}
 	}()
 
@@ -98,7 +102,13 @@ func srv(config *OPNCall) error {
 	state = "[DISABLED]"
 	if config.Unifi.Backup.Enable {
 		state = "[ENABLED]"
+		// The httpd goroutine (started above) already serves the index page,
+		// which reads unifiStatus under unifiMutex; the init write must take
+		// the same lock or a request racing the assignment reads a torn
+		// two-word string (data race per the Go memory model).
+		unifiMutex.Lock()
 		unifiStatus = "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Member: " + config.Unifi.WebUI.String() + " Version: n/a Last Seen: n/a</span></div>"
+		unifiMutex.Unlock()
 		go srvUnifiBackup(config)
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-BACKUP-AND-MONITORING]" + state)
@@ -115,7 +125,11 @@ func srv(config *OPNCall) error {
 	state = "[DISABLED]"
 	if config.Unifi.Watch.Enable {
 		state = "[ENABLED]"
+		// Guarded like unifiStatus above: the httpd render path reads this
+		// global under unifiWatchMutex.
+		unifiWatchMutex.Lock()
 		unifiWatchStatus = "<div class=\"member-status\">" + _na + "</div><div class=\"member-main\"><span class=\"member-meta\">Unifi autoBackup Watch: " + config.Unifi.Watch.Path + " Last Sync: n/a</span></div>"
+		unifiWatchMutex.Unlock()
 		go srvUnifiWatch(config)
 	}
 	displayChan <- []byte("[SERVICE][UNIFI-WATCH-FOLDER-SYNC]" + state)

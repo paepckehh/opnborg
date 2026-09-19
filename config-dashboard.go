@@ -119,8 +119,12 @@ func renderSyncPanel(c *OPNCall) string {
 	writeDashRow(&s, "Sync Enabled", boolPill(c.Sync.Enable))
 	writeDashRow(&s, "Master Host", maskIfEmpty(html.EscapeString(c.Sync.Master)))
 	writeDashRow(&s, "Package Sync", boolPill(c.Sync.PKG.Enable))
-	if c.Sync.PKG.Enable && len(c.Sync.PKG.Packages) > 0 {
-		writeDashRow(&s, "Packages", html.EscapeString(strings.Join(c.Sync.PKG.Packages, ", ")))
+	// The package list is read through the guarded getSyncPKG snapshot: the
+	// main loop rewrites config.Sync.PKG.Packages on every master read, so
+	// reading the config field here (httpd request goroutine) would race on
+	// the slice header.
+	if pkgs := splitPlugins(getSyncPKG()); c.Sync.PKG.Enable && len(pkgs) > 0 {
+		writeDashRow(&s, "Packages", html.EscapeString(strings.Join(pkgs, ", ")))
 	}
 	s.WriteString("</div>")
 	return s.String()

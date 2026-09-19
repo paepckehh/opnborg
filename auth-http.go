@@ -82,6 +82,13 @@ func requireAdminFiles(next http.Handler) http.Handler {
 	})
 }
 
+// _authBodyLimit bounds the POST body size accepted by the login and the
+// credential-generator endpoints. The forms carry a single short password
+// value, so 16 KiB is orders of magnitude above any legitimate request and
+// a hostile client can no longer buffer an arbitrarily large body in memory
+// via ParseForm.
+const _authBodyLimit = 16 << 10
+
 // getLoginHandler processes password submissions.
 func getLoginHandler() http.Handler {
 	h := func(r http.ResponseWriter, q *http.Request) {
@@ -89,6 +96,7 @@ func getLoginHandler() http.Handler {
 			http.Error(r, "Error: Method Not Allowed (405) ["+q.Method+"]", http.StatusMethodNotAllowed)
 			return
 		}
+		q.Body = http.MaxBytesReader(r, q.Body, _authBodyLimit)
 		next := sanitizeAuthNext(q.URL.Query().Get("next"))
 		if err := q.ParseForm(); err != nil {
 			http.Error(r, "Error: Bad Request (400)", http.StatusBadRequest)
@@ -174,6 +182,7 @@ func getAuthHashHandler() http.Handler {
 		case http.MethodGet:
 			writeTransportCompressedPage(getAuthHashHTML("", "", "", armed), r, q, false)
 		case http.MethodPost:
+			q.Body = http.MaxBytesReader(r, q.Body, _authBodyLimit)
 			if err := q.ParseForm(); err != nil {
 				http.Error(r, "Error: Bad Request (400)", http.StatusBadRequest)
 				return
@@ -182,6 +191,10 @@ func getAuthHashHandler() http.Handler {
 			pw2 := q.FormValue("password2")
 			if len(pw) < 5 {
 				writeTransportCompressedPage(getAuthHashHTML("", "", "password too short (minimum 5 characters)", armed), r, q, false)
+				return
+			}
+			if len(pw) > _authMaxPasswordLen {
+				writeTransportCompressedPage(getAuthHashHTML("", "", "password too long (maximum 1024 characters)", armed), r, q, false)
 				return
 			}
 			if pw != pw2 {
@@ -462,7 +475,9 @@ func getBodyHead(q *http.Request) string {
 	s.WriteString("<div class=\"header-right\">")
 	s.WriteString(modeBox)
 	s.WriteString(authBtn)
-	s.WriteString("<div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ " + SemVer + " ]</a></div>")
+	s.WriteString("<div class=\"semver\"><a href=\"https://paepcke.de/opnborg\">[ ")
+	s.WriteString(SemVer)
+	s.WriteString(" ]</a></div>")
 	s.WriteString("</div></header>" + _lf)
 	s.WriteString(dialog)
 	s.WriteString(infoDialog)

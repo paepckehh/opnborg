@@ -178,8 +178,12 @@ func renderAuditPage(config *OPNCall, rangeSlug string, q *http.Request) string 
 	// Ollama tag was authored before tracking was wired in) are tracked.
 	// Without this the approve-all button counts only commits the ledger
 	// already knows about and shows 0 even when the page renders approve
-	// buttons for untracked medium/high/critical commits.
-	syncAuditCommitsToLedger(config, commits)
+	// buttons for untracked medium/high/critical commits. The sync writes to
+	// the ledger database and is therefore restricted to authenticated
+	// admin sessions — an unauthenticated monitoring GET stays read-only.
+	if admin {
+		syncAuditCommitsToLedger(config, commits)
+	}
 	var s strings.Builder
 	s.WriteString("<div class=\"dashboard audit-page\"><div class=\"audit-page-head\">")
 	s.WriteString("<h2>BorgConfigAUDIT &middot; Git Commit History &middot; ")
