@@ -11,7 +11,7 @@ import (
 // below and is overridden at build time via
 // `-ldflags "-X paepcke.de/opnborg.SemVer=<tag>"` by the Docker image build,
 // goreleaser and `make build` so shipped artifacts always report their tag.
-var SemVer = "v0.1.218"
+var SemVer = "v0.1.219"
 
 // global var
 var (

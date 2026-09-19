@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
     runs-on: ${{ matrix.os }}
@@ -30,7 +30,7 @@ jobs:
       - run: go test -count=1 ./...
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Build Docker image (smoke test, no push)
