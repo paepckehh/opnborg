@@ -1,16 +1,17 @@
 PROJECT=$(shell basename $(CURDIR))
 
 # Program version injected into the binary at build time via -ldflags. The
-# value is the most recent git tag (e.g. v0.0.22) so the web UI navbar shows
-# the released version. Falls back to "v0.0.0-dev" when no tag exists yet.
-VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0-dev)
-LDFLAGS := -X paepcke.de/$(PROJECT)/internal/version.Version=$(VERSION)
+# value is the most recent git tag (e.g. v0.1.218) so the CLI banner and web
+# UI footer show the released version. Falls back to the SemVer constant in
+# api.go when no tag exists yet (empty -X is a no-op at link time).
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo '')
+LDFLAGS := -s -w -X paepcke.de/$(PROJECT).SemVer=$(VERSION)
 
 all: build
 
 build:
 	touch $(PROJECT) && rm $(PROJECT)
-	go build -ldflags "$(LDFLAGS)" -o ./${PROJECT} ./cmd/$(PROJECT)
+	go build -trimpath -ldflags "$(LDFLAGS)" -o ./${PROJECT} ./cmd/$(PROJECT)
 
 update: 
 	git pull

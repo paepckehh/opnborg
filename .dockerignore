@@ -16,3 +16,10 @@ opnborg-docker-complex.nix
 opnborg-prometheus-grafana.nix
 Dockerfile
 .dockerignore
+.env
+.env.*
+dist/
+*.db
+*.db-wal
+*.db-shm
+opnborg

@@ -6,8 +6,12 @@ import (
 	"time"
 )
 
-// global exported consts
-const SemVer = "v0.1.217"
+// SemVer is the single source of truth for the version string shown in the
+// CLI banner and WebUI footer. It defaults to the manually maintained value
+// below and is overridden at build time via
+// `-ldflags "-X paepcke.de/opnborg.SemVer=<tag>"` by the Docker image build,
+// goreleaser and `make build` so shipped artifacts always report their tag.
+var SemVer = "v0.1.218"
 
 // global var
 var (

@@ -13,6 +13,11 @@ builds:
     main: ./cmd/opnborg/main.go
     env:
       - CGO_ENABLED=0
+    # Link the release tag into the binary (CLI banner, WebUI footer,
+    # User-Agent) so shipped artifacts report their version. Falls back to
+    # the SemVer constant in api.go for snapshot builds.
+    ldflags:
+      - -s -w -X paepcke.de/opnborg.SemVer=v{{ .Version }}
     goos:
       - linux
       - freebsd

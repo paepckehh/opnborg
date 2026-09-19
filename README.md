@@ -113,9 +113,50 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 
 ### Docker
 
+The image is published from every `v*` tag to
+[ghcr.io/paepckehh/opnborg](https://github.com/paepckehh/opnborg/pkgs/container/opnborg)
+for **linux/amd64** and **linux/arm64**, tagged `v0.1.218` (exact release),
+`v0.1` (minor line), `v0` (major line) and `latest`. Pushes to `main` publish
+a bleeding-edge `edge` tag. The release tag is linked into the binary, so the
+CLI banner and WebUI footer always show the image's version.
+
+The image is distroless (no shell, no package manager), stores backups under
+`/var/opnborg` and binds the WebUI to `0.0.0.0:6464`:
+
 ```sh
-docker pull ghcr.io/paepckehh/opnborg:latest
+docker run -d --name opnborg \
+  -p 6464:6464 \
+  -v opnborg-data:/var/opnborg \
+  -e OPN_TARGETS="opn01.lan:443,opn02.lan:443" \
+  -e OPN_APIKEY="+RIb6YWNdcDWMMM7W5ZY..." \
+  -e OPN_APISECRET="8VbjM3HKKqQW2ozO..." \
+  ghcr.io/paepckehh/opnborg:latest
 ```
+
+Or with Docker Compose:
+
+```yaml
+services:
+  opnborg:
+    image: ghcr.io/paepckehh/opnborg:latest
+    restart: unless-stopped
+    ports:
+      - "6464:6464"
+    volumes:
+      - opnborg-data:/var/opnborg
+    environment:
+      OPN_TARGETS: "opn01.lan:443,opn02.lan:443"
+      OPN_APIKEY: "+RIb6YWNdcDWMMM7W5ZY..."
+      OPN_APISECRET: "8VbjM3HKKqQW2ozO..."
+
+volumes:
+  opnborg-data:
+```
+
+> 🔐 The WebUI publishes to `0.0.0.0:6464` inside the container for port
+> mapping — expose it only to trusted networks, and arm `OPN_AUTH_HASH` /
+> `OPN_AUTH_SALT` for admin-mode gating. See
+> [WebUI authentication](#webui-authentication--monitoring-vs-admin-mode).
 
 ### NixOS / Nix
 

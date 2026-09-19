@@ -28,3 +28,16 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -count=1 ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build Docker image (smoke test, no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          build-args: |
+            VERSION=ci
+          push: false
+          tags: opnborg:ci
