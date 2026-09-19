@@ -4,7 +4,7 @@
 
 ### Resistance is futile. Your OPNsense will be assimilated.
 
-A self-hosted, single-binary Go daemon that **backs up, monitors, and synchronizes configuration** across a fleet of [OPNsense](https://opnsense.org/) firewalls and (optionally) [Unifi](https://ui.com) controllers — with an embedded WebUI, central syslog collector, AI-assisted security audit, and a consolidated git-tracked archive for rapid restore.
+Self-hosted, single-binary daemon that **backs up, monitors, and synchronizes** your [OPNsense](https://opnsense.org/) firewall fleet — with an embedded WebUI, AI-assisted security audit, git-tracked archive, and optional [Unifi](https://ui.com) integration.
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
@@ -26,63 +26,24 @@ A self-hosted, single-binary Go daemon that **backs up, monitors, and synchroniz
 
 ---
 
-## ✨ Features
+## ✨ Why opnborg?
 
-### Core Backup & Monitoring
-
-- **Central Monitoring** — version, status, online/offline, last seen, and configuration compliance across the whole hive, rendered as an animated SVG status dashboard.
-- **Central Package Management** — replicate installed OPNsense plugins from one master host to every target via `OPN_MASTER` + `OPN_SYNC_PKG`.
-- **Central Configuration Audit & Backup** — a consolidated git repo plus a filesystem archive (SHA-256 deduplicated, timestamped, symlink-rotated) for auditable change-log trails and rapid restore.
-- **Central Log Consolidation** — built-in RFC5424 syslog collector with lumberjack rotation (256 MB, 256 backups, 180-day retention, gzipped).
-- **Forced Backup Progress** — a live, animated progress dashboard (`/progress`) streams the display-engine log lines of a forced backup pass in real time, with sequence counters distinguishing forced passes from timer ticks.
-
-### Unifi Controller Integration
-
-- **Unifi Controller Backup** — download and archive `.unf` backups on every poll cycle.
-- **Unifi autoBackup Watch** — watch a co-located controller autoBackup folder (`OPN_UNIFI_WATCH_PATH`) via `fsnotify` and mirror the newest `.unf` into the store on every change (SHA-256 deduplicated).
-- **Unifi Inventory Export** — nightly export of the Unifi device/site inventory into the git-tracked store as CSV or JSON, reading directly from the Unifi MongoDB.
-
-### AI Security Audit Review
-
-- **AI-Authored Commit Messages** — when a local [Ollama](https://ollama.com) daemon (`OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`) or an [OpenAI-compatible](https://platform.openai.com/) local server (`OPENAPI_DESC_URL` + `OPENAPI_DESC_MODEL`) is configured, every backup commit message is authored by the LLM from an enriched diff (per-file metadata, OPNsense XML section detection, widened hunks, small-file inclusion, capped at 256 KB). The model produces a short headline, a brief security summary, and a trailing **`tag: <severity>[, needs-review]`** line.
-- **Security-Impact Classification** — the AI classifies each commit's security impact as `low` (routine), `medium` (bounded hardening/exposure change), `high` (broadens attack surface), or `critical` (removes a key control), optionally appending `, needs-review` for high/critical severity or any auth/cert/IPsec/firewall-defaults change.
-- **OpenAI-Compatible Fallback** — when Ollama is unset or fails, the same enriched diff and prompt go to an OpenAI-compatible `/chat/completions` endpoint (optional Bearer token). The fallback is automatic and transparent.
-- **AI Review Banner** — while the model is generating a commit message, the index page renders an animated `AI review in progress` banner so the operator knows a commit is pending.
-- **Health Probes** — the config dashboard probes the configured AI backend (Ollama `/api/tags` or OpenAI `/models`) and reports server reachable, API ready, and model ready in real time.
-
-### BorgAUDIT — Git Commit History Review
-
-- **BorgAUDIT WebUI** — a dedicated tile and `/audit?range=` page render the storage repo git commit history (commit metadata, full message including the AI `tag:` line, and the full syntax-highlighted unified diff) for the last 24 hours / 7 days / 1 / 3 / 6 months.
-- **Threat-Level Dashboard** — an interactive severity categorisation map at the top of the audit page renders clickable filter cards (critical, high, medium, low, untagged) for at-a-glance risk triage.
-- **Change Performer Tracking** — each audit entry surfaces a `change-performed-by:` line extracting the admin account that authored the config change from the diff content.
-- **Security-Approval Ledger** — a local SQLite database (`approval.db`, gitignored, never committed) tracks every commit whose AI tag is medium/high/critical. Operators can approve or unapprove each tracked commit from the BorgAUDIT page, recording the wall-clock timestamp, source IP, X-Forwarded-For chain, and Remote-User identity of the approver.
-
-### WebUI Authentication — Role Separation
-
-- **Two-Mode Access Model** — the WebUI always starts in **monitoring-only** mode (green badge): the full hive dashboard, config dashboard, audit page, and progress page are readable without authentication. Config-file downloads, forced backup triggers, audit diffs, and approval actions are **locked** (greyed out).
-- **Admin Mode** (red/yellow badge) — an optional per-browser-session state unlocked by submitting the admin password via the nav-bar dialog, enabling config downloads, full audit diffs, forced backup, and approval actions.
-- **Argon2id Credential Derivation** — admin credentials are derived via Argon2id (time=8, memory=64 MiB, threads=1, keylen=64) with a 16-byte random salt. Verification is constant-time (`subtle.ConstantTimeCompare`). A built-in credential generator at `/auth-hash` derives the env vars from a chosen password (never stored or logged).
-- **Global Login Lockout** — failed logins trigger a process-global backoff shared across all sessions (10 s, 20 s, 40 s, doubling), resetting on successful login, daemon restart, or 6 hours of inactivity. The countdown is shown live in the nav bar.
-- **Session Security** — 32-byte random session tokens as HttpOnly SameSite=Strict cookies, 12-hour sliding TTL, in-process memory only (daemon restart revokes all sessions).
-
-### Backup Dashboard
-
-- **BorgDASHBOARD** — the WebUI renders a bottom-of-page panel showing the on-disk backup store stats (servers, archive count, total size, newest archive), the local git repo state (HEAD, commit count, last commit, dirty worktree), and the upstream sync health (in sync / ahead / behind / diverged / never pushed, last push result) — all gathered from local state with no network round-trip on render.
-
-### Operational Excellence
-
-- **Single Static Binary** — no runtime dependencies; `CGO_ENABLED=0` cross-compiled for Linux, FreeBSD, OpenBSD, NetBSD, Windows on amd64, arm64, and armv7.
-- **Internal Git GC** — an aggressive repack (delta window=250, equivalent to `git gc --aggressive`) runs after every successful commit, consolidating loose objects into a fresh packfile via native `go-git` (no external `git` binary required).
-- **TLS Pinning** — OPNsense API HTTPS connections are MitM-proofed via `OPN_TLSKEYPIN` (SHA-256 base64 of the SPKI); OS trust-store verification is intentionally disabled.
-- **NixOS Integration** — ready-made modules for Prometheus + Grafana (WIP: Wazuh, Influx, Graylog).
-- **Complementary Sidekick** — designed as a small companion to [OPNCentral](https://opnsense.org/), not a replacement.
-- **Free & Open Source** — BSD 3-Clause. Contributions and forks welcome.
+| | |
+| --- | --- |
+| 🖥️ **Hive dashboard** | Live version, status, online/offline & compliance per firewall — animated SVG, zero JS frameworks |
+| 💾 **Dedup backups** | SHA-256 deduplicated, timestamped archive + symlink rotation, rapid restore |
+| 🔁 **Fleet sync** | Replicate plugins & syslog config from a master host to every target |
+| 🤖 **AI security audit** | Local LLM (Ollama / OpenAI-compatible) authors commit messages with a `tag: <severity>` line |
+| 🕵️ **BorgAUDIT** | Git commit history review: full diffs, threat dashboard, change performer, approval ledger |
+| 🎛️ **Unifi** | `.unf` backups, autoBackup folder watch, inventory export to CSV/JSON |
+| 📜 **Syslog collector** | Built-in RFC5424 server with rotated retention |
+| 🔐 **Two-mode WebUI** | Monitoring-only by default, Argon2id-gated admin sessions for sensitive actions |
+| 📦 **One static binary** | `CGO_ENABLED=0`, no runtime deps — Linux, BSD, Windows, amd64/arm64/armv7 |
+| ☁️ **Git native** | go-git repo management, aggressive repack, optional SSH upstream push with host-key pinning |
 
 ---
 
 ## 🚀 Quick Start
-
-Run the latest tagged release directly from source — no build step required:
 
 ```sh
 OPN_PATH='/tmp/opn' \
@@ -92,58 +53,27 @@ OPN_APISECRET='...' \
 go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-In daemon mode (the default) the internal WebUI comes up at
-<http://localhost:6464>. Add `OPN_NODAEMON=1` to run a single backup pass and
-exit instead.
+That's it. The WebUI comes up at <http://localhost:6464>. Add `OPN_NODAEMON=1` for a single pass.
 
----
-
-## 📦 Installation
-
-### Pre-built binaries
-
-Download the latest release for your platform from the
-[Releases page](https://github.com/paepckehh/opnborg/releases).
-
-### From source
+Or grab a prebuilt binary from the [Releases](https://github.com/paepckehh/opnborg/releases) page:
 
 ```sh
 go install paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-### Docker
+---
 
-The image is published from every `v*` tag to
-[ghcr.io/paepckehh/opnborg](https://github.com/paepckehh/opnborg/pkgs/container/opnborg)
-for **linux/amd64** and **linux/arm64**, tagged `v0.1.218` (exact release),
-`v0.1` (minor line), `v0` (major line) and `latest`. Pushes to `main` publish
-a bleeding-edge `edge` tag. The release tag is linked into the binary, so the
-CLI banner and WebUI footer always show the image's version.
+## 🐳 Docker
 
-The image is distroless (no shell, no package manager), stores backups under
-`/var/opnborg` and binds the WebUI to `0.0.0.0:6464`:
-
-```sh
-docker run -d --name opnborg \
-  -p 6464:6464 \
-  -v opnborg-data:/var/opnborg \
-  -e OPN_TARGETS="opn01.lan:443,opn02.lan:443" \
-  -e OPN_APIKEY="+RIb6YWNdcDWMMM7W5ZY..." \
-  -e OPN_APISECRET="8VbjM3HKKqQW2ozO..." \
-  ghcr.io/paepckehh/opnborg:latest
-```
-
-Or with Docker Compose:
+Distroless image (`linux/amd64` + `linux/arm64`) published from every `v*` tag to [ghcr.io/paepckehh/opnborg](https://github.com/paepckehh/opnborg/pkgs/container/opnborg) — tags: `latest`, `edge`, `v0`, `v0.1`, exact release.
 
 ```yaml
 services:
   opnborg:
     image: ghcr.io/paepckehh/opnborg:latest
     restart: unless-stopped
-    ports:
-      - "6464:6464"
-    volumes:
-      - opnborg-data:/var/opnborg
+    ports: ["6464:6464"]
+    volumes: [opnborg-data:/var/opnborg]
     environment:
       OPN_TARGETS: "opn01.lan:443,opn02.lan:443"
       OPN_APIKEY: "+RIb6YWNdcDWMMM7W5ZY..."
@@ -153,607 +83,149 @@ volumes:
   opnborg-data:
 ```
 
-> 🔐 The WebUI publishes to `0.0.0.0:6464` inside the container for port
-> mapping — expose it only to trusted networks, and arm `OPN_AUTH_HASH` /
-> `OPN_AUTH_SALT` for admin-mode gating. See
-> [WebUI authentication](#webui-authentication--monitoring-vs-admin-mode).
-
-### NixOS / Nix
-
-Available as a Nix package — see [search.nixos.org](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg).
-Ready-made service modules live in this repo:
-
-- `opnborg-docker.nix`
-- `opnborg-docker-complex.nix`
-- `opnborg-prometheus-grafana.nix`
+> 🔐 Expose `6464` to trusted networks only — and arm `OPN_AUTH_HASH` / `OPN_AUTH_SALT` for admin mode.
 
 ---
 
 ## 🔧 Configuration
 
-OPNBORG is configured entirely through **environment variables** — the binary itself accepts only `-v` / `-h`. A local `.env` file in the working directory is auto-loaded via `godotenv` if present.
+Everything is **environment variables** — the binary accepts only `-v` / `-h`. A local `.env` file is auto-loaded. Ready-to-use examples: `example.sh`, `example-env-config-simple.sh`, `example-env-config-complex.sh`, `example-env-config-unifi.sh`, `example-env-config-dev.sh`.
 
-> ⚠️ **Booleans are presence-based.** Setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to **true**. To disable a flag, **unset** the variable. The only exception is the empty string, which is treated as false. `OPN_NODAEMON` inverts the default (daemon mode is on when unset). The git repo feature is **opt-in** via `OPN_GIT_ENABLE` (unset = off).
+> ⚠️ **Booleans are presence-based.** `OPN_DEBUG=0` and `OPN_DEBUG=false` are both **true** — unset the var to disable. `OPN_GIT_ENABLE` is opt-in.
 
-Example configurations are provided in the repo root:
+### Basics
 
-| File | Use case |
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPN_APIKEY` / `OPN_APISECRET` | — | OPNsense backup user API credentials *(required)* |
+| `OPN_TARGETS` | — | Comma-separated targets, optional `#<asset-tag>` per host (`opn01.lan:8443#RACK-PROD01`) |
+| `OPN_TARGETS_<GROUP>` | — | Named groups: `OPN_TARGETS_INTRANET='opn01.lan:8443,...'` |
+| `OPN_TARGETS_DESC_<GROUP>` | — | WebUI group text description |
+| `OPN_TARGETS_IMGURL_<GROUP>` | — | WebUI group image URL (description becomes the tooltip) |
+| `OPN_PATH` | `.` | Backup store path |
+| `OPN_TLSKEYPIN` | — | SPKI SHA-256 base64 keypin — MitM-proofing for the OPNsense API |
+| `OPN_SLEEP` | `3600` | Poll interval in seconds (min `10`) |
+| `OPN_MASTER` | — | Master host — replicate its config across the hive |
+| `OPN_SYNC_PKG` | — | Sync installed plugins from master to all targets |
+| `OPN_EMAIL` | `git@opnborg` | Git commit author email |
+| `OPN_NODAEMON` | — | One-shot mode: single pass, then exit |
+| `OPN_DEBUG` | — | Verbose debug logging |
+
+### Git store
+
+| Variable | Description |
 | --- | --- |
-| `example.sh` | Minimal baseline |
-| `example-env-config-simple.sh` | Small OPNsense fleet |
-| `example-env-config-complex.sh` | Multi-group hive |
-| `example-env-config-dev.sh` | Development / debug |
-| `example-env-config-unifi.sh` | Unifi controller |
+| `OPN_GIT_ENABLE` | Manage `OPN_PATH` as a git repo with auto commit — opt-in |
+| `OPN_GIT_UPSTREAM` | SSH remote to push to; unset = local-only |
+| `OPN_GIT_SSH_KEY` | PEM private key for upstream auth (required with upstream) |
+| `OPN_GIT_SSH_HOSTKEY` | `SHA256:<base64>` host-key pin; unset skips verification |
 
-### Minimal example
+### AI security audit
 
-```sh
-export OPN_PATH='/tmp/opn'
-export OPN_TARGETS='opn01.lan:8443,opn02.lan:8443,opn03.lan:8443'
-export OPN_APIKEY='+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD'
-export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p'
-```
-
-### Custom groups with descriptions & images
-
-Split the hive into named groups via `OPN_TARGETS_<GROUP>`. Each group may carry an optional WebUI text description (`OPN_TARGETS_DESC_<GROUP>`) and an optional image URL (`OPN_TARGETS_IMGURL_<GROUP>`) that replaces the text headline — when an image is set, the description becomes the image's tooltip.
+Backends: **Ollama first, OpenAI-compatible as automatic fallback.** The LLM reads an enriched diff and writes the commit message — headline, security summary, trailing `tag: low|medium|high|critical[, needs-review]` — surfaced on the BorgAUDIT page. Needs `OPN_GIT_ENABLE`.
 
 ```sh
-export OPN_TARGETS_STANDBY='opn00.lan:8443#RACK-LAB-2ND-FLOOR'
-export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
-export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01-VODAFONE,opn04.lan:8443#RACK-DMZ02-TELEKOM'
-
-export OPN_TARGETS_DESC_STANDBY='Hot-Standby'
-export OPN_TARGETS_DESC_INTRANET='Intranet Builder'
-export OPN_TARGETS_DESC_EXTERNAL='External Internet Gateways'
-
-# or alternative, some (custom) images (go wild ...) instead of text
-
-export OPN_TARGETS_IMGURL_STANDBY='https://paepcke.de/res/hot.png'
-export OPN_TARGETS_IMGURL_INTRANET='https://paepcke.de/res/int.png'
-export OPN_TARGETS_IMGURL_EXTERNAL='https://paepcke.de/res/ext.png'
-```
-
-The Unifi backup group accepts the same pair of options:
-
-```sh
-export OPN_UNIFI_BACKUP_DESC='Network controller'
-export OPN_UNIFI_BACKUP_IMGURL='https://paepcke.de/res/unifi.png'
-```
-
-### Unifi controller backup
-
-A complete, self-contained Unifi-only configuration (no OPNsense targets
-required) — opnborg pulls `.unf` backups on every poll cycle, mirrors a
-co-located controller autoBackup folder when present, and exports the Unifi
-inventory into the git-tracked store:
-
-```sh
-# store + git archive
-export OPN_PATH='/var/opnborg'
-export OPN_GIT_ENABLE='1'                         # opt-in: commit each backup pass
-# export OPN_GIT_UPSTREAM='git@github.com:user/opnborg-backups.git'
-# export OPN_GIT_SSH_KEY='/home/opnborg/.ssh/id_ed25519'
-
-# Unifi controller
-export OPN_UNIFI_WEBUI='https://192.168.1.10:8443#RACK-PROD03'
-export OPN_UNIFI_BACKUP_USER='backup'
-export OPN_UNIFI_BACKUP_SECRET='start'
-export OPN_UNIFI_VERSION='8.5.6'                  # required for backup
-export OPN_UNIFI_BACKUP_DESC='Network controller'
-
-# Optional: watch & mirror a co-located controller autoBackup folder
-export OPN_UNIFI_WATCH_PATH='/var/lib/unifi/data/backup/autobackup'
-
-# Optional: nightly inventory export (CSV by default)
-export OPN_UNIFI_EXPORT='1'
-export OPN_UNIFI_FORMAT='csv'
-export OPN_UNIFI_MONGODB_URI='mongodb://127.0.0.1:27117'
-
-# Daemon + WebUI
-export OPN_SLEEP='3600'
-export OPN_HTTPD_SERVER='127.0.0.1:6464'
-```
-
-### Full hive with sync, syslog, git push, AI audit & dashboards
-
-```sh
-# Targets split into named groups with asset tags
-export OPN_TARGETS_INTRANET='opn01.lan:8443#RACK-PROD01,opn02.lan:8443#RACK-PROD02'
-export OPN_TARGETS_EXTERNAL='opn03.lan:8443#RACK-DMZ01,opn04.lan:8443#RACK-DMZ02'
-export OPN_TARGETS_DESC_INTRANET='Intranet firewalls'
-export OPN_TARGETS_DESC_EXTERNAL='External gateways'
-
-# Auth + keypin (see FAQ below for generating OPN_TLSKEYPIN)
-export OPN_APIKEY='+RIb6YWNdcDWMMM7W5ZYDkUvP4qx6e1r7e/Lg/Uh3aBH+veuWfKc7UvEELH/lajWtNxkOaOPjWR8uMcD'
-export OPN_APISECRET='8VbjM3HKKqQW2ozOe5PTicMXOBVi9jZTSPCGfGrHp8rW6m+TeTxHyZyAI1GjERbuzjmz6jK/usMCWR/p'
-export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
-
-# Master + plugin sync from opn01 to the rest of the hive
-export OPN_MASTER='opn01.lan:8443'
-export OPN_SYNC_PKG='1'
-
-# Store + git archive with upstream push
-export OPN_PATH='/var/opnborg'
-export OPN_GIT_ENABLE='1'
-export OPN_GIT_UPSTREAM='git@github.com:user/opnborg-backups.git'
-export OPN_GIT_SSH_KEY='/home/opnborg/.ssh/id_ed25519'
-# Optional: pin the upstream SSH host key for MitM protection
-# export OPN_GIT_SSH_HOSTKEY='SHA256:...'
-
-# AI security audit (choose one or both — OpenAI-compatible is the fallback)
-# Option A: local Ollama daemon
 export OLLAMA_DESC_URL='http://localhost:11434'
 export OLLAMA_DESC_MODEL='llama3'
-# Option B: OpenAI-compatible local server
-# export OPENAPI_DESC_URL='http://192.168.6.222:11434/v1'
-# export OPENAPI_DESC_MODEL='gpt-4o-mini'
-# export OPENAPI_DESC_TOKEN='...'
-
-# WebUI admin authentication (see /auth-hash page to generate)
-# export OPN_AUTH_HASH='vE3ejmyleL75oyrv/...'
-# export OPN_AUTH_SALT='Kqz96+9PuS1Ss9/...'
-
-# Internal RFC5424 syslog collector
-export OPN_RSYSLOG_ENABLE='1'
-export OPN_RSYSLOG_SERVER='192.168.0.1:5140'
-
-# Daemon + WebUI (HTTPS, mTLS-protected)
-export OPN_SLEEP='3600'
-export OPN_HTTPD_SERVER='127.0.0.1:6464'
-export OPN_HTTPD_CACERT='/etc/opnborg/server.crt'
-export OPN_HTTPD_CAKEY='/etc/opnborg/server.key'
-export OPN_HTTPD_CACLIENT='/etc/opnborg/ca.crt'   # set to enforce mTLS
-export OPN_HTTPD_COLOR_FG='black'
-export OPN_HTTPD_COLOR_BG='orange'
-
-# Observability dashboards
-export OPN_PROMETHEUS_WEBUI='http://localhost:9191'
-export OPN_GRAFANA_WEBUI='http://localhost:9090'
-export OPN_GRAFANA_DASHBOARD_FREEBSD='Kczn-jPZz/node-exporter-freebsd'
-export OPN_GRAFANA_DASHBOARD_HAPROXY='P4zs3-ces/haproxy-2-full'
-export OPN_GRAFANA_DASHBOARD_UNIFI='g3kd0-3ds/unpoller'
-export OPN_WAZUH_WEBUI='http://localhost:9292'
+# or/and (fallback):
+export OPENAPI_DESC_URL='http://192.168.6.222:11434/v1'   # default model: gpt-4o-mini
+# export OPENAPI_DESC_MODEL='...' OPENAPI_DESC_TOKEN='...'
 ```
 
----
+### WebUI auth
 
-## 🧰 Docker Compose / NixOS example
+Monitoring mode is always open (green badge). Sensitive actions — config downloads, audit diffs, forced backup, approvals — require an admin session (red/yellow badge): Argon2id (time=8, 64 MiB) credentials, HttpOnly SameSite=Strict cookies, 12 h sliding TTL, exponential global lockout on failed logins. Generate `OPN_AUTH_HASH` + `OPN_AUTH_SALT` from a password on the `/auth-hash` page — nothing is ever logged. Without valid credentials, login is impossible and the sensitive paths return 403.
 
-```nix
-{config, ...}: {
-  ####################
-  #-=# NETWORKING #=-#
-  ####################
-  networking = {
-    firewall = {
-      allowedTCPPorts = [6464]; # open tcp port 6464
-    };
-  };
-  ########################
-  #-=# VIRTUALISATION #=-#
-  ########################
-  virtualisation = {
-    oci-containers = {
-      backend = "podman";
-      containers = {
-        opnborg = {
-          image = "ghcr.io/paepckehh/opnborg";
-          volumes = ["/var/opnborg:/var/opnborg"];
-          extraOptions = ["--network=host"];
-          environment = {
-            "OPN_PATH" = "/var/opnborg";
-            "OPN_TARGETS" = "opn01.lan:8443,opn02.lan:8443";
-            "OPN_APIKEY" = "+RIb6YWNdcDWMMM7W5ZY...";
-            "OPN_APISECRET" = "8VbjM3HKKqQW2ozO...";
-          };
-        };
-      };
-    };
-  };
-}
-```
+### WebUI / HTTP
 
----
-
-## 📖 Environment Variable Reference
-
-### Required
-
-| Variable | Description |
-| --- | --- |
-| `OPN_APIKEY` | OPNsense backup user API key (base64-encoded string) |
-| `OPN_APISECRET` | OPNsense backup user API secret (base64-encoded string) |
-| `OPN_TARGETS` | Comma-separated list of OPNsense targets. Append `#<asset-tag>` per host (e.g. `opn01.lan:8443#RACK-PROD01`) |
-| `OPN_TARGETS_*` | Alternative: custom named groups (e.g. `OPN_TARGETS_INTRANET="opn-int-01.lan:8443,..."`) |
-| `OPN_TARGETS_DESC_*` | Custom WebUI text description for a group (e.g. `OPN_TARGETS_DESC_INTRANET="Intranet firewalls"`) |
-| `OPN_TARGETS_IMGURL_*` | Custom image URL for a group (e.g. `OPN_TARGETS_IMGURL_INTRANET="https://paepcke.de/img/intra.png"`) |
-
-### Optional / General
+| Route | Access | What |
+| --- | --- | --- |
+| `/` | open | Hive dashboard |
+| `/config` | open | Auth, AI, git & store tiles |
+| `/audit` | open | BorgAUDIT — commit history, threat dashboard |
+| `/progress` | open | Live forced-backup progress |
+| `/force` | open | Trigger a backup pass now |
+| `/files/` | admin | Config downloads |
+| `/approve`, `/approve-all` | admin | Approval ledger actions (POST) |
+| `/auth/*`, `/auth-hash` | open | Login/logout/state, credential generator |
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `OPN_PATH` | `.` | Absolute or relative path to store backups |
-| `OPN_TLSKEYPIN` | _empty_ | OPNsense TLS MitM-proof certificate keypin (base64 SPKI SHA-256) |
-| `OPN_SLEEP` | `3600` | Daemon poll interval in seconds (minimum `10`) |
-| `OPN_EMAIL` | `git@opnborg` | Email address used for local git commits |
-| `OPN_NODAEMON` | unset (= daemon on) | Quit after one loop instead of running as a daemon |
-| `OPN_DEBUG` | unset | Verbose debug log mode |
-
-### Backup Storage Git Repo
-
-opnborg manages the backup storage folder (`OPN_PATH`) as a local git
-repository using the native `go-git` library — no external `git` binary is
-required. It auto-initialises the repo, maintains a `.gitignore` (archive,
-CONFIG, Logs, and the approval ledger), commits every change after a backup
-pass, runs an aggressive repack (delta window=250) after each commit, and
-optionally pushes to an upstream SSH remote.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OPN_GIT_ENABLE` | unset | Manage `OPN_PATH` as a git repo with auto commit (opt-in) |
-| `OPN_GIT_UPSTREAM` | _empty_ | Upstream SSH git URL to sync with (e.g. `git@github.com:user/repo.git`); empty disables push |
-| `OPN_GIT_SSH_KEY` | _empty_ | Path to the PEM-encoded SSH private key used for upstream auth (required when `OPN_GIT_UPSTREAM` is set) |
-| `OPN_GIT_SSH_HOSTKEY` | _empty_ | Optional `SHA256:<base64>` fingerprint of the upstream SSH host key; when set, push refuses any host whose key does not match (unset = skip host-key verification) |
-
-### AI Security Audit
-
-The AI security audit feature enriches each backup diff and sends it to a
-local LLM that authors the commit message with a trailing
-`tag: <severity>[, needs-review]` line classifying the security impact.
-Two backends are supported; when both are configured, Ollama is tried first
-and the OpenAI-compatible server is the automatic fallback.
-
-**Ollama (local)**
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OLLAMA_DESC_URL` | _empty_ | Ollama REST API base URL (e.g. `http://localhost:11434`); enables LLM-authored commit messages when set together with `OLLAMA_DESC_MODEL` |
-| `OLLAMA_DESC_MODEL` | _empty_ | Ollama model name (e.g. `llama3`) used to summarise each backup diff into a commit message with a `tag: <severity>` security-impact line; enables the feature when set together with `OLLAMA_DESC_URL` |
-
-**OpenAI-compatible (local)**
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OPENAPI_DESC_URL` | _empty_ | OpenAI-compatible REST API base URL (e.g. `http://192.168.6.222:11434/v1`); required to arm the fallback; endpoints `/chat/completions` and `/models` are appended |
-| `OPENAPI_DESC_MODEL` | `gpt-4o-mini` | Model name used for the fallback commit-message generation (same `tag: <severity>` contract as the Ollama backend) |
-| `OPENAPI_DESC_TOKEN` | _empty_ | API bearer token sent as `Authorization: Bearer <token>`; optional for local servers that do not require auth |
-
-### WebUI Authentication — Monitoring vs Admin Mode
-
-The WebUI ships with a **two-mode access model** and always starts in
-**monitoring-only view mode** — a login is never required to use the dashboard.
-
-- **Monitoring mode** (green badge in the top nav bar): the full hive dashboard,
-  config dashboard, audit page, and progress page are readable without any
-  authentication. Config-file downloads (`current.xml` / `archive` buttons),
-  audit diff details, forced backup trigger, and the BorgAUDIT approval actions
-  are locked (greyed out).
-- **Admin mode** (red/yellow badge): an optional, per-browser-session state
-  unlocked by submitting the admin password via the nav-bar dialog. Enables
-  config downloads, full audit diffs, forced backup, and approval actions.
-
-An **[ Authenticate ]** button sits in the nav bar between the mode badge and
-the version pill. It is purely an optional entry point — hitting it opens the
-login dialog when credentials are armed.
-
-**Without valid credentials, login is impossible.** If `OPN_AUTH_HASH` /
-`OPN_AUTH_SALT` are missing, empty, whitespace-only, or invalid (hash not
-decoding to exactly 64 bytes, malformed base64, or a salt shorter than 8 raw
-bytes — all checked at startup), opnborg stays in monitoring-only mode and
-does not allow authentication at all: the login dialog is not rendered, and
-clicking any greyed-out download or approve control points the operator at
-the config dashboard's Authentication setup section.
-
-With both env vars set and valid, admin mode unlocks per-browser sessions
-(12 h sliding TTL, HttpOnly SameSite=Strict cookie): config downloads, audit
-diffs, the forced backup trigger, and the approve / approve-all actions become
-active.
-
-Failed logins are penalised with a **global** lockout shared across all
-browser sessions: 10 s after the 1st failure, 20 s after the 2nd, 40 s after
-the 3rd, doubling with every further failure. The counter resets on a
-successful login, on daemon restart, and after 6 hours of inactivity; the
-remaining lock time is shown live in the nav bar and the login dialog.
-
-The **Authentication** tile on the config dashboard shows the current mode,
-whether the credentials are armed (masked), the KDF parameter set, and a
-*Create Authentication Env Vars* button: enter the password you want to use,
-and opnborg derives the two env vars below with Argon2id (time=8, memory=64
-MiB, threads=1, keylen=64). Copy both into the opnborg environment (e.g.
-`.env` or systemd unit) and restart. The password itself is never stored or
-logged; the generator page is always available, even when credentials are
-already armed.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OPN_AUTH_HASH` | _empty_ | Argon2id admin credential — a single base64-encoded 64-byte key (generated by the WebUI credential generator); arming requires `OPN_AUTH_SALT` too. For backward compatibility the legacy `<base64-key>$<base64-key>` format (key encoded twice) is also accepted. Missing, empty, or invalid content disables login entirely (monitoring-only mode). Example for password `example`: `OPN_AUTH_HASH=vE3ejmyleL75oyrv/o70nHVhiPDYkQFdwVwl9oPECrXqtmU4MKJla8gr7BsxQziAUmOXR5anlS1SaoCnJDVy1A==` |
-| `OPN_AUTH_SALT` | _empty_ | Base64-encoded random salt (16 raw bytes, minimum 8 accepted at validation) belonging to `OPN_AUTH_HASH`. Example for password `example`: `OPN_AUTH_SALT=Kqz96+9PuS1Ss9/oel1zaw==` |
-
-### BorgAUDIT — Git Commit History Review
-
-When `OPN_GIT_ENABLE` is set, the index page carries a **BorgAUDIT** tile that
-links to a dedicated `/audit?range=` page rendering the storage repo git commit
-history for the last 24 hours / 7 days / 1 / 3 / 6 months. Each entry is a
-collapsible card carrying the commit hash, author, date, file-change stats, the
-full commit message (including the AI `tag: <severity>[, needs-review]` line
-when the commit was model-authored), the full syntax-highlighted unified diff
-against the commit's first parent, and a `change-performed-by:` line surfacing
-the admin account that authored the config change. The walk is bounded (250
-commits per page, 512 KB diff per commit) and opens the repo directly against
-`OPN_PATH` with no `os.Chdir`, so it is safe to render concurrently with the
-backup workers.
-
-A **threat-level dashboard** at the top of the page renders an interactive
-severity categorisation map (critical / high / medium / low / untagged) with
-click-to-filter toggles. Commits tagged medium / high / critical are tracked
-in a local SQLite **security-approval ledger** (`approval.db`, gitignored and
-never committed) that records the approval state and a full audit trail
-(source IP, X-Forwarded-For chain, Remote-User, timestamp) when an operator
-approves a commit from the WebUI.
-
-Host key verification never reads or writes `~/.ssh/known_hosts`: pin the
-upstream host key fingerprint via `OPN_GIT_SSH_HOSTKEY` (recommended whenever
-the upstream is reachable over an untrusted network); when unset, host key
-verification is skipped entirely for unattended container/CI deployments.
-
-### Package Installation Sync
-
-| Variable | Description |
-| --- | --- |
-| `OPN_MASTER` | Define a master server; opnborg replicates its config to all hive members |
-| `OPN_SYNC_PKG` | Enable OPNsense plugin/system package synchronization across all targets |
-
-### Internal Remote Syslog Collector
-
-| Variable | Description |
-| --- | --- |
-| `OPN_RSYSLOG_ENABLE` | Spin up internal RFC5424 rsyslog server; monitor hive log config |
-| `OPN_RSYSLOG_SERVER` | Listen address & port (e.g. `192.168.0.1:5140`). Do not use `0.0.0.0` |
-
-### WebUI / HTTP Server
-
-The internal HTTPD serves the following routes:
-
-| Route | Auth | Description |
-| --- | --- | --- |
-| `/` | open | Hive index — animated SVG status dashboard |
-| `/config` | open | Config dashboard with Authentication, AI, and Git tiles |
-| `/audit` | open | BorgAUDIT commit history with threat dashboard and approval controls |
-| `/progress` | open | Forced-backup progress dashboard (live log stream) |
-| `/files/` | admin | Static file server for config downloads (never pass-through) |
-| `/force` | open | Manual backup trigger (arms an already-scheduled pass) |
-| `/approve` | admin | Single-commit approval toggle (POST) |
-| `/approve-all` | admin | Bulk approve all pending commits (POST) |
-| `/auth/login` | open | Admin login (POST) |
-| `/auth/logout` | open | Session revoke (POST) |
-| `/auth/state` | open | Mode + lock state JSON (polled by nav-bar JS) |
-| `/auth-hash` | open | Credential generator page |
-| `/favicon.ico` | open | Favicon |
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OPN_HTTPD_DISABLE` | unset (= httpd on) | Disable the internal HTTPD server |
-| `OPN_HTTPD_SERVER` | `127.0.0.1:6464` | HTTPD listen address |
-| `OPN_HTTPD_CACERT` | _empty_ | Server CA X.509 certificate; empty disables HTTPS |
-| `OPN_HTTPD_CAKEY` | _empty_ | Server CA key; empty disables HTTPS |
-| `OPN_HTTPD_CACLIENT` | _empty_ | Client CA certificate; if set, enforces mTLS |
-| `OPN_HTTPD_COLOR_FG` | `white` | WebUI foreground color (e.g. `black` or `#000000`) |
-| `OPN_HTTPD_COLOR_BG` | `#333333` | WebUI background color (e.g. `orange` or `#ffa500`) |
-
-### Prometheus
-
-| Variable | Description |
-| --- | --- |
-| `OPN_PROMETHEUS_WEBUI` | Prometheus web console target & port (e.g. `http://localhost:8443`) |
+| `OPN_HTTPD_SERVER` | `127.0.0.1:6464` | Listen address |
+| `OPN_HTTPD_DISABLE` | — | Turn the WebUI off |
+| `OPN_HTTPD_CACERT` / `OPN_HTTPD_CAKEY` | — | Enable HTTPS |
+| `OPN_HTTPD_CACLIENT` | — | Enforce mTLS |
+| `OPN_HTTPD_COLOR_FG` / `OPN_HTTPD_COLOR_BG` | `white` / `#333333` | Theme colors |
+| `OPN_RSYSLOG_ENABLE` + `OPN_RSYSLOG_SERVER` | — | Built-in RFC5424 collector (e.g. `192.168.0.1:5140`) |
 
 ### Unifi
 
-| Variable | Description |
-| --- | --- |
-| `OPN_UNIFI_WEBUI` | Unifi web console target & port (e.g. `https://localhost:8443`); `#` appends an asset tag (e.g. `https://localhost:8443#RACK-PROD03`) |
-| `OPN_UNIFI_BACKUP_USER` | Unifi backup user account (required when `OPN_UNIFI_WEBUI` is set) |
-| `OPN_UNIFI_BACKUP_SECRET` | Unifi backup user account password (required when `OPN_UNIFI_WEBUI` is set) |
-| `OPN_UNIFI_VERSION` | Unifi controller version string (e.g. `8.5.6`); **required** whenever Unifi backup is enabled |
-| `OPN_UNIFI_BACKUP_DESC` | Unifi backup group text description |
-| `OPN_UNIFI_BACKUP_IMGURL` | Unifi backup group image URL |
-| `OPN_UNIFI_WATCH_PATH` | Co-located Unifi autoBackup folder to watch & mirror into the store (e.g. `/var/lib/unifi/data/backup/autobackup`); requires a readable `autobackup_meta.json` marker file in the folder (contents are not parsed) |
+```sh
+export OPN_UNIFI_WEBUI='https://192.168.1.10:8443#RACK-PROD03'
+export OPN_UNIFI_BACKUP_USER='backup'
+export OPN_UNIFI_BACKUP_SECRET='start'
+export OPN_UNIFI_VERSION='8.5.6'              # required
+# optional:
+export OPN_UNIFI_WATCH_PATH='/var/lib/unifi/data/backup/autobackup'  # watch-only deploy is valid
+export OPN_UNIFI_EXPORT='1'; export OPN_UNIFI_FORMAT='csv'           # or 'json'
+export OPN_UNIFI_MONGODB_URI='mongodb://127.0.0.1:27117'
+export OPN_UNIFI_BACKUP_DESC='Network controller'   # (+_IMGURL) like target groups
+```
 
-When `OPN_UNIFI_WATCH_PATH` points at a co-located controller's autoBackup
-folder, opnborg watches it for filesystem events and mirrors the newest `.unf`
-backup into the store (deduplicated by SHA-256 against the previous
-`CONFIG-CURRENT`) on every change. The watcher is only armed when the folder
-exists **and** contains a readable `autobackup_meta.json` marker file — its
-contents are neither parsed nor validated — so opnborg keeps running unchanged
-on hosts that do not co-locate a controller.
+### Observability links
 
-A watch-only deployment is a valid configuration: when `OPN_UNIFI_WATCH_PATH`
-points at a valid autoBackup folder and neither `OPN_TARGETS` nor
-`OPN_UNIFI_WEBUI`/`OPN_UNIFI_BACKUP_*` are set, the file watcher is the sole
-source of backups and opnborg starts normally.
-
-### Unifi Inventory Export
-
-See [github.com/paepckehh/uniex](https://github.com/paepckehh/uniex) for details.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OPN_UNIFI_EXPORT` | unset | Enable nightly Unifi inventory export into the git repo (e.g. `1`) |
-| `OPN_UNIFI_FORMAT` | `csv` | Export format; optional `json` |
-| `OPN_UNIFI_MONGODB_URI` | `mongodb://127.0.0.1:27117` | Unifi MongoDB database URI |
-
-### Wazuh
-
-| Variable | Description |
-| --- | --- |
-| `OPN_WAZUH_WEBUI` | Wazuh web console target & port (e.g. `http://localhost:9292`) |
-
-### Grafana
-
-| Variable | Description |
-| --- | --- |
-| `OPN_GRAFANA_WEBUI` | Grafana web console target & port (e.g. `http://localhost:9090`) |
-| `OPN_GRAFANA_DASHBOARD_FREEBSD` | FreeBSD node dashboard id / name (e.g. `Kczn-jPZz/node-exporter-freebsd`) |
-| `OPN_GRAFANA_DASHBOARD_HAPROXY` | HAProxy node dashboard id / name (e.g. `P4zs3-ces/haproxy-2-full`) |
-| `OPN_GRAFANA_DASHBOARD_UNIFI` | Unpoller dashboard id / name (e.g. `g3kd0-3ds/unpoller`) |
+`OPN_PROMETHEUS_WEBUI`, `OPN_WAZUH_WEBUI`, `OPN_GRAFANA_WEBUI`, `OPN_GRAFANA_DASHBOARD_FREEBSD`, `OPN_GRAFANA_DASHBOARD_HAPROXY`, `OPN_GRAFANA_DASHBOARD_UNIFI` — deep links into your existing monitoring stack, rendered on the dashboard.
 
 ---
 
-## 🏗 Architecture
+## 🗄 Storage layout
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              OPNBORG (single binary)          │
-                    │                                             │
-  OPNsense API ────▶│  fetchXML ──▶ SHA-256 dedup ──▶ checkIntoStore │
-  (HTTPS+keypin)    │                                             │
-                    │  gitCommit ──▶ gitPush ──▶ gitGC (repack)     │
-                    │     │                                       │
-                    │     ├──▶ Ollama / OpenAI ──▶ tag: <severity>  │
-                    │     │         (AI commit message + security  │
-                    │     │          classification)               │
-                    │     └──▶ approvalTrackCommit ──▶ SQLite      │
-                    │                    (approval.db, gitignored) │
-                    │                                             │
-  Unifi API ───────▶│  .unf backup ──▶ store                      │
-  Unifi autoBackup ─▶│  fsnotify watch ──▶ mirror ──▶ store        │
-  Unifi MongoDB ───▶│  inventory export ──▶ store                  │
-                    │                                             │
-  RFC5424 syslog ──▶│  startRSysLog ──▶ lumberjack rotation       │
-                    │                                             │
-                    │  Embedded HTTPD (WebUI)                     │
-                    │  / /config /audit /progress /files /force    │
-                    │  /approve /auth/* /auth-hash                │
-                    │  [monitoring mode] ←→ [admin mode]           │
-                    └─────────────────────────────────────────────┘
-                                         │
-                    ┌────────────────────┴────────────────────────┐
-                    │          <OPN_PATH>/ backup store             │
-                    │                                             │
-                    │  <server>/current.xml    (latest backup)     │
-                    │  <server>/.archive/...   (timestamped)       │
-                    │  <server>/CONFIG-CURRENT  (symlink)           │
-                    │  <server>/CONFIG-LAST     (symlink)           │
-                    │  <server>/sha256.db       (dedup log)         │
-                    │  approval.db              (SQLite, gitignored)│
-                    │  .git/                    (if OPN_GIT_ENABLE) │
-                    └─────────────────────────────────────────────┘
+<OPN_PATH>/<server>/
+  current.xml          # latest backup
+  .archive/<Y>/<M>/<ts>-<server>.xml
+  CONFIG-CURRENT/LAST # symlink rotation
+  sha256.db           # dedup log
+approval.db            # security-approval ledger (SQLite, always gitignored)
+.git/                  # when OPN_GIT_ENABLE is set
 ```
 
 ---
 
 ## ❓ FAQ
 
-### How do I create a secure OPNsense Backup API Key (`OPN_APIKEY` & `OPN_APISECRET`)?
+**Create an OPNsense API key?**
+System → Access → Users → add a `backup` user (scrambled password) → grant *Diagnostics: Configuration History* (+ *System: Firmware* for plugin sync) → API Keys → Add.
 
-1. Create a `backup` user:
-   - OPNsense WebUI → **System → Access → Users → Add**
-   - Skip the password, tick **scrambled random password**, then **Save and go back**.
-2. Re-open the `backup` user via **Edit** (new option sections will appear).
-3. Under **Effective Privileges → Edit**, tick:
-   - **Diagnostics: Configuration History** (required for system backups)
-   - **System: Firmware** (only needed for automatic plugin/package management)
-   - Click **Save**.
-4. Under **API Keys → Add**, create an API key. The key & secret will download to your browser's download folder.
+**Generate `OPN_TLSKEYPIN`?**
 
-### How do I lock down the TLS session against MitM via `OPN_TLSKEYPIN`?
+```sh
+go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
+# X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
+export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
+```
 
-1. Enable HTTPS for your OPNsense admin interface (self-signed certificates are fine).
-2. Run:
+**Enable the AI audit?** Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`, enable `OPN_GIT_ENABLE`, restart.
 
-   ```sh
-   go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
-   ```
+**Arm admin mode?** `/config` → *Create Authentication Env Vars* → copy both `OPN_AUTH_*` lines into your env → restart.
 
-3. Pick the first line — copy only the base64 string (without brackets):
+**Notes**
 
-   ```sh
-   # Example:
-   # X509 Cert KeyPin [base64] : [FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M=]
-   export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
-   ```
-
-### How do I set up the AI security audit?
-
-1. Install [Ollama](https://ollama.com) locally (or point at an OpenAI-compatible server).
-2. Pull a model: `ollama pull llama3`
-3. Set the env vars:
-
-   ```sh
-   # Ollama
-   export OLLAMA_DESC_URL='http://localhost:11434'
-   export OLLAMA_DESC_MODEL='llama3'
-
-   # OR OpenAI-compatible fallback
-   export OPENAPI_DESC_URL='http://192.168.6.222:11434/v1'
-   export OPENAPI_DESC_MODEL='gpt-4o-mini'
-   ```
-
-4. Enable the git repo: `OPN_GIT_ENABLE=1`
-5. Restart opnborg. Every backup commit will now carry an AI-authored message
-   with a `tag: <severity>` line, visible on the BorgAUDIT page.
-
-### How do I set up WebUI admin authentication?
-
-1. Open the WebUI config dashboard (`/config`).
-2. Click **[ Create Authentication Env Vars ]** in the Authentication tile.
-3. Enter your desired admin password.
-4. Copy both `OPN_AUTH_HASH` and `OPN_AUTH_SALT` into your opnborg environment.
-5. Restart opnborg. The nav bar will show a red/yellow **ADMIN** badge when
-   logged in, and a green **MONITORING** badge otherwise.
-
-### Operational notes
-
-- The internal web server listens on `127.0.0.1:6464` by default (daemon mode only) → <http://localhost:6464>.
-- Boolean env vars are always `true` when defined — the assigned value is irrelevant.
-- `OPN_TARGETS` & `OPN_MASTER` must hold reachable WebUI interfaces (e.g. `192.168.0.1`) including a port if not `:443` (e.g. `192.168.0.1:8443`).
-- Clear-text HTTP is unsupported — enable HTTPS for your admin interface (self-signed certificates are fine).
-- ⚠️ HTTPS chain verification via the OS trust store is **disabled by default** — use `OPN_TLSKEYPIN`.
-- The approval ledger (`approval.db`, `approval.db-wal`, `approval.db-shm`) is always gitignored and never committed into the storage repo.
+- Targets need an explicit port unless `:443`; plain HTTP is unsupported.
+- OS trust-store verification is intentionally **off** — use `OPN_TLSKEYPIN`.
+- `approval.db` (+ WAL sidecars) is always gitignored, never committed.
 
 ---
 
-## 📈 NixOS: Prometheus & Grafana Integration
+## 📈 NixOS
 
-If you run OPNBORG on NixOS:
-
-1. Adapt target IPs and import the module:
-
-   ```nix
-   imports = [
-     ./opnborg-prometheus-grafana.nix
-   ];
-   ```
-
-2. Import these Grafana dashboards, then set `OPN_GRAFANA_DASHBOARD_*` accordingly:
-   - [FreeBSD Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-freebsd.json)
-   - [Linux Node Exporter](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/node-exporter-full.json)
-   - [HAProxy2](https://github.com/rfmoz/grafana-dashboards/blob/master/prometheus/haproxy-2-full.json)
-
-### TODO
-
-- Add Wazuh integration
-- Add pre-configured, optimized OPNsense dashboards
-- Provide an `opnborg` Nixpkg and a declarative systemd service (`services.opnborg = { enable = true; }`)
+Available as a [Nix package](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg). Ready-made modules in this repo: `opnborg-docker.nix`, `opnborg-docker-complex.nix`, `opnborg-prometheus-grafana.nix` (Prometheus + Grafana; Wazuh/Influx/Graylog WIP).
 
 ---
 
-## 📚 Documentation
+## 🤝 Contributing & 🛡 License
 
-- Package reference: [pkg.go.dev/paepcke.de/opnborg](https://pkg.go.dev/paepcke.de/opnborg)
-- Internal architecture: see [`AGENTS.md`](AGENTS.md)
-
----
-
-## 🛡 License
-
-[![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
-
-This project is licensed under the terms of the **BSD 3-Clause License**. See [LICENSE](LICENSE) for details.
-
----
-
-## 📃 Citation
+PRs welcome — see [`AGENTS.md`](AGENTS.md) for the workflow. BSD 3-Clause, see [LICENSE](LICENSE).
 
 ```bibtex
 @misc{opnborg,
@@ -765,14 +237,6 @@ This project is licensed under the terms of the **BSD 3-Clause License**. See [L
   howpublished = {\url{https://paepcke.de/opnborg}}
 }
 ```
-
----
-
-## 🤝 Contributing
-
-Yes, please! Pull requests are welcome. Please read [`AGENTS.md`](AGENTS.md) for the build / test / commit / tag workflow before opening a PR.
-
----
 
 ## 💖 Sponsors & Special Thanks
 
