@@ -231,7 +231,10 @@ export OPN_UNIFI_BACKUP_DESC='Network controller'   # (+_IMGURL) like target gro
   .archive/<Y>/<M>/<ts>-<server>.xml
   CONFIG-CURRENT/LAST # symlink rotation
   sha256.db           # dedup log
-approval.db            # security-approval ledger (SQLite, always gitignored)
+.db/
+  approval.db          # security-approval ledger (SQLite, always gitignored, never committed)
+  approval.db-wal
+  approval.db-shm
 .git/                  # when OPN_GIT_ENABLE is set
 ```
 
@@ -278,7 +281,7 @@ Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL
 
 - Targets need an explicit port unless `:443`; plain HTTP is unsupported.
 - OS trust-store verification is intentionally **off** — use `OPN_TLSKEYPIN`.
-- `approval.db` (+ WAL sidecars) is always gitignored, never committed.
+- The `.db/` ledger directory (`approval.db` + WAL sidecars, plus anything else inside) is always gitignored and hardwire-excluded from commit staging — never committed, not even by a manual `git add .`. A legacy root-level ledger is migrated into `.db/` at startup.
 
 </details>
 

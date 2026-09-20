@@ -25,16 +25,17 @@ const (
 	// _ignore is the canonical .gitignore content written into the storage
 	// root. It keeps the archive/history files, the symlink targets, the
 	// logs, and the on-disk security-approval ledger out of the commit
-	// history. The approval ledger is a local-only runtime database
-	// comprising three SQLite files — approval.db (main database),
-	// approval.db-wal (write-ahead log), and approval.db-shm (shared memory
-	// index). All three are listed explicitly so the .gitignore is
-	// self-documenting and every sidecar is covered even if a future
-	// SQLite build renames a sidecar pattern. gitCommit additionally skips
-	// every approval-ledger path at staging time (isApprovalDBPath) so a
-	// ledger update can never enter a commit, even when a stale or
-	// hand-edited .gitignore failed to ignore the file.
-	_ignore               = ".archive\nCONFIG*\nLogs\napproval.db\napproval.db-shm\napproval.db-wal\n"
+	// history. The approval ledger lives in the dedicated .db directory
+	// (<store>/.db) and comprises three SQLite files — approval.db (main
+	// database), approval.db-wal (write-ahead log), and approval.db-shm
+	// (shared memory index). The ".db/" entry ignores that whole directory
+	// (for the opnborg commit cycle AND for manual git commands), and the
+	// three explicit filenames additionally cover a legacy root-level
+	// ledger and any stale spelling. gitCommit additionally skips every
+	// approval-ledger path at staging time (isApprovalDBPath) so a ledger
+	// update can never enter a commit, even when a stale or hand-edited
+	// .gitignore failed to ignore the file.
+	_ignore               = ".archive\nCONFIG*\nLogs\n.db/\napproval.db\napproval.db-shm\napproval.db-wal\n"
 	_origin               = "origin"
 	_commitMsg            = "opnborg auto update"
 	_authorName           = "OPNBORG-AUTO-COMMIT"
@@ -72,13 +73,15 @@ func gitRepo(path string) (*git.Repository, error) {
 // missing, so the archive/history files, the symlink targets, the logs, and
 // the on-disk security-approval ledger stay out of the commit history. When a
 // .gitignore already exists it is reconciled rather than clobbered: the
-// reconcile ensures the three approval-ledger ignore lines (approval.db,
-// approval.db-wal, approval.db-shm) are present so the ledger database and its
-// SQLite WAL sidecars are never added, evaluated, or committed by the opnborg
-// commit cycle. This migration matters because older opnborg releases used a
-// glob ("approval.db*") or omitted the sidecars; the canonical form now lists
-// all three files explicitly. All other lines (including operator-added
-// custom ignores) are preserved.
+// reconcile ensures the ".db/" directory entry plus the three approval-ledger
+// ignore lines (approval.db, approval.db-wal, approval.db-shm) are present so
+// the ledger directory, the ledger database, and its SQLite WAL sidecars are
+// never added, evaluated, or committed — by the opnborg commit cycle or by a
+// manual `git add .`. This migration matters because older opnborg releases
+// used a glob ("approval.db*"), omitted the sidecars, or predate the .db
+// directory; the canonical form now lists the directory and all three files
+// explicitly. All other lines (including operator-added custom ignores) are
+// preserved.
 func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
@@ -95,14 +98,15 @@ func gitEnsureIgnore(config *OPNCall) error {
 
 // reconcileGitignoreApprovalLedger guarantees the .gitignore at ignore
 // carries lines that ignore every file of the security-approval ledger: the
-// main database (approval.db) and both SQLite WAL sidecars (approval.db-wal,
+// dedicated .db directory as a whole (".db/"), the main database
+// (approval.db), and both SQLite WAL sidecars (approval.db-wal,
 // approval.db-shm). When the file already contains a recognised ignore for
-// the ledger (bare filename, sidecar, or trailing-star glob — see
-// ignoresApprovalLedger) it is left untouched; otherwise the three explicit
-// lines are appended on their own rows. Operator-added custom ignores and the
-// canonical archive/CONFIG/Logs lines are always preserved. The file is only
-// rewritten when its content would change, so a clean .gitignore incurs no
-// write.
+// the ledger (directory, bare filename, sidecar, or trailing-star glob — see
+// ignoresApprovalLedger) it is left untouched; otherwise the ".db/" line and
+// the three explicit entries are appended on their own rows.
+// Operator-added custom ignores and the canonical archive/CONFIG/Logs lines
+// are always preserved. The file is only rewritten when its content would
+// change, so a clean .gitignore incurs no write.
 func reconcileGitignoreApprovalLedger(ignore string) error {
 	raw, err := os.ReadFile(ignore)
 	if err != nil {
@@ -112,12 +116,13 @@ func reconcileGitignoreApprovalLedger(ignore string) error {
 		return nil
 	}
 	// Ensure the existing content ends with a newline so the appended lines
-	// land on their own rows, then append the three explicit ledger entries.
+	// land on their own rows, then append the directory entry plus the three
+	// explicit ledger entries.
 	out := string(raw)
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	out += "approval.db\napproval.db-wal\napproval.db-shm\n"
+	out += ".db/\napproval.db\napproval.db-wal\napproval.db-shm\n"
 	return os.WriteFile(ignore, []byte(out), 0660)
 }
 
@@ -161,6 +166,15 @@ func ignoresApprovalLedger(line string) bool {
 		return false
 	}
 	p = strings.TrimPrefix(p, "/")
+	// The dedicated ledger directory ignores the ledger wholesale: a ".db"
+	// or ".db/" pattern matches the directory (and everything inside it) at
+	// any depth, so it always satisfies the check.
+	if p == _approvalDBDir {
+		return true
+	}
+	if dir, ok := strings.CutSuffix(p, "/"); ok && dir == _approvalDBDir {
+		return true
+	}
 	if strings.Contains(p, "/") {
 		// An anchored path pattern is out of scope: the ledger lives at the
 		// store root, so a nested ignore never targets it.
@@ -179,20 +193,30 @@ func ignoresApprovalLedger(line string) bool {
 	return false
 }
 
-// isApprovalDBPath reports whether a worktree path is a file of the
-// security-approval ledger (approval.db) or one of its SQLite WAL sidecars
-// (approval.db-wal, approval.db-shm). The primary guard is the substring
+// isApprovalDBPath reports whether a worktree path belongs to the
+// security-approval ledger: the dedicated .db directory (anything at or
+// below "<store>/.db" at any depth), the ledger database (approval.db), or
+// one of its SQLite WAL sidecars (approval.db-wal, approval.db-shm). The
+// first guard is the .db directory: every path whose first component is
+// ".db", plus any path containing a "/.db/" segment, is excluded wholesale —
+// no file inside the ledger directory may ever be staged or committed,
+// regardless of its filename. The second guard is the substring
 // "approval.db": it matches the main database and every WAL sidecar at any
 // depth in the store ("approval.db", "approval.db-wal", "approval.db-shm",
 // "store/sub/approval.db", "approval.db.bak", ...), which is exactly the
-// "never commit a file containing the string 'approval.db'" guarantee. The
-// base-name fallback additionally catches ledger-style spellings that do not
-// literally contain "approval.db" (e.g. a hypothetical "approval-wal.db")
-// so the protection is strictly broader than the substring alone. gitCommit
-// uses it to skip every approval-ledger path at staging time so a ledger
-// update can never enter a commit, even when a stale or hand-edited .gitignore
-// failed to ignore the file.
+// "never commit a file containing the string 'approval.db'" guarantee — it
+// also covers a legacy root-level ledger written before the .db directory
+// existed. The base-name fallback additionally catches ledger-style
+// spellings that do not literally contain "approval.db" (e.g. a hypothetical
+// "approval-wal.db") so the protection is strictly broader than the
+// substring alone. gitCommit uses it to skip every approval-ledger path at
+// staging time so a ledger update can never enter a commit, even when a
+// stale or hand-edited .gitignore failed to ignore the file.
 func isApprovalDBPath(p string) bool {
+	p = strings.TrimPrefix(p, "./")
+	if p == _approvalDBDir || strings.HasPrefix(p, _approvalDBDir+"/") || strings.Contains(p, "/"+_approvalDBDir+"/") {
+		return true
+	}
 	if strings.Contains(p, _approvalDBName) {
 		return true
 	}
@@ -557,6 +581,13 @@ func gitInit(config *OPNCall) error {
 	}
 	if err := gitEnsureIgnore(config); err != nil {
 		return err
+	}
+	// Relocate a legacy root-level approval ledger (approval.db plus its WAL
+	// sidecars at the store root) into the dedicated .db directory and make
+	// sure the store root holds no ledger leftovers. A failure is logged but
+	// non-fatal: the ledger then simply opens at the canonical .db location.
+	if err := approvalDBMigrate(config.Path); err != nil {
+		displayChan <- []byte("[APPROVAL][DB][MIGRATE][FAIL] " + err.Error())
 	}
 	repo, err := gitRepo(config.Path)
 	if err != nil {

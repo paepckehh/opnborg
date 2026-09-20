@@ -956,9 +956,10 @@ func headFileContent(tree *object.Tree, pth string) (string, error) {
 // commit. When neither Ollama nor OpenAI-compatible generation is enabled (or
 // the change set is entirely Unifi .unf files) the default message _commitMsg
 // is returned so the commit proceeds without any network round-trip. The
-// security-approval ledger (approval.db and its SQLite WAL sidecars) is never
-// part of a changeset: it is gitignored and gitCommit skips every
-// approval-ledger path at staging time, so it never reaches this function.
+// security-approval ledger (.db directory and every approval.db file or
+// SQLite WAL sidecar) is never part of a changeset: it is gitignored and
+// gitCommit skips every approval-ledger path at staging time, so it never
+// reaches this function.
 // When the change set touches any file under the Unifi autoBackup store (a
 // path containing "unifi-autobackup") the model generation is skipped and the
 // commit subject is set to _unifiAutobackupSubject verbatim, since those

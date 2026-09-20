@@ -132,12 +132,40 @@ The `BorgAUDIT` tile and `/audit?range=` page expose the storage repo git histor
 
 ### Security-approval ledger (`approval.go`, `approval-http.go`)
 
-A single on-disk SQLite database (`approval.db`, co-located with `config.Path`) tracks every opnborg-authored git commit whose security-impact tag is above `low`/`none`/`backup` (i.e. `medium` / `high` / `critical`). For each tracked commit the ledger records the full git hash, severity, headline, timestamp, and an approval state toggleable from the BorgAUDIT page. Toggling to approved records the wall-clock timestamp, source IP, `X-Forwarded-For` chain, and `Remote-User` identity of the operator.
+> ## SECURITY REQUIREMENT — APPROVAL LEDGER, NO EXCEPTIONS
+>
+> The security-approval ledger is a **local-only runtime database** and must
+> **never be committed, pushed, or exposed** — not by the opnborg commit
+> cycle, not by a manual `git add .`, not under any configuration:
+>
+> - The ledger lives in the dedicated `<OPN_PATH>/.db/` directory:
+>   `.db/approval.db` plus its SQLite WAL sidecars `.db/approval.db-wal` /
+>   `.db/approval.db-shm`. **Nothing inside `.db/` may ever be staged,
+>   committed, diffed into an AI prompt, or pushed — not even an unrelated
+>   stray file.**
+> - `gitInit` migrates any legacy root-level `approval.db*` leftovers into
+>   `.db/` at startup and guarantees the store root holds no ledger
+>   leftovers afterwards.
+> - The `.gitignore` must always carry `.db/` plus the three explicit names
+>   `approval.db`, `approval.db-wal`, `approval.db-shm`; `gitEnsureIgnore`
+>   reconciles them on every startup and every `gitCheckIn`.
+> - `isApprovalDBPath` (`git.go`) is the **hardwired code-level guard**:
+>   `gitCommit` skips every path at or below `.db/`, every path containing
+>   `approval.db`, and ledger-style `approval*.db` spellings at staging
+>   time — even when a stale or hand-edited `.gitignore` failed to ignore
+>   the file. **Never weaken or bypass this guard.**
+> - Any change touching the ledger location, migration, ignore policy, or
+>   staging skip MUST keep the regression tests green and extend them:
+>   `TestApprovalDBNeverCommitted`, `TestDBDirContentsNeverCommitted`,
+>   `TestApprovalDBMigrateMovesLegacyRootLedger`, and
+>   `TestGitInitMigratesLegacyLedgerAndOpensIt`.
+
+A single on-disk SQLite database (`.db/approval.db` inside the dedicated `.db` directory under `config.Path`) tracks every opnborg-authored git commit whose security-impact tag is above `low`/`none`/`backup` (i.e. `medium` / `high` / `critical`). For each tracked commit the ledger records the full git hash, severity, headline, timestamp, and an approval state toggleable from the BorgAUDIT page. Toggling to approved records the wall-clock timestamp, source IP, `X-Forwarded-For` chain, and `Remote-User` identity of the operator.
 
 - Uses `modernc.org/sqlite` (pure-Go, CGO-free) so the binary stays `CGO_ENABLED=0`.
-- `approvalDB` is a package-global `*sql.DB` opened from `gitInit` (`git.go`) after repo init, and lazily from the httpd. `approvalBackfillFromHistory` walks the existing commit log on a fresh store.
+- `approvalDB` is a package-global `*sql.DB` opened from `gitInit` (`git.go`) after repo init, and lazily from the httpd. `approvalBackfillFromHistory` walks the existing commit log on a fresh store. `approvalDBMigrate` (called from `gitInit` before the open) relocates a legacy root-level ledger into `.db/` and cleans root leftovers; when a `.db` copy already exists it wins and stale root leftovers are removed.
 - `approvalTrackCommit` is called from `gitCommit` after every commit (idempotent insert). `syncAuditCommitsToLedger` reconciles the ledger with the audit page.
-- The `.gitignore` carries three explicit entries — `approval.db`, `approval.db-wal`, `approval.db-shm` — so the ledger database and its SQLite WAL sidecars are never tracked. `gitEnsureIgnore` reconciles this on every startup (and every `gitCheckIn`), and `gitCommit` skips any path containing `approval.db` at staging time (`isApprovalDBPath`) so a ledger update can never enter a commit even when a stale or hand-edited `.gitignore` failed to ignore the file. A regression test (`TestApprovalDBNeverCommitted`) guards this invariant.
+- The `.gitignore` carries four ledger entries — `.db/` (the whole directory, so a manual `git add .` cannot pick up anything either), `approval.db`, `approval.db-wal`, `approval.db-shm` — so the ledger directory, database, and SQLite WAL sidecars are never tracked. `gitEnsureIgnore` reconciles this on every startup (and every `gitCheckIn`), and `gitCommit` skips at staging time (`isApprovalDBPath`) every path at or below `.db/`, every path containing `approval.db`, and ledger-style `approval*.db` spellings, so a ledger update can never enter a commit even when a stale or hand-edited `.gitignore` failed to ignore the file. Regression tests (`TestApprovalDBNeverCommitted`, `TestDBDirContentsNeverCommitted`) guard this invariant.
 - `POST /approve?hash=<hash>&range=<range>` and `POST /approve-all?range=<range>` toggle approval state and redirect to the audit page. Both are POST-only and wrapped with `requireAdmin` so an unauthenticated client cannot approve commits.
 
 ### OPNsense API endpoints (`transport.go`)
@@ -173,7 +201,11 @@ For a configured `OPN_PATH` (default `.`):
 
 ```
 <OPN_PATH>/
-  .gitignore                         # auto-created: ignores .archive, CONFIG*, Logs, approval.db, approval.db-wal, approval.db-shm
+  .gitignore                         # auto-created: ignores .archive, CONFIG*, Logs, .db/, approval.db, approval.db-wal, approval.db-shm
+  .db/                               # security-approval ledger (SQLite, always gitignored, never committed)
+    approval.db
+    approval.db-wal
+    approval.db-shm
   <server>/
     current.xml                      # regular file holding the latest backup XML (served by the WebUI)
     CONFIG-CURRENT                   # symlink to the latest .archive entry (read by lastSum for SHA-256 compare)
@@ -183,7 +215,7 @@ For a configured `OPN_PATH` (default `.`):
   Logs/current.log                   # rotated by lumberjack (256 MB, 256 backups, 180 d, gzipped)
 ```
 
-`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` opens-or-inits the repo and reconciles `.gitignore` at startup. `gitCheckIn` runs per tick when `config.dirty` is set: `os.Chdir(config.Path)`, status fast-path, path-by-path staging (skipping approval-ledger files via `isApprovalDBPath`), commit. The commit author is `_authorName` (`OPNBORG-AUTO-COMMIT`) unless a model authored the message, in which case `authorFromCommitMessage` (`ollama.go`) uses a sanitised version of the headline. `gitPush` pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`, with host key verification via `OPN_GIT_SSH_HOSTKEY` fingerprint matching (or `InsecureIgnoreHostKey` when unset). `gitGC` runs a best-effort per-tick aggressive repack (`pack.deltaWindow` raised to `_aggressivePackWindow`, 250) consolidating loose objects into a fresh packfile — the native `go-git` equivalent of `git gc --aggressive`. Pruning of unreachable loose objects is deliberately omitted: go-git's `Prune` implementation is prone to errors on repos with rotated packfiles, and the repack alone already consolidates every reachable loose object. All git operations use `go-git` — no external `git` binary.
+`git.go` manages the storage folder as a git repo (opt-in via `OPN_GIT_ENABLE`). `gitInit` opens-or-inits the repo, reconciles `.gitignore`, and migrates a legacy root-level approval ledger into `.db/` at startup. `gitCheckIn` runs per tick when `config.dirty` is set: `os.Chdir(config.Path)`, status fast-path, path-by-path staging (skipping the whole `.db/` directory and every approval-ledger file via `isApprovalDBPath`), commit. The commit author is `_authorName` (`OPNBORG-AUTO-COMMIT`) unless a model authored the message, in which case `authorFromCommitMessage` (`ollama.go`) uses a sanitised version of the headline. `gitPush` pushes via `ssh.NewPublicKeysFromFile` from `OPN_GIT_SSH_KEY`, with host key verification via `OPN_GIT_SSH_HOSTKEY` fingerprint matching (or `InsecureIgnoreHostKey` when unset). `gitGC` runs a best-effort per-tick aggressive repack (`pack.deltaWindow` raised to `_aggressivePackWindow`, 250) consolidating loose objects into a fresh packfile — the native `go-git` equivalent of `git gc --aggressive`. Pruning of unreachable loose objects is deliberately omitted: go-git's `Prune` implementation is prone to errors on repos with rotated packfiles, and the repack alone already consolidates every reachable loose object. All git operations use `go-git` — no external `git` binary.
 
 `checkIntoStore` (`store.go`) resolves every path against `config.Path` and does **not** call `os.Chdir`, so it is safe from the concurrent per-server worker goroutines. The `CONFIG-CURRENT` / `CONFIG-LAST` symlinks use a relative target so the store tree stays portable. The remaining `os.Chdir` call sites are `gitInit` / `gitCheckIn` (both Chdir to `config.Path`) and `startWeb` / `startRSysLog` (startup only, before workers run).
 
@@ -196,7 +228,7 @@ For a configured `OPN_PATH` (default `.`):
 
 ## Testing
 
-The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
+The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), `.db` directory migration (`TestApprovalDBMigrateMovesLegacyRootLedger`, `TestGitInitMigratesLegacyLedgerAndOpensIt`) and the hardwired whole-`.db/`-directory never-committed invariant (`TestDBDirContentsNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
 
 ## Coding Conventions
 

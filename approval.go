@@ -21,7 +21,8 @@ import (
 )
 
 // approval.go manages the security-approval ledger: a single on-disk SQLite
-// database (approval.db, co-located with the backup store) that tracks every
+// database (approval.db, living in the dedicated .db directory inside the
+// backup store) that tracks every
 // opnborg-authored git commit whose Ollama security-impact tag is above
 // "low"/"none"/"backup" (i.e. medium / high / critical). For each tracked
 // commit the ledger records the full git hash, the security severity, the
@@ -38,15 +39,27 @@ import (
 // commit, keyed by the full git commit hash (the unique primary key).
 
 const (
+	// _approvalDBDir is the dedicated directory inside the backup store that
+	// holds the security-approval ledger and nothing else: <storePath>/.db.
+	// Everything inside it is gitignored (see _ignore in git.go) and
+	// hardwire-excluded from commit staging (isApprovalDBPath in git.go): no
+	// file below .db — the ledger database, its SQLite WAL sidecars
+	// (approval.db-wal / approval.db-shm), or any stray file — may ever be
+	// added, evaluated, or committed by the opnborg commit cycle, nor picked
+	// up by a manual `git add .` thanks to the ".db/" .gitignore entry. A
+	// legacy root-level ledger (approval.db at the store root, as written by
+	// older releases) is migrated into .db at startup by approvalDBMigrate.
+	_approvalDBDir = ".db"
 	// _approvalDBName is the on-disk filename of the approval ledger, placed
-	// at the root of the backup store. It is gitignored (see _ignore in
-	// git.go): the ledger is a local-only runtime database and must never be
-	// added, evaluated, or committed by the opnborg commit cycle. The
-	// .gitignore carries an "approval.db*" glob so the main database and its
-	// SQLite WAL sidecars (approval.db-wal / approval.db-shm) all stay
-	// untracked. gitCommit additionally skips every approval-ledger path at
-	// staging time so a ledger update can never enter a commit even if a
-	// stale or hand-edited .gitignore failed to ignore it.
+	// inside the dedicated .db directory of the backup store. It is gitignored
+	// (see _ignore in git.go): the ledger is a local-only runtime database and
+	// must never be added, evaluated, or committed by the opnborg commit cycle.
+	// The .gitignore carries a ".db/" entry plus the explicit approval.db /
+	// approval.db-wal / approval.db-shm names so the main database, its SQLite
+	// WAL sidecars, and every other file of the .db directory stay untracked
+	// even for manual git commands. gitCommit additionally skips every
+	// approval-ledger path at staging time so a ledger update can never enter
+	// a commit even if a stale or hand-edited .gitignore failed to ignore it.
 	_approvalDBName = "approval.db"
 	// _approvalDriver is the database/sql driver name registered by
 	// modernc.org/sqlite (a pure-Go, CGO-free SQLite implementation, so the
@@ -127,11 +140,83 @@ func approvalDBHandle(storePath string) (*sql.DB, error) {
 	return approvalDBOpenLocked(storePath)
 }
 
+// approvalDBPath returns the on-disk location of the approval ledger
+// database inside the given backup store: <storePath>/.db/approval.db. The
+// dedicated .db directory keeps every ledger file (database, WAL sidecars,
+// anything else) out of the git worktree evaluation path; the single source
+// of truth for the location so open, exists, and migration never drift apart.
+func approvalDBPath(storePath string) string {
+	return filepath.Join(storePath, _approvalDBDir, _approvalDBName)
+}
+
+// approvalDBMigrate relocates a legacy root-level approval ledger into the
+// dedicated <storePath>/.db directory and guarantees the store root holds no
+// approval-ledger leftovers afterwards. Older opnborg releases placed
+// approval.db (plus its approval.db-wal / approval.db-shm WAL sidecars)
+// directly at the store root; every startup moves those three files into
+// .db so the root stays clean. When the .db target already exists the fresh
+// .db copy wins and the stale root leftover is removed, so a partially
+// migrated or hand-restored store converges to the canonical layout. A
+// rename failure (e.g. cross-device store) falls back to copy-then-remove.
+// The migration is idempotent: a store without root-level ledger files is a
+// no-op.
+func approvalDBMigrate(storePath string) error {
+	if storePath == "" {
+		return nil
+	}
+	var legacy bool
+	for _, name := range _approvalLedgerNames {
+		if _, err := os.Stat(filepath.Join(storePath, name)); err == nil {
+			legacy = true
+			break
+		}
+	}
+	if !legacy {
+		return nil
+	}
+	dir := filepath.Join(storePath, _approvalDBDir)
+	if err := os.MkdirAll(dir, 0770); err != nil {
+		return fmt.Errorf("approval db dir: %w", err)
+	}
+	for _, name := range _approvalLedgerNames {
+		src := filepath.Join(storePath, name)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		dst := filepath.Join(dir, name)
+		if _, err := os.Stat(dst); err == nil {
+			// The .db copy is the canonical one: drop the stale root leftover.
+			if err := os.Remove(src); err != nil {
+				return fmt.Errorf("cleanup legacy %s: %w", src, err)
+			}
+			continue
+		}
+		if err := os.Rename(src, dst); err == nil {
+			continue
+		}
+		// Rename refused (e.g. cross-device store): copy then remove.
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return fmt.Errorf("read legacy %s: %w", src, err)
+		}
+		if err := os.WriteFile(dst, data, 0660); err != nil {
+			return fmt.Errorf("write %s: %w", dst, err)
+		}
+		if err := os.Remove(src); err != nil {
+			return fmt.Errorf("remove legacy %s: %w", src, err)
+		}
+	}
+	return nil
+}
+
 // approvalDBOpenLocked is the core of approvalDBOpen; it assumes
 // approvalDBMu is already held. approvalDBHandle uses it directly so the whole
 // check-open-reuse sequence is one critical section.
 func approvalDBOpenLocked(storePath string) (*sql.DB, error) {
-	dbPath := filepath.Join(storePath, _approvalDBName)
+	dbPath := approvalDBPath(storePath)
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0770); err != nil {
+		return nil, fmt.Errorf("approval db dir: %w", err)
+	}
 	if approvalDB != nil {
 		if approvalDBAt == dbPath {
 			return approvalDB, nil
@@ -156,13 +241,14 @@ func approvalDBOpenLocked(storePath string) (*sql.DB, error) {
 }
 
 // approvalDBExists reports whether the on-disk approval ledger file already
-// exists at the root of the backup store. It is used by gitInit to detect a
-// first-time ledger creation so the full storage-repo git history can be
-// scanned once to backfill every pre-existing security-relevant commit into
-// the freshly-created ledger. A stat error other than NotExist is treated as
-// "does not exist" so a transient FS problem never blocks the open.
+// exists in the dedicated .db directory of the backup store. It is used by
+// gitInit (after approvalDBMigrate has relocated any legacy root-level
+// ledger) to detect a first-time ledger creation so the full storage-repo git
+// history can be scanned once to backfill every pre-existing security-relevant
+// commit into the freshly-created ledger. A stat error other than NotExist is
+// treated as "does not exist" so a transient FS problem never blocks the open.
 func approvalDBExists(storePath string) bool {
-	_, err := os.Stat(filepath.Join(storePath, _approvalDBName))
+	_, err := os.Stat(approvalDBPath(storePath))
 	return err == nil
 }
 

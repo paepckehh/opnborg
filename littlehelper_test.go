@@ -2402,7 +2402,7 @@ func TestGitEnsureIgnoreEnsuresApprovalLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\napproval.db\napproval.db-wal\napproval.db-shm\n"
+	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n.db/\napproval.db\napproval.db-wal\napproval.db-shm\n"
 	if string(got) != want {
 		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
 	}
@@ -2464,6 +2464,9 @@ func TestIgnoresApprovalLedger(t *testing.T) {
 		"approval-db-shm":       {"approval.db-shm", true},
 		"approval-db-wal-slash": {"/approval.db-wal", true},
 		"approval-db-glob":      {"approval.db*", true},
+		"db-dir":                {".db", true},
+		"db-dir-slash":          {".db/", true},
+		"db-dir-anchored":       {"/.db/", true},
 		"blank":                 {"", false},
 		"whitespace":            {"   ", false},
 		"comment":               {"# approval.db", false},
@@ -3383,6 +3386,13 @@ func TestIsApprovalDBPath(t *testing.T) {
 		"approval-shm-db":     {"approval-shm.db", true},
 		"approval-wal-db":     {"approval-wal.db", true},
 		"nested-approval-db":  {"store/sub/approval.db", true},
+		"db-dir":              {".db", true},
+		"db-dir-file":         {".db/anything.txt", true},
+		"db-dir-ledger":       {".db/approval.db", true},
+		"db-dir-wal":          {".db/approval.db-wal", true},
+		"db-dir-shm":          {".db/approval.db-shm", true},
+		"db-dir-nested":       {"nested/.db/file", true},
+		"db-dir-dot-slash":    {"./.db/approval.db", true},
 		"xml":                 {"fw01.lan/current.xml", false},
 		"unf":                 {"unifi-autobackup/current.unf", false},
 		"gitignore":           {".gitignore", false},
@@ -3658,7 +3668,7 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 			t.Fatalf("read gitignore: %v", err)
 		}
 		body := string(raw)
-		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+		for _, name := range []string{".db/", "approval.db", "approval.db-wal", "approval.db-shm"} {
 			if !strings.Contains(body, name) {
 				t.Errorf(".gitignore missing %q: got %q", name, body)
 			}
@@ -3731,8 +3741,19 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<b/>"), 0660); err != nil {
 			t.Fatalf("write xml2: %v", err)
 		}
+		// Write all three ledger files in the canonical .db directory (plus a
+		// stray non-ledger file there), legacy root-level leftovers, and the
+		// XML change above.
+		if err := os.MkdirAll(filepath.Join(store, ".db"), 0770); err != nil {
+			t.Fatalf("mkdir .db: %v", err)
+		}
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm", "stray-note.txt"} {
+			if err := os.WriteFile(filepath.Join(store, ".db", name), []byte("ledger-blob-"+name), 0660); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
 		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
-			if err := os.WriteFile(filepath.Join(store, name), []byte("ledger-blob-"+name), 0660); err != nil {
+			if err := os.WriteFile(filepath.Join(store, name), []byte("legacy-"+name), 0660); err != nil {
 				t.Fatalf("write %s: %v", name, err)
 			}
 		}
@@ -3764,6 +3785,24 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 				t.Errorf("%s must never be committed into the HEAD tree", name)
 			}
 		}
+		// Stronger: nothing under the .db directory (ledger files and stray
+		// files alike) may ever appear anywhere in the HEAD tree.
+		iter := tree.Files()
+		for {
+			f, err := iter.Next()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					t.Fatalf("tree files: %v", err)
+				}
+				break
+			}
+			if isApprovalDBPath(f.Name) {
+				t.Errorf("approval-ledger path %q must never be committed into the HEAD tree", f.Name)
+			}
+			if strings.HasPrefix(f.Name, ".db/") || f.Name == ".db" {
+				t.Errorf("path %q inside the .db ledger directory must never be committed into the HEAD tree", f.Name)
+			}
+		}
 		// The real XML change must have landed.
 		xmlEntry, err := tree.FindEntry("fw01.lan/current.xml")
 		if err != nil {
@@ -3786,6 +3825,363 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 			t.Fatalf("xml change not committed: HEAD blob = %q, want %q", string(xmlGot), "<b/>")
 		}
 	})
+}
+
+// TestApprovalDBMigrateMovesLegacyRootLedger verifies the startup migration
+// relocates a legacy root-level approval ledger (approval.db plus its
+// approval.db-wal / approval.db-shm WAL sidecars) into the dedicated .db
+// directory, preserving file content, leaving no leftovers in the store root,
+// and converging a partially migrated or hand-restored store to the canonical
+// layout (the .db copy wins, stale root leftovers are removed). The migration
+// is idempotent: a second run over a clean store is a no-op.
+func TestApprovalDBMigrateMovesLegacyRootLedger(t *testing.T) {
+	ensureDisplayDrained(t)
+
+	t.Run("moves-all-three-and-cleans-root", func(t *testing.T) {
+		store := t.TempDir()
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if err := os.WriteFile(filepath.Join(store, name), []byte("legacy-"+name), 0660); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
+		if err := approvalDBMigrate(store); err != nil {
+			t.Fatalf("approvalDBMigrate: %v", err)
+		}
+		for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+			if _, err := os.Stat(filepath.Join(store, name)); err == nil {
+				t.Errorf("legacy root leftover %s must be removed from the store root", name)
+			}
+			got, err := os.ReadFile(filepath.Join(store, _approvalDBDir, name))
+			if err != nil {
+				t.Fatalf("read migrated %s: %v", name, err)
+			}
+			if string(got) != "legacy-"+name {
+				t.Errorf("migrated %s content = %q, want %q", name, got, "legacy-"+name)
+			}
+		}
+		// Idempotent: a second migration over the clean store is a no-op.
+		if err := approvalDBMigrate(store); err != nil {
+			t.Fatalf("approvalDBMigrate (2nd): %v", err)
+		}
+	})
+
+	t.Run("db-copy-wins-over-root-leftover", func(t *testing.T) {
+		store := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(store, _approvalDBDir), 0770); err != nil {
+			t.Fatalf("mkdir .db: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, _approvalDBDir, "approval.db"), []byte("canonical"), 0660); err != nil {
+			t.Fatalf("write canonical: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, "approval.db"), []byte("stale-root"), 0660); err != nil {
+			t.Fatalf("write stale root: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(store, "approval.db-wal"), []byte("stale-wal"), 0660); err != nil {
+			t.Fatalf("write stale wal: %v", err)
+		}
+		if err := approvalDBMigrate(store); err != nil {
+			t.Fatalf("approvalDBMigrate: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(store, _approvalDBDir, "approval.db"))
+		if err != nil {
+			t.Fatalf("read canonical: %v", err)
+		}
+		if string(got) != "canonical" {
+			t.Errorf("canonical .db copy was clobbered by the stale root leftover: got %q", got)
+		}
+		if _, err := os.Stat(filepath.Join(store, "approval.db")); err == nil {
+			t.Errorf("stale root approval.db must be removed")
+		}
+		gotWal, err := os.ReadFile(filepath.Join(store, _approvalDBDir, "approval.db-wal"))
+		if err != nil {
+			t.Fatalf("read migrated wal: %v", err)
+		}
+		if string(gotWal) != "stale-wal" {
+			t.Errorf("root wal must be migrated when no .db target exists: got %q", gotWal)
+		}
+	})
+
+	t.Run("no-legacy-is-noop", func(t *testing.T) {
+		store := t.TempDir()
+		if err := os.WriteFile(filepath.Join(store, "current.xml"), []byte("<x/>"), 0660); err != nil {
+			t.Fatalf("write xml: %v", err)
+		}
+		if err := approvalDBMigrate(store); err != nil {
+			t.Fatalf("approvalDBMigrate: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(store, _approvalDBDir)); err == nil {
+			t.Errorf("no .db directory must be created when no legacy ledger exists")
+		}
+	})
+}
+
+// TestGitInitMigratesLegacyLedgerAndOpensIt verifies the full startup path:
+// gitInit relocates a legacy root-level approval ledger into the .db
+// directory, the ledger then opens from the canonical location, the schema is
+// intact (rows can be written and read back), and the store root holds no
+// ledger leftovers afterwards.
+func TestGitInitMigratesLegacyLedgerAndOpensIt(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd); approvalClose() })
+
+	store := t.TempDir()
+	// Seed a real ledger at the legacy root location so the migration must
+	// preserve actual SQLite data, not just a placeholder file.
+	legacy := t.TempDir()
+	db, err := approvalDBOpen(legacy)
+	if err != nil {
+		t.Fatalf("open legacy ledger: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO approval (commit_hash, approved, severity, commit_subject) VALUES (?, 0, ?, ?)`,
+		"0123456789012345678901234567890123456789", "medium", "legacy subject"); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	approvalClose()
+	for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+		src := filepath.Join(legacy, _approvalDBDir, name)
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			t.Fatalf("read legacy %s: %v", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(store, name), data, 0660); err != nil {
+			t.Fatalf("write legacy %s into store root: %v", name, err)
+		}
+	}
+
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm"} {
+		if _, err := os.Stat(filepath.Join(store, name)); err == nil {
+			t.Errorf("legacy root leftover %s must be migrated away from the store root", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(store, _approvalDBDir, _approvalDBName)); err != nil {
+		t.Fatalf("migrated ledger missing at .db/approval.db: %v", err)
+	}
+	migrated, err := approvalDBHandle(store)
+	if err != nil {
+		t.Fatalf("approvalDBHandle: %v", err)
+	}
+	var subject string
+	if err := migrated.QueryRow(`SELECT commit_subject FROM approval WHERE commit_hash = ?`,
+		"0123456789012345678901234567890123456789").Scan(&subject); err != nil {
+		t.Fatalf("migrated ledger lost its data: %v", err)
+	}
+	if subject != "legacy subject" {
+		t.Errorf("migrated row subject = %q, want %q", subject, "legacy subject")
+	}
+}
+
+// TestDBDirContentsNeverCommitted is the hardwire regression test for the
+// .db ledger directory: NOTHING below <store>/.db may ever be committed —
+// not the ledger database, not the WAL sidecars, not even an unrelated stray
+// file. It runs against a hand-edited .gitignore stripped of every
+// .db/approval entry so the only thing keeping the directory out of commits
+// is gitCommit's hardwired isApprovalDBPath skip. A pure .db changeset must
+// be a clean no-op (no commit), and a mixed .db + XML changeset must commit
+// only the XML.
+func TestDBDirContentsNeverCommitted(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Hand-craft a .gitignore without any ledger ignore and seed it in the
+	// initial commit, so nothing but the hardwired code guard keeps .db
+	// content out of later commits (gitInit/gitCheckIn would reconcile the
+	// ignore lines back in; this test deliberately bypasses them).
+	store := t.TempDir()
+	if err := os.WriteFile(filepath.Join(store, _gitignore), []byte(".archive\nCONFIG*\nLogs\n"), 0660); err != nil {
+		t.Fatalf("write gitignore: %v", err)
+	}
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if _, err := wtree.Add(_gitignore); err != nil {
+		t.Fatalf("add gitignore: %v", err)
+	}
+	if _, err := wtree.Commit("seed", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "seed", Email: "test@opnborg", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("seed commit: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(store, _approvalDBDir), 0770); err != nil {
+		t.Fatalf("mkdir .db: %v", err)
+	}
+	for _, name := range []string{"approval.db", "approval.db-wal", "approval.db-shm", "stray.txt"} {
+		if err := os.WriteFile(filepath.Join(store, _approvalDBDir, name), []byte("blob-"+name), 0660); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	// Subcase 1: a pure .db changeset must not produce a commit. The bare
+	// .gitignore means the untracked .db files DO surface in the worktree
+	// status, so this exercises gitCommit's hardwired skip, not the
+	// gitignore layer.
+	status, err := wtree.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	var inStatus int
+	for p := range status {
+		if strings.HasPrefix(p, _approvalDBDir+"/") {
+			inStatus++
+		}
+	}
+	if inStatus == 0 {
+		t.Fatalf("test setup broken: .db files must appear in the worktree status against the bare .gitignore")
+	}
+	committed, err := gitCommit(config, repo)
+	if err != nil {
+		t.Fatalf("gitCommit pure .db: %v", err)
+	}
+	if committed {
+		t.Fatalf("pure .db changeset must not produce a commit")
+	}
+
+	// Subcase 2: a mixed .db + XML changeset commits only the XML.
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	committed, err = gitCommit(config, repo)
+	if err != nil {
+		t.Fatalf("gitCommit mixed: %v", err)
+	}
+	if !committed {
+		t.Fatalf("mixed changeset with real XML must produce a commit")
+	}
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Head: %v", err)
+	}
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	tree, err := headCommit.Tree()
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	iter := tree.Files()
+	for {
+		f, err := iter.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("tree files: %v", err)
+			}
+			break
+		}
+		if strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir || isApprovalDBPath(f.Name) {
+			t.Errorf("path %q from the .db ledger directory must never be committed into the HEAD tree", f.Name)
+		}
+	}
+	if _, err := tree.FindEntry("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("xml entry missing: %v", err)
+	}
+
+	// Subcase 3: manual staging straight through the worktree API (the
+	// equivalent of a hand-run `git add .db/approval.db`) then a subsequent
+	// gitCommit pass must not carry the ledger content into a new commit:
+	// gitCommit stages from the status map and skips every .db path.
+	if err := os.WriteFile(filepath.Join(store, _approvalDBDir, "approval.db"), []byte("blob-v2-must-not-commit"), 0660); err != nil {
+		t.Fatalf("write approval.db v2: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<b/>"), 0660); err != nil {
+		t.Fatalf("write xml2: %v", err)
+	}
+	committed, err = gitCommit(config, repo)
+	if err != nil {
+		t.Fatalf("gitCommit second pass: %v", err)
+	}
+	if !committed {
+		t.Fatalf("second pass with real XML must produce a commit")
+	}
+	head2, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Head (2): %v", err)
+	}
+	headCommit2, err := repo.CommitObject(head2.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject (2): %v", err)
+	}
+	tree2, err := headCommit2.Tree()
+	if err != nil {
+		t.Fatalf("Tree (2): %v", err)
+	}
+	iter2 := tree2.Files()
+	for {
+		f, err := iter2.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("tree files (2): %v", err)
+			}
+			break
+		}
+		if strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir || isApprovalDBPath(f.Name) {
+			t.Errorf("path %q from the .db ledger directory must never be committed into the HEAD tree (2)", f.Name)
+		}
+	}
+	xmlEntry, err := tree2.FindEntry("fw01.lan/current.xml")
+	if err != nil {
+		t.Fatalf("xml entry (2) missing: %v", err)
+	}
+	xmlBlob, err := repo.BlobObject(xmlEntry.Hash)
+	if err != nil {
+		t.Fatalf("xml blob: %v", err)
+	}
+	xr, err := xmlBlob.Reader()
+	if err != nil {
+		t.Fatalf("xml reader: %v", err)
+	}
+	xmlGot, err := io.ReadAll(xr)
+	xr.Close()
+	if err != nil {
+		t.Fatalf("xml readall: %v", err)
+	}
+	if string(xmlGot) != "<b/>" {
+		t.Fatalf("xml change not committed: HEAD blob = %q, want %q", string(xmlGot), "<b/>")
+	}
+
+	// Subcase 4 (gitignore layer, manual `git add .` safety): once
+	// gitEnsureIgnore reconciles the .gitignore back to the canonical form,
+	// newly created .db files never even surface in the worktree status, so
+	// a hand-run `git add .` cannot pick them up either.
+	if err := gitEnsureIgnore(config); err != nil {
+		t.Fatalf("gitEnsureIgnore: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, _approvalDBDir, "fresh-stray.txt"), []byte("fresh"), 0660); err != nil {
+		t.Fatalf("write fresh stray: %v", err)
+	}
+	status2, err := wtree.Status()
+	if err != nil {
+		t.Fatalf("status (2): %v", err)
+	}
+	for p := range status2 {
+		if strings.HasPrefix(p, _approvalDBDir+"/") || p == _approvalDBDir || isApprovalDBPath(p) {
+			t.Errorf("path %q from the .db ledger directory must be gitignored and absent from the worktree status", p)
+		}
+	}
 }
 
 // TestOllamaPromptContainsDiffAndContract verifies the assembled prompt carries
@@ -7980,7 +8376,7 @@ func TestAuditApproveControlsLockedInMonitoringMode(t *testing.T) {
 	if err := gitInit(config); err != nil {
 		t.Fatalf("gitInit: %v", err)
 	}
-	t.Cleanup(func() { approvalClose(); _ = os.RemoveAll(filepath.Join(store, _approvalDBName)) })
+	t.Cleanup(func() { approvalClose(); _ = os.RemoveAll(filepath.Join(store, _approvalDBDir)) })
 
 	armTestAuth(t, "pw-123456")
 	adminEnabled.Store(false)
