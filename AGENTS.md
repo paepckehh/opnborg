@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.228`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.229`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -20,10 +20,10 @@ Reference guide for AI agents working in the `opnborg` repository.
 
 ## Project Summary
 
-`opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary accepts only `-v` / `-h`. Output goes to stdout via an internal `displayChan` log engine, and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
+`opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary accepts only `-v` / `-h`. `-v` prints the SemVer plus the embedded VCS commit, and the same version/commit pair is logged by `main.go` at startup. Output goes to stdout via an internal `displayChan` log engine (ANSI-colored per status tag when stdout is a tty), and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
 
 - Module path: `paepcke.de/opnborg`
-- Go version: see `go.mod` (currently `1.27.1`); CI uses `go-version-file: go.mod`
+- Go version: see `go.mod` (currently `1.27.2`); CI uses `go-version-file: go.mod`
 - Entry point: `cmd/opnborg/main.go` -> `opnborg.Start(config)` -> `srv(config)`
 - License: BSD 3-Clause
 
@@ -46,7 +46,7 @@ go install paepcke.de/opnborg/cmd/opnborg@main
 
 - Releases are tag-driven (`v*`). Pushing a `v*` tag triggers `.github/workflows/release.yml` (goreleaser cross-compile via `.goreleaser.yml`) and `.github/workflows/ghcr.yml` (build/push `ghcr.io/paepckehh/opnborg:latest`).
 - goreleaser targets linux/freebsd/darwin/windows on amd64 + arm64, `CGO_ENABLED=0`.
-- **Before tagging**, bump `SemVer` in `api.go` to match the new tag. `SemVer` is the single source of truth for the version string (CLI banner + WebUI footer). The Makefile's `-ldflags -X paepcke.de/opnborg/internal/version.Version=...` is a no-op (no `internal/version` package exists).
+- **Before tagging**, bump `SemVer` in `api.go` to match the new tag. `SemVer` is the single source of truth for the version string (CLI banner + WebUI footer) and must equal the newest git tag on a released commit. `make build` injects the newest tag via `-ldflags "-X paepcke.de/opnborg.SemVer=$(git describe --tags --abbrev=0)"` (empty when no tag exists, which is a no-op). `TestSemVerFormatAndTagSync` fails if the constant lags behind a published tag; `TestDocsShowCurrentSemVer` fails if the `docs/` artwork still shows an old version.
 
 ## Architecture & Control Flow
 
@@ -60,7 +60,7 @@ All package files live at the repository root (`/`) under `package opnborg`. `cm
 
 ### `srv()` main loop (`srv.go`)
 
-- Spins up goroutines for: display/log engine (`startLog`), background timer, internal HTTP server (`startWeb`), RFC5424 syslog server (`startRSysLog`), Unifi backup (`srvUnifiBackup`), Unifi asset export (`srvUnifiExport`), and Unifi autoBackup folder watch (`srvUnifiWatch`), each guarded by its respective `config.*.Enable` flag.
+- Spins up goroutines for: display/log engine (`startLog`), background timer, internal HTTP server (`startWeb`), RFC5424 syslog server (`startRSysLog`, `rsyslog-srv.go`), Unifi backup (`srvUnifiBackup`), Unifi asset export (`srvUnifiExport`), and Unifi autoBackup folder watch (`srvUnifiWatch`), each guarded by its respective `config.*.Enable` flag.
 - When `config.Git.Enable`, `gitInit(config)` runs once at startup (before the first worker pass) to open-or-init the storage repo and write `.gitignore`.
 - Builds the `servers` slice by splitting `config.Targets` on commas; each entry may carry an asset tag separated by `#` (e.g. `opn01.lan#edge-1`). The host/tag split is centralised in `parseServerTag` (`srv.go`), used by both the hive status-tile init and the worker dispatch.
 - Main loop body per tick:
@@ -179,7 +179,7 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 
 ## Configuration Conventions (ENV)
 
-- **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`). To disable, unset the var.
+- **Boolean env vars are presence-based, not value-based**: setting `OPN_DEBUG=0`, `OPN_DEBUG=false`, or `OPN_DEBUG=1` all evaluate to `true` via `isEnv()` (`littlehelper.go`). To disable, unset the var. The same rule applies to the `OPN_NOCOLOR` display opt-out.
 - `OPN_NODAEMON` inverts the daemon default (`Daemon = !isEnv("OPN_NODAEMON")`). In one-shot mode the httpd, rsyslog server, and Unifi goroutines are not armed.
 - **Git repo** is opt-in via `OPN_GIT_ENABLE` (presence-based). `OPN_GIT_UPSTREAM` sets an upstream SSH git URL; `OPN_GIT_SSH_KEY` points at the PEM private key; `OPN_GIT_SSH_HOSTKEY` sets the upstream's SHA-256 fingerprint (`SHA256:base64...`) for host key verification — when unset, host key verification is skipped (`InsecureIgnoreHostKey`). All validated in `validateGitConfig` (`git.go`). (`OPN_NOGIT` is no longer honored.)
 - **Ollama-assisted commit messages** (opt-in via `OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`). Before each non-`.unf` commit, an enriched diff (commit summary + per-file metadata + widened hunks + detected OPNsense XML sections + full small-file content, capped at 256 KB) is POSTed to `<OLLAMA_DESC_URL>/api/generate` (`stream=false`, 240 s timeout, 5 retries, 2 s backoff). The model's verbatim response becomes the commit message: a short headline, a brief security summary, and a trailing `tag: <severity>[, needs-review]` line. `.unf`-only commits and any model failure fall back to the default message (`opnborg auto update`). Implemented in `ollama.go`, wired into `gitCommit` (`git.go`).
@@ -228,20 +228,20 @@ For a configured `OPN_PATH` (default `.`):
 
 ## Testing
 
-The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), `.db` directory migration (`TestApprovalDBMigrateMovesLegacyRootLedger`, `TestGitInitMigratesLegacyLedgerAndOpensIt`) and the hardwired whole-`.db/`-directory never-committed invariant (`TestDBDirContentsNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
+The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, the display color classifier (`TestColorizeLine`), SemVer/tag sync (`TestSemVerFormatAndTagSync`), the README artwork version guard (`TestDocsShowCurrentSemVer`), URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), `.db` directory migration (`TestApprovalDBMigrateMovesLegacyRootLedger`, `TestGitInitMigratesLegacyLedgerAndOpensIt`) and the hardwired whole-`.db/`-directory never-committed invariant (`TestDBDirContentsNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
 
 ## Coding Conventions
 
 - One package (`opnborg`) at the repo root; `package main` only under `cmd/opnborg/`.
 - File naming: kebab-case `topic.go`. Struct types are PascalCase; exported fields are PascalCase with inline `// comment` docs (see `OPNCall` in `api.go`).
 - Constants and unexported globals are grouped at the top of the relevant file (often with `_` prefix like `_app`, `_lf`, `_archive`).
-- Logging: never use `log`/`fmt.Println` in daemon hot paths — send `[]byte` to the `displayChan` channel. `fmt.Println` is acceptable in `srvHttpd.go` startup error paths only.
+- Logging: never use `log`/`fmt.Println` in daemon hot paths — send `[]byte` to the `displayChan` channel. `fmt.Println` is acceptable in `srvHttpd.go` startup error paths only. The display engine colorizes lines by tag (`colorizeLine` in `littlehelper.go`) only when stdout is a character device and neither `NO_COLOR` nor `OPN_NOCOLOR` is set; the raw, uncolored payload is what reaches `appendProgress`, so the WebUI progress console and tests never see escape sequences.
 - HTTP handlers return `http.Handler` via `http.HandlerFunc` closure; apply `addSecurityHeader` at `mux.Handle` registration time.
 - `config.dirty` is an `atomic.Bool` — always `.Store()`/`.Load()`, never `=`.
 - `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
-- README artwork lives in `docs/` as hand-built SVG (no binary screenshots): `hero-{dark,light}.svg` plus `screenshot-{hive,audit,backup}-{dark,light}.svg`. The README embeds them with `<picture>` + `prefers-color-scheme`, so every asset must ship as a matched dark/light pair and stay within a 1280 px-wide banner or 1200 px-wide screenshot canvas. Keep the pair in sync when editing either file.
+- README artwork lives in `docs/` as hand-built SVG (no binary screenshots): `hero-{dark,light}.svg` plus `screenshot-{hive,audit,backup,console}-{dark,light}.svg`. The README embeds them with `<picture>` + `prefers-color-scheme`, so every asset must ship as a matched dark/light pair and stay within a 1280 px-wide banner or 1200 px-wide screenshot canvas. Keep the pair in sync when editing either file.
 
 ## Gotchas
 

@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	gitcfg "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	gitobject "github.com/go-git/go-git/v5/plumbing/object"
 	xssh "golang.org/x/crypto/ssh"
 )
@@ -9180,4 +9182,156 @@ func TestFaviconLinkRootAbsolute(t *testing.T) {
 	// Since _head is only populated during Setup(), we verify the constant
 	// in the source by checking that setup.go writes /favicon.ico.
 	// This is a source-level guard.
+}
+
+// sourceDir returns the package source directory. Tests change the process
+// working directory (git init/checkin tests), so documentation checks must
+// resolve paths against the source location instead of the current directory.
+func sourceDir(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test source location")
+	}
+	return filepath.Dir(file)
+}
+
+// semverParts parses "vMAJOR.MINOR.PATCH" into its numeric segments.
+func semverParts(v string) ([3]int, bool) {
+	var out [3]int
+	if !regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(v) {
+		return out, false
+	}
+	fields := strings.Split(strings.TrimPrefix(v, "v"), ".")
+	for i, f := range fields {
+		n, err := strconv.Atoi(f)
+		if err != nil {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// TestSemVerFormatAndTagSync verifies that SemVer is well formed and never
+// behind the newest git tag. On a released commit the tag and the constant are
+// identical; between bumping SemVer and creating the tag the constant may be up
+// to one patch ahead, but it must never lag behind a published tag.
+func TestSemVerFormatAndTagSync(t *testing.T) {
+	cur, ok := semverParts(SemVer)
+	if !ok {
+		t.Fatalf("SemVer %q is not a valid vMAJOR.MINOR.PATCH tag", SemVer)
+	}
+
+	root := sourceDir(t)
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		t.Skip("not a git checkout: cannot compare SemVer with git tags")
+	}
+	repo, err := git.PlainOpen(root)
+	if err != nil {
+		t.Skipf("open repo: %v", err)
+	}
+	refs, err := repo.References()
+	if err != nil {
+		t.Skipf("list refs: %v", err)
+	}
+
+	var latest [3]int
+	var latestTag string
+	if err := refs.ForEach(func(ref *plumbing.Reference) error {
+		if !ref.Name().IsTag() {
+			return nil
+		}
+		name := ref.Name().Short()
+		parts, ok := semverParts(name)
+		if !ok {
+			return nil
+		}
+		if latestTag == "" || semverLess(latest, parts) {
+			latest, latestTag = parts, name
+		}
+		return nil
+	}); err != nil {
+		t.Skipf("iterate refs: %v", err)
+	}
+	if latestTag == "" {
+		t.Skip("no semver tags in repo yet")
+	}
+	if semverLess(cur, latest) {
+		t.Fatalf("SemVer %q is behind the newest git tag %q: bump api.go before tagging", SemVer, latestTag)
+	}
+}
+
+// semverLess reports whether a sorts before b.
+func semverLess(a, b [3]int) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// TestColorizeLine verifies the display classifier: known status tags get the
+// matching ANSI color, unknown lines stay untouched, and a disabled engine
+// never emits escape sequences.
+func TestColorizeLine(t *testing.T) {
+	cases := []struct {
+		line  string
+		color string
+	}{
+		{"[OPNBORG-API][ERROR][FAIL] boom", _colorRed},
+		{"[OPNBORG-API][BACKUP][ERROR][FAIL:UNABLE-TO-FETCH]", _colorRed},
+		{"[OPNBORG-API][AUTH][LOGIN][DENIED] wait=10s", _colorRed},
+		{"[OPNBORG-API][FETCH][WARN] slow", _colorYellow},
+		{"[OPNBORG-API][BACKUP][OK][SUCCESS:XML-STORE-CHECKIN-OF-MODIFIED-XML]", _colorGreen},
+		{"[OPNBORG-API][FINISH][BACKUP][ALL]", _colorGreen},
+		{"[OPNBORG-API][STARTING][OPNBORG][v0.1.229][DAEMON-MODE]", _colorCyan},
+		{"[OPNBORG-API][GIT][REPO][COMMIT][abc123] opnborg auto update", ""},
+	}
+	for _, tc := range cases {
+		got := colorizeLine([]byte(tc.line), true)
+		if tc.color == "" {
+			if got != tc.line {
+				t.Errorf("ungrouped line changed: got %q want %q", got, tc.line)
+			}
+			continue
+		}
+		if got != tc.color+tc.line+_colorReset {
+			t.Errorf("colorize %q: got %q want %q", tc.line, got, tc.color+tc.line+_colorReset)
+		}
+	}
+
+	for _, line := range []string{"[ERROR][FAIL] x", "[STARTING] y", "[OK] z"} {
+		if got := colorizeLine([]byte(line), false); got != line {
+			t.Errorf("disabled colorizer emitted escapes for %q: %q", line, got)
+		}
+	}
+}
+
+// TestDocsShowCurrentSemVer keeps the README artwork in sync with the release
+// version: every shipped screenshot banner must report the current SemVer.
+func TestDocsShowCurrentSemVer(t *testing.T) {
+	files := []string{
+		"docs/hero-dark.svg",
+		"docs/hero-light.svg",
+		"docs/screenshot-hive-dark.svg",
+		"docs/screenshot-hive-light.svg",
+		"docs/screenshot-audit-dark.svg",
+		"docs/screenshot-audit-light.svg",
+		"docs/screenshot-backup-dark.svg",
+		"docs/screenshot-backup-light.svg",
+		"docs/screenshot-console-dark.svg",
+		"docs/screenshot-console-light.svg",
+	}
+	root := sourceDir(t)
+	for _, f := range files {
+		body, err := os.ReadFile(filepath.Join(root, f))
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		if !bytes.Contains(body, []byte(SemVer)) {
+			t.Errorf("%s does not mention the current SemVer %q", f, SemVer)
+		}
+	}
 }

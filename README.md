@@ -14,6 +14,9 @@ A single self-hosted Go daemon that keeps every OPNsense firewall (and optionall
 controller) in a git-tracked, SHA-256 deduplicated archive — then lets a local LLM write the
 security review of every change it makes.
 
+<sub><b>⚡ ESTABLISHED IN THE OPEN SINCE SEPTEMBER 2024</b> · 2 years of continuous public development
+on GitHub · 287 tagged releases · still one binary, still zero runtime dependencies</sub>
+
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
 [![SemVer](https://img.shields.io/github/v/release/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/releases/latest)
@@ -104,6 +107,22 @@ the severity tag, the full unified diff, and the admin account that made the cha
 back to the hive view when the pass completes.
 </details>
 
+<details open>
+<summary><b>🖨️ Real console output — version, commit and colored status lines</b></summary>
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-console-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-console-light.svg">
+  <img src="docs/screenshot-console-dark.svg" width="100%" alt="OPNBORG terminal output showing the startup version and commit, git repo init, auth, per-server backup lines in green, a yellow retry warning and a red fetch error">
+</picture>
+
+Exactly what a pass looks like on a real tty: `[OK]`/`[SUCCESS]`/`[FINISH]` green,
+`[WARN]` yellow, `[ERROR]`/`[FAIL]` red, `[START*]` cyan. Color is emitted only for
+interactive stdout — set `NO_COLOR` or `OPN_NOCOLOR` to pipe plain text.
+`./opnborg -v` prints the same SemVer + build commit shown at startup.
+</details>
+
 ---
 
 ## 🧠 How It Works
@@ -164,6 +183,9 @@ go run paepcke.de/opnborg/cmd/opnborg@main
 Prebuilt binaries: **[Releases](https://github.com/paepckehh/opnborg/releases)** ·
 `go install paepcke.de/opnborg/cmd/opnborg@main`
 Add `OPN_NODAEMON=1` for a single pass instead of the daemon.
+
+`./opnborg -v` prints the release SemVer plus the embedded build commit, and every startup logs
+the same `[VERSION:…][COMMIT:…]` pair — so you always know exactly which artifact is deployed.
 
 <details>
 <summary><b>🐳 Docker / Docker Compose</b> — distroless, <code>linux/amd64</code> + <code>linux/arm64</code></summary>
@@ -231,6 +253,7 @@ file is auto-loaded. Ready-to-use examples live in the repo: `example.sh`,
 | `OPN_EMAIL` | `git@opnborg` | Git commit author email |
 | `OPN_NODAEMON` | — | One-shot mode: single pass, then exit |
 | `OPN_DEBUG` | — | Verbose debug logging |
+| `OPN_NOCOLOR` | — | Disable ANSI colors on stdout (also honors `NO_COLOR`) |
 
 </details>
 

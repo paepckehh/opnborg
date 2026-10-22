@@ -13,12 +13,80 @@ import (
 // Display IO
 //
 
+// ANSI SGR codes used by the display engine. Color is applied only when
+// stdout is a terminal, so piped output, container logs, the WebUI progress
+// ring buffer and test output stay free of escape sequences.
+const (
+	_colorReset  = "\033[0m"
+	_colorRed    = "\033[31m"
+	_colorGreen  = "\033[32m"
+	_colorYellow = "\033[33m"
+	_colorCyan   = "\033[36m"
+)
+
+// colorOn is resolved once at startup: interactive stdout and no explicit
+// opt-out via NO_COLOR or OPN_NOCOLOR (which is presence-based, like every
+// other OPN_* boolean).
+var colorOn = colorEnabled()
+
+// colorEnabled reports whether the display engine should colorize stdout.
+func colorEnabled() bool {
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return false
+	}
+	if isEnv("OPN_NOCOLOR") {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// containsAny reports whether line contains at least one of the needles.
+func containsAny(line string, needles ...string) bool {
+	for _, n := range needles {
+		if strings.Contains(line, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// colorizeLine classifies a display line by its status tags and wraps it in
+// the matching ANSI color. Unknown lines pass through unchanged. The classifier
+// is deliberately tag-based so it never alters the payload the progress ring
+// buffer and syslog consumers rely on.
+func colorizeLine(msg []byte, enabled bool) string {
+	line := string(msg)
+	if !enabled || line == "" {
+		return line
+	}
+	code := ""
+	switch {
+	case containsAny(line, "[ERROR]", "[FAIL", "[EXIT]", "[DENIED]"):
+		code = _colorRed
+	case containsAny(line, "[WARN]"):
+		code = _colorYellow
+	case containsAny(line, "[OK]", "[SUCCESS", "[FINISH]"):
+		code = _colorGreen
+	case containsAny(line, "[STARTING]", "[START]", "[INFO]"):
+		code = _colorCyan
+	}
+	if code == "" {
+		return line
+	}
+	return code + line + _colorReset
+}
+
 // outSlice write messages to stdout in a single write so the display
 // engine never interleaves partial lines under concurrent producers.
 func outSlice(msg []byte, config *OPNCall) {
-	out := make([]byte, 0, len(config.AppName)+len(msg)+1)
+	line := colorizeLine(msg, colorOn)
+	out := make([]byte, 0, len(config.AppName)+len(line)+1)
 	out = append(out, config.AppName...)
-	out = append(out, msg...)
+	out = append(out, line...)
 	out = append(out, '\n')
 	_, _ = os.Stdout.Write(out)
 }
