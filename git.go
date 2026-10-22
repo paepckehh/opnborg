@@ -73,15 +73,15 @@ func gitRepo(path string) (*git.Repository, error) {
 // missing, so the archive/history files, the symlink targets, the logs, and
 // the on-disk security-approval ledger stay out of the commit history. When a
 // .gitignore already exists it is reconciled rather than clobbered: the
-// reconcile ensures the ".db/" directory entry plus the three approval-ledger
-// ignore lines (approval.db, approval.db-wal, approval.db-shm) are present so
-// the ledger directory, the ledger database, and its SQLite WAL sidecars are
-// never added, evaluated, or committed — by the opnborg commit cycle or by a
-// manual `git add .`. This migration matters because older opnborg releases
-// used a glob ("approval.db*"), omitted the sidecars, or predate the .db
-// directory; the canonical form now lists the directory and all three files
-// explicitly. All other lines (including operator-added custom ignores) are
-// preserved.
+// reconcile guarantees the ".db/" directory entry is present so the ledger
+// directory (database, WAL sidecars, and any stray file inside it) is never
+// added, evaluated, or committed — by the opnborg commit cycle or by a manual
+// `git add .`. This migration matters because older opnborg releases placed
+// the ledger files at the store root or used a glob ("approval.db*") that
+// covers the files but not the directory. Existing recognised file patterns
+// are preserved as-is; fresh stores also list approval.db, approval.db-wal and
+// approval.db-shm explicitly. All other lines (including operator-added custom
+// ignores) are preserved.
 func gitEnsureIgnore(config *OPNCall) error {
 	ignore := filepath.Join(config.Path, _gitignore)
 	if _, err := os.Stat(ignore); err == nil {
@@ -97,33 +97,49 @@ func gitEnsureIgnore(config *OPNCall) error {
 }
 
 // reconcileGitignoreApprovalLedger guarantees the .gitignore at ignore
-// carries lines that ignore every file of the security-approval ledger: the
-// dedicated .db directory as a whole (".db/"), the main database
-// (approval.db), and both SQLite WAL sidecars (approval.db-wal,
-// approval.db-shm). When the file already contains a recognised ignore for
-// the ledger (directory, bare filename, sidecar, or trailing-star glob — see
-// ignoresApprovalLedger) it is left untouched; otherwise the ".db/" line and
-// the three explicit entries are appended on their own rows.
+// carries the ".db/" directory entry, which ignores the whole security-approval
+// ledger: the database, both SQLite WAL sidecars, and any stray file inside the
+// directory. When the entry (with or without a leading slash) is already
+// present the file is left untouched, so a clean .gitignore incurs no write;
+// otherwise only that one line is appended. The three ledger file names may
+// already be covered by any recognised spelling (bare name, sidecar, or
+// trailing-star glob — see ignoresApprovalLedger) and are not duplicated.
 // Operator-added custom ignores and the canonical archive/CONFIG/Logs lines
-// are always preserved. The file is only rewritten when its content would
-// change, so a clean .gitignore incurs no write.
+// are always preserved.
 func reconcileGitignoreApprovalLedger(ignore string) error {
 	raw, err := os.ReadFile(ignore)
 	if err != nil {
 		return err
 	}
-	if gitignoreIgnoresApprovalLedger(string(raw)) {
+	out := string(raw)
+	// The ledger file names may already be covered by any recognised spelling
+	// (bare name, sidecars, trailing-star glob — see ignoresApprovalLedger),
+	// and the directory entry subsumes all of them. What must never be
+	// missing is the .db/ directory ignore: without it a stray file in .db/
+	// (or a WAL sidecar not covered by a hand-edited pattern list) could be
+	// picked up by a manual `git add .`. Append only that line when absent.
+	if gitignoreHasLine(out, _approvalDBDir+"/") || gitignoreHasLine(out, _approvalDBDir) {
 		return nil
 	}
-	// Ensure the existing content ends with a newline so the appended lines
-	// land on their own rows, then append the directory entry plus the three
-	// explicit ledger entries.
-	out := string(raw)
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	out += ".db/\napproval.db\napproval.db-wal\napproval.db-shm\n"
-	return os.WriteFile(ignore, []byte(out), 0660)
+	return os.WriteFile(ignore, []byte(out+_approvalDBDir+"/\n"), 0660)
+}
+
+// gitignoreHasLine reports whether body carries the exact ignore pattern
+// want (on its own non-comment line, with an optional leading slash).
+func gitignoreHasLine(body, want string) bool {
+	for line := range strings.SplitSeq(body, "\n") {
+		p := strings.TrimSpace(line)
+		if p == "" || strings.HasPrefix(p, "#") {
+			continue
+		}
+		if strings.TrimPrefix(p, "/") == want {
+			return true
+		}
+	}
+	return false
 }
 
 // gitignoreIgnoresApprovalLedger reports whether a whole .gitignore body

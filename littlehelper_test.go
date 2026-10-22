@@ -173,14 +173,21 @@ func TestCheckPreURL(t *testing.T) {
 	if want := "https://grafana.example.com/d/abc-123"; got.String() != want {
 		t.Errorf("got %q want %q", got.String(), want)
 	}
-	// Empty env var still produces the prefix-only URL (no error).
-	withEnv(t, "OPNBORG_DASH", "", true)
-	got, err = checkPreURL(base, "/d/", "OPNBORG_DASH")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "https://grafana.example.com/d/"; got.String() != want {
-		t.Errorf("empty env: got %q want %q", got.String(), want)
+	// Empty or unset env means "not configured": no URL, matching checkURL,
+	// so no bogus prefix-only dashboard link is rendered.
+	for _, tc := range []struct {
+		name string
+		set  bool
+		val  string
+	}{{"empty", true, ""}, {"unset", false, ""}} {
+		withEnv(t, "OPNBORG_DASH", tc.val, tc.set)
+		got, err = checkPreURL(base, "/d/", "OPNBORG_DASH")
+		if err != nil {
+			t.Fatalf("%s env: %v", tc.name, err)
+		}
+		if got != nil {
+			t.Errorf("%s env: got %q, want nil", tc.name, got.String())
+		}
 	}
 }
 
@@ -2404,7 +2411,7 @@ func TestGitEnsureIgnoreEnsuresApprovalLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n.db/\napproval.db\napproval.db-wal\napproval.db-shm\n"
+	want := ".archive\nCONFIG*\nLogs\n# keep my logs\nmy-stuff/\n.db/\n"
 	if string(got) != want {
 		t.Errorf("reconciled .gitignore = %q, want %q", got, want)
 	}
@@ -2419,9 +2426,10 @@ func TestGitEnsureIgnoreEnsuresApprovalLedger(t *testing.T) {
 }
 
 // TestGitEnsureIgnoreKeepsExistingApprovalLedgerGlobs verifies the reconcile
-// leaves a .gitignore untouched when it already ignores the ledger via any of
-// the recognised spellings (bare filename, sidecars, or a trailing-star glob),
-// so an operator-configured ignore is never duplicated or rewritten.
+// preserves a .gitignore that already ignores the ledger via any recognised
+// spelling (bare filename, sidecars, or a trailing-star glob) and only
+// appends the missing .db/ directory entry — it never duplicates the file
+// patterns the operator already wrote.
 func TestGitEnsureIgnoreKeepsExistingApprovalLedgerGlobs(t *testing.T) {
 	ensureDisplayDrained(t)
 	cwd, _ := os.Getwd()
@@ -2443,8 +2451,8 @@ func TestGitEnsureIgnoreKeepsExistingApprovalLedgerGlobs(t *testing.T) {
 				t.Fatalf("gitEnsureIgnore: %v", err)
 			}
 			got, _ := os.ReadFile(ignorePath)
-			if string(got) != body {
-				t.Errorf("reconciled .gitignore = %q, want unchanged %q", got, body)
+			if string(got) != body+".db/\n" {
+				t.Errorf("reconciled .gitignore = %q, want existing lines plus .db/ = %q", got, body+".db/\n")
 			}
 		})
 	}
@@ -3098,7 +3106,7 @@ func TestGetForceHandlerNonBlocking(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		rr := httptest.NewRecorder()
-		req := &http.Request{Header: http.Header{}}
+		req := httptest.NewRequest("GET", "/force", nil)
 		h.ServeHTTP(rr, req)
 		close(done)
 	}()
@@ -3295,12 +3303,13 @@ func TestGetForceHandlerInjectsForceSeq(t *testing.T) {
 	resetProgressState()
 	// Simulate the template Setup would have built. The dashboard JS reads
 	// the injected FORCE value to detect when its forced pass has run.
-	saved := _forceRedirect
+	savedPage, savedCfg := _forceRedirect, _cfg
 	_forceRedirect = "<html><body>FORCE=%FORCE% force-dash</body></html>"
-	t.Cleanup(func() { _forceRedirect = saved })
+	_cfg = &OPNCall{Daemon: true, Enable: true} // OPN pass can advance the counters
+	t.Cleanup(func() { _forceRedirect, _cfg = savedPage, savedCfg })
 
 	rr := httptest.NewRecorder()
-	req := &http.Request{Header: http.Header{}}
+	req := httptest.NewRequest("GET", "/force", nil)
 	getForceHandler().ServeHTTP(rr, req)
 
 	body := rr.Body.String()
@@ -3677,30 +3686,38 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 		}
 	})
 
-	t.Run("reconcile-adds-all-three-to-stale-gitignore", func(t *testing.T) {
+	t.Run("reconcile-adds-db-dir-to-stale-gitignore", func(t *testing.T) {
 		store := t.TempDir()
 		ignorePath := filepath.Join(store, _gitignore)
-		// A .gitignore that uses the old glob form but not the explicit
-		// entries — reconcile should append the three explicit lines.
+		// A .gitignore that uses the old glob form: it covers the ledger
+		// files but not the .db directory, so reconcile must append ".db/".
 		stale := ".archive\nCONFIG*\nLogs\napproval.db*\n"
 		if err := os.WriteFile(ignorePath, []byte(stale), 0660); err != nil {
 			t.Fatalf("write: %v", err)
 		}
-		// The old glob already covers the ledger, so gitEnsureIgnore
-		// (which checks gitignoreIgnoresApprovalLedger) must leave it
-		// untouched — the glob is a recognised spelling.
 		config := &OPNCall{Path: store, Email: "test@opnborg"}
 		if err := gitEnsureIgnore(config); err != nil {
 			t.Fatalf("gitEnsureIgnore: %v", err)
 		}
-		// Now verify the glob still covers all three files.
 		got, _ := os.ReadFile(ignorePath)
-		if string(got) != stale {
-			t.Errorf("reconcile changed an already-covering gitignore: got %q", got)
+		body := string(got)
+		if !strings.HasPrefix(body, stale) {
+			t.Errorf("reconcile dropped existing lines: got %q", body)
+		}
+		if !gitignoreHasLine(body, ".db/") {
+			t.Errorf(".gitignore missing .db/ entry: got %q", body)
+		}
+		// Idempotent: a second reconcile must not rewrite the file.
+		if err := gitEnsureIgnore(config); err != nil {
+			t.Fatalf("gitEnsureIgnore (second): %v", err)
+		}
+		again, _ := os.ReadFile(ignorePath)
+		if string(again) != body {
+			t.Errorf("second reconcile changed the file: %q", string(again))
 		}
 	})
 
-	t.Run("reconcile-adds-three-when-missing", func(t *testing.T) {
+	t.Run("reconcile-adds-db-dir-when-missing", func(t *testing.T) {
 		store := t.TempDir()
 		ignorePath := filepath.Join(store, _gitignore)
 		stale := ".archive\nCONFIG*\nLogs\n"
@@ -3715,11 +3732,8 @@ func TestApprovalDBNeverCommitted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read: %v", err)
 		}
-		body := string(got)
-		for _, name := range []string{"approval.db\n", "approval.db-wal\n", "approval.db-shm\n"} {
-			if !strings.Contains(body, name) {
-				t.Errorf("reconciled .gitignore missing %q: got %q", name, body)
-			}
+		if body := string(got); body != stale+".db/\n" {
+			t.Errorf("reconciled .gitignore = %q, want %q", body, stale+".db/\n")
 		}
 	})
 
@@ -7868,22 +7882,23 @@ func TestRequireAdminAllowsAuthenticated(t *testing.T) {
 	}
 }
 
-func TestRequireAdminPassThroughWithoutCredentials(t *testing.T) {
+func TestRequireAdminDeniesWithoutCredentials(t *testing.T) {
 	resetAuthState(t)
-	// no credentials: requireAdmin is a pass-through (monitoring-only mode)
+	// no credentials: there is no way to obtain an admin session, so a
+	// mutating admin action (approve / approve-all) must be refused.
 	rec := httptest.NewRecorder()
-	q := httptest.NewRequest("GET", "http://x/force", nil)
+	q := httptest.NewRequest("POST", "http://x/approve?hash=x", nil)
 	called := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
 	requireAdmin(inner).ServeHTTP(rec, q)
-	if !called {
-		t.Errorf("requireAdmin must pass through when no credentials are configured")
+	if called {
+		t.Error("requireAdmin must never pass through an unauthenticated request")
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("request must get 200 without credentials, got %d", rec.Code)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("request without credentials must get 403, got %d", rec.Code)
 	}
 }
 
@@ -9347,5 +9362,88 @@ func TestReadmeAssetsExist(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, m[1])); err != nil {
 			t.Errorf("README.md references missing asset %q", m[1])
 		}
+	}
+}
+
+// TestPKGPluginListHTMLEscaped verifies the master plugin list (remote data
+// from the OPNsense config) is HTML-escaped before it is rendered, and that
+// the Manage Plugins link is attribute-safe.
+func TestPKGPluginListHTMLEscaped(t *testing.T) {
+	saved := getSyncPKG()
+	t.Cleanup(func() { setSyncPKG(saved) })
+	setSyncPKG(`os-a,<img src=x onerror=alert(1)>`)
+	out := getPKG()
+	if !strings.Contains(out, "&lt;img src=x onerror=alert(1)&gt;") {
+		t.Fatalf("plugin list not escaped: %q", out)
+	}
+	if strings.Contains(out, "<img src=x") {
+		t.Fatalf("plugin list rendered raw markup: %q", out)
+	}
+}
+
+// TestApprovalOperatorLabelNoDuplicateBy verifies the approved tooltip names
+// the operator exactly once ("by <identity>", not "by by <identity>").
+func TestApprovalOperatorLabelNoDuplicateBy(t *testing.T) {
+	ensureDisplayDrained(t)
+	dir := t.TempDir()
+	t.Cleanup(approvalClose)
+	cfg := &OPNCall{Path: dir}
+	cfg.Git.Enable = true
+	savedCfg := _cfg
+	t.Cleanup(func() { _cfg = savedCfg })
+	_cfg = cfg
+	if _, err := approvalDBOpen(dir); err != nil {
+		t.Fatalf("approvalDBOpen: %v", err)
+	}
+	hash := "cafef00d00000000000000000000000000000000"
+	approvalTrackCommit(cfg, hash, "tag: high", time.Now())
+	if err := approvalApprove(cfg, hash, "192.0.2.5", "", ""); err != nil {
+		t.Fatalf("approvalApprove: %v", err)
+	}
+	got := renderAuditApprovalControl(auditCommit{fullHash: hash, message: "tag: high"}, "high", "24h", true)
+	if strings.Contains(got, "by by") {
+		t.Fatalf("duplicate 'by' in approval label: %q", got)
+	}
+	if !strings.Contains(got, "by 192.0.2.5") {
+		t.Fatalf("operator identity missing from approval label: %q", got)
+	}
+}
+
+// TestForceRedirectsWhenOPNBackupDisabled verifies /force does not hand an
+// OPN-less deployment (e.g. Unifi-only) the animated pass dashboard: its
+// busy/pass counters can never advance, so the page would only time out.
+func TestForceRedirectsWhenOPNBackupDisabled(t *testing.T) {
+	savedCfg, savedPage := _cfg, _forceRedirect
+	savedBackup, savedExport, savedWatch := unifiBackupEnable.Load(), unifiExportEnable.Load(), unifiWatchEnable.Load()
+	t.Cleanup(func() {
+		_cfg, _forceRedirect = savedCfg, savedPage
+		unifiBackupEnable.Store(savedBackup)
+		unifiExportEnable.Store(savedExport)
+		unifiWatchEnable.Store(savedWatch)
+	})
+	_cfg = &OPNCall{Daemon: true} // Enable == false: no OPN targets configured
+	_forceRedirect = "PROGRESS-PAGE"
+	for _, ch := range []chan bool{updateOPN, updateUnifiBackup, updateUnifiExport, updateUnifiWatch} {
+		select {
+		case <-ch:
+		default:
+		}
+	}
+	rec := httptest.NewRecorder()
+	getForceHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/force", nil))
+	for _, ch := range []chan bool{updateOPN, updateUnifiBackup, updateUnifiExport, updateUnifiWatch} {
+		select {
+		case <-ch:
+		default:
+		}
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("force without OPN targets: got %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Fatalf("redirect target = %q, want /", loc)
+	}
+	if strings.Contains(rec.Body.String(), "PROGRESS-PAGE") {
+		t.Fatalf("progress page rendered without an observable pass")
 	}
 }

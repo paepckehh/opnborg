@@ -48,8 +48,10 @@ import (
 // requireAdminFiles has stricter rules — see its comment.
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Without configured credentials there is no way to obtain an admin
+		// session, so a mutating admin action must be refused — never allowed.
 		if !authCredentialsEnabled() {
-			next.ServeHTTP(w, r)
+			http.Error(w, "Forbidden: this action requires admin authentication (configure OPN_AUTH_HASH and OPN_AUTH_SALT, then authenticate)", http.StatusForbidden)
 			return
 		}
 		if authIsAdmin(r) {

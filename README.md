@@ -15,7 +15,7 @@ controller) in a git-tracked, SHA-256 deduplicated archive — then lets a local
 security review of every change it makes.
 
 <sub><b>⚡ ESTABLISHED IN THE OPEN SINCE SEPTEMBER 2024</b> · 2 years of continuous public development
-on GitHub · 288 tagged releases · still one binary, still zero runtime dependencies</sub>
+on GitHub · 289 tagged releases · still one binary, still zero runtime dependencies</sub>
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)

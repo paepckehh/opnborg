@@ -130,9 +130,15 @@ func checkURL(env string) (*url.URL, error) {
 	return out, nil
 }
 
-// checkPreURL check prefixed url
+// checkPreURL builds a deep link from a base URL plus a per-dashboard env
+// suffix. An unset or blank env var yields nil, mirroring checkURL: callers
+// render the link only when the operator configured that dashboard.
 func checkPreURL(base *url.URL, prefix, env string) (*url.URL, error) {
-	out, err := url.Parse(base.String() + prefix + os.Getenv(env))
+	val, ok := os.LookupEnv(env)
+	if !ok || strings.TrimSpace(val) == "" || base == nil {
+		return nil, nil
+	}
+	out, err := url.Parse(base.String() + prefix + val)
 	if err != nil {
 		return nil, errors.New("[SETUP][" + env + "][INVALID-URL] " + err.Error())
 	}

@@ -48,6 +48,14 @@ func getForceHandler() http.Handler {
 			default:
 			}
 		}
+		// The animated dashboard can only observe a pass driven by the OPN
+		// main loop. Without OPN targets (e.g. a Unifi-only deployment) the
+		// busy/pass counters never advance, so the page would wait for its
+		// 25-minute timeout; redirect straight back to the hive instead.
+		if _cfg == nil || !_cfg.Enable {
+			http.Redirect(r, q, "/", http.StatusSeeOther)
+			return
+		}
 		// arm a fresh forced pass so the dashboard can detect completion
 		// even when a timer-tick pass was already queued in the channel.
 		force := bumpForceSeq()
@@ -143,11 +151,11 @@ func getPKG() string {
 	}
 	var s strings.Builder
 	s.WriteString("<div class=\"backup-section sync-tile\"><b>BorgSYNC</b> <span class=\"member-meta\">[ Module:Package-Sync:Active ]</span> <span class=\"member-meta\">")
-	s.WriteString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", ""))
+	s.WriteString(html.EscapeString(strings.ReplaceAll(strings.ReplaceAll(syncPKG, ",", " / "), "os-", "")))
 	s.WriteString("</span>")
 	s.WriteString("<div class=\"tile-actions\">")
 	s.WriteString("<a href=\"")
-	s.WriteString(pkgmaster)
+	s.WriteString(html.EscapeString(pkgmaster))
 	s.WriteString("\" class=\"btn btn-force\">[ Manage Plugins ]</a>")
 	s.WriteString("</div>")
 	s.WriteString("</div>")

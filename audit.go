@@ -883,7 +883,7 @@ func renderAuditApprovalControl(c auditCommit, severity, rangeSlug string, admin
 			tip.WriteString("yes")
 		}
 		if who := approvalOperatorLabel(st); who != "" {
-			tip.WriteString(" by ")
+			tip.WriteString(" ")
 			tip.WriteString(html.EscapeString(who))
 		}
 		var b strings.Builder
