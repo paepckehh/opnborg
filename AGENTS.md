@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.207`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.228`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -23,7 +23,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 `opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary accepts only `-v` / `-h`. Output goes to stdout via an internal `displayChan` log engine, and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
 
 - Module path: `paepcke.de/opnborg`
-- Go version: see `go.mod` (currently `1.26.5`); CI uses `go-version-file: go.mod`
+- Go version: see `go.mod` (currently `1.27.1`); CI uses `go-version-file: go.mod`
 - Entry point: `cmd/opnborg/main.go` -> `opnborg.Start(config)` -> `srv(config)`
 - License: BSD 3-Clause
 
@@ -241,6 +241,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
+- README artwork lives in `docs/` as hand-built SVG (no binary screenshots): `hero-{dark,light}.svg` plus `screenshot-{hive,audit,backup}-{dark,light}.svg`. The README embeds them with `<picture>` + `prefers-color-scheme`, so every asset must ship as a matched dark/light pair and stay within a 1280 px-wide banner or 1200 px-wide screenshot canvas. Keep the pair in sync when editing either file.
 
 ## Gotchas
 

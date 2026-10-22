@@ -1,64 +1,157 @@
 <div align="center">
 
-<img src="resources/borg.png" width="180" alt="OPNBORG"/>
-
-# ⚙️ OPNBORG
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+  <img src="docs/hero-dark.svg" width="100%" alt="OPNBORG — self-hosted OPNsense fleet control plane">
+</picture>
 
 ### Resistance is futile. Your OPNsense will be assimilated. 🖖
 
-**One binary. Your whole firewall fleet. Backed up, monitored, audited.**
+**One binary. Your entire firewall fleet. Backed up, watched, audited, and under version control.**
 
-Self-hosted daemon for [OPNsense](https://opnsense.org/) config management — with an embedded WebUI,
-AI-assisted security audit, git-tracked archive, and optional [Unifi](https://ui.com) integration.
+A single self-hosted Go daemon that keeps every OPNsense firewall (and optionally every Unifi
+controller) in a git-tracked, SHA-256 deduplicated archive — then lets a local LLM write the
+security review of every change it makes.
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
 [![SemVer](https://img.shields.io/github/v/release/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/releases/latest)
 [![License](https://img.shields.io/github/license/paepckehh/opnborg)](https://github.com/paepckehh/opnborg/blob/master/LICENSE)
 [![built with nix](https://builtwithnix.org/badge.svg)](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=opnborg)
+[![single binary](https://img.shields.io/badge/single%20binary-CGO--free-4a9eff.svg)](#-quick-start)
+[![platforms](https://img.shields.io/badge/linux%20·%20bsd%20·%20darwin%20·%20windows-amd64%20·%20arm64-a06bff.svg)](#-quick-start)
 
-[🚀 Quick Start](#-quick-start) · [✨ Features](#-features) · [📸 Screenshots](#-screenshots) · [🔧 Config](#-configuration) · [❓ FAQ](#-faq)
+[🚀 Quick Start](#-quick-start) · [✨ Features](#-features) · [📸 Screenshots](#-screenshots) · [🧠 How It Works](#-how-it-works) · [🔧 Configuration](#-configuration) · [🔐 Security](#-security-model) · [❓ FAQ](#-faq)
 
 </div>
 
 ---
 
-## TL;DR
-
-```sh
-OPN_TARGETS='opn01.lan:8443,opn02.lan:8443' \
-OPN_APIKEY='...' OPN_APISECRET='...' \
-go run paepcke.de/opnborg/cmd/opnborg@main
-# ▸ WebUI live at http://localhost:6464
-```
+> [!TIP]
+> **30-second demo** — point it at one firewall, get a WebUI on `:6464`, a deduplicated archive,
+> and a git repo with AI-reviewed commit messages. No agents on the firewalls. No database server.
+> No runtime dependencies.
+>
+> ```sh
+> OPN_TARGETS='opn01.lan:8443' OPN_APIKEY='...' OPN_APISECRET='...' \
+>   go run paepcke.de/opnborg/cmd/opnborg@main
+> # ▸ WebUI live at http://localhost:6464
+> ```
 
 ---
 
 ## ✨ Features
 
-🖥️ **Hive dashboard** — live version, status & compliance per firewall, animated SVG, zero JS frameworks
-💾 **Smart backups** — SHA-256 deduplicated, timestamped archive, symlink rotation, rapid restore
-🔁 **Fleet sync** — replicate plugins & syslog config from a master host to every target
-🤖 **AI security audit** — local LLM (Ollama / OpenAI-compatible) writes commit messages with a `tag: <severity>` line
-🧟 **BorgAUDIT** — commit history review: full diffs, threat dashboard, change performer, approval ledger
-🎛️ **Unifi** — `.unf` backups, autoBackup folder watch, inventory export (CSV/JSON)
-📜 **Syslog collector** — built-in RFC5424 server, rotated retention
-🔐 **Two-mode WebUI** — monitoring-only by default; Argon2id-gated admin sessions for sensitive actions
-📦 **One static binary** — `CGO_ENABLED=0`, no runtime deps · Linux · BSD · Windows · amd64/arm64/armv7
-☁️ **Git native** — go-git repo management, aggressive repack, SSH upstream push with host-key pinning
+| | Feature | What it actually does |
+| --- | --- | --- |
+| 🖥️ | **Hive dashboard** | Live version, reachability and backup state per firewall, rendered as animated SVG by an embedded HTTP server — no JS framework, no build step. |
+| 💾 | **Smart backups** | Every pass is SHA-256 hashed; unchanged configs are skipped, changed ones land in a timestamped `.archive/` with `CONFIG-CURRENT` / `CONFIG-LAST` rotation. |
+| 🔁 | **Fleet sync** | Pick a master host — its plugin set and remote-syslog client config are replicated to every other target, so the hive never drifts. |
+| 🤖 | **AI security audit** | A local LLM (Ollama, or any OpenAI-compatible endpoint) reads an enriched diff and writes the commit message: headline, security summary, and a `tag: low\|medium\|high\|critical` line. |
+| 🧟 | **BorgAUDIT** | Commit-history review page: full diffs, a threat-level map, the admin who performed each change, and a per-commit approval ledger. |
+| 🎛️ | **Unifi aware** | `.unf` backups, autoBackup folder watch, and inventory export (CSV/JSON) from the same binary, on the same dashboard. |
+| 📜 | **Syslog collector** | Built-in RFC5424 server with rotated retention — point your firewalls at it, read it from the WebUI host. |
+| 🔐 | **Two-mode WebUI** | Monitoring is always read-only and open; sensitive actions unlock per browser session behind Argon2id credentials. |
+| ☁️ | **Git native** | go-git manages the storage repo: commit per backup pass, aggressive repack, SSH upstream push with host-key pinning. No git binary required. |
+| 📦 | **One static binary** | `CGO_ENABLED=0`, embedded assets, zero runtime deps. Linux, BSD, macOS, Windows on amd64/arm64/armv7. |
 
 ---
 
 ## 📸 Screenshots
 
-![OPNBORG Sample Screenshot 01](resources/sc01.png)
-![OPNBORG Sample Screenshot 02](resources/sc02.png)
+> All previews below are theme-aware — they follow your GitHub light/dark setting.
+
+<details open>
+<summary><b>🖥️ The hive — fleet status at a glance</b></summary>
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-hive-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-hive-light.svg">
+  <img src="docs/screenshot-hive-dark.svg" width="100%" alt="OPNBORG hive dashboard showing three fleet members, their versions, last-seen times and SHA-256 config state">
+</picture>
+
+Every member tile carries its version, last-seen time, config hash and asset tag.
+Downloads are locked until you authenticate — by design.
+</details>
+
+<details open>
+<summary><b>🧟 BorgAUDIT — the AI-reviewed change history</b></summary>
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-audit-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-audit-light.svg">
+  <img src="docs/screenshot-audit-dark.svg" width="100%" alt="BorgAUDIT page with a threat level map and commit cards containing AI-written security summaries, severity tags and diffs">
+</picture>
+
+Each commit is a collapsible card: hash, author, diff stats, the model-written summary,
+the severity tag, the full unified diff, and the admin account that made the change.
+</details>
+
+<details open>
+<summary><b>⚡ Live backup console — force a pass and watch it stream</b></summary>
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-backup-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-backup-light.svg">
+  <img src="docs/screenshot-backup-dark.svg" width="100%" alt="OPNBORG forced backup progress page with a radar animation, progress bar, live stats and a streaming log console">
+</picture>
+
+`/force` arms a pass; the progress page streams the daemon log line by line and redirects
+back to the hive view when the pass completes.
+</details>
+
+---
+
+## 🧠 How It Works
+
+```mermaid
+flowchart LR
+    subgraph fleet["🏰 Your fleet"]
+        OPN["OPNsense<br/>firewalls"]
+        UNI["Unifi<br/>controllers"]
+    end
+
+    subgraph borg["⚙️ opnborg — one binary"]
+        PULL["fetch<br/>HTTPS + keypin"]
+        STORE["SHA-256 store<br/>archive + rotation"]
+        GIT["go-git repo<br/>commit + repack"]
+        AI{"local LLM<br/>review"}
+        UI["WebUI :6464<br/>hive · audit · config"]
+        SYS["RFC5424<br/>syslog sink"]
+    end
+
+    OPN -->|"config XML"| PULL
+    UNI -->|".unf"| PULL
+    PULL --> STORE
+    STORE --> GIT
+    GIT --> AI
+    AI -->|"commit msg + tag"| GIT
+    GIT --> UI
+    OPN -->|"logs"| SYS
+    STORE --> UI
+    GIT -->|"SSH push"| UP[("upstream<br/>git remote")]
+```
+
+1. **Pull** — the daemon polls each target over HTTPS (OS trust store intentionally bypassed,
+   `OPN_TLSKEYPIN` used for MitM-proofing) and fetches the live config.
+2. **Diff & dedup** — a SHA-256 of the payload is compared with the previous `CONFIG-CURRENT`.
+   No change, no write. Change, and the XML is archived and the symlinks rotate.
+3. **Commit** — the storage directory is a git repo. Each pass stages the changed files, skips
+   the approval ledger via a hardwired path guard, and commits.
+4. **Review** — if a model is configured, an enriched diff (file metadata, widened hunks,
+   detected XML sections) is sent to Ollama or an OpenAI-compatible endpoint. The model's answer
+   *is* the commit message, including a `tag:` severity line.
+5. **Surface** — the WebUI renders the hive, the audit history, and the approval ledger.
 
 ---
 
 ## 🚀 Quick Start
 
-Run the latest release straight from source — no build step:
+### Run from source (no build step)
 
 ```sh
 OPN_PATH='/tmp/opn' \
@@ -68,7 +161,8 @@ OPN_APISECRET='...' \
 go run paepcke.de/opnborg/cmd/opnborg@main
 ```
 
-Prebuilt binaries: [Releases](https://github.com/paepckehh/opnborg/releases) · `go install paepcke.de/opnborg/cmd/opnborg@main`
+Prebuilt binaries: **[Releases](https://github.com/paepckehh/opnborg/releases)** ·
+`go install paepcke.de/opnborg/cmd/opnborg@main`
 Add `OPN_NODAEMON=1` for a single pass instead of the daemon.
 
 <details>
@@ -92,7 +186,8 @@ volumes:
   opnborg-data:
 ```
 
-> 🔐 Expose `6464` to trusted networks only — and arm `OPN_AUTH_HASH` / `OPN_AUTH_SALT` for admin mode.
+> [!WARNING]
+> Expose `6464` to trusted networks only — and arm `OPN_AUTH_HASH` / `OPN_AUTH_SALT` to unlock admin mode.
 
 </details>
 
@@ -109,10 +204,14 @@ Available as a [Nix package](https://search.nixos.org/packages?channel=unstable&
 
 ## 🔧 Configuration
 
-Everything is **environment variables** — the binary accepts only `-v` / `-h`. A local `.env` file is auto-loaded.
-Ready-to-use examples: `example.sh`, `example-env-config-simple.sh`, `example-env-config-complex.sh`, `example-env-config-unifi.sh`, `example-env-config-dev.sh`.
+Everything is **environment variables** — the binary accepts only `-v` / `-h`. A local `.env`
+file is auto-loaded. Ready-to-use examples live in the repo: `example.sh`,
+`example-env-config-simple.sh`, `example-env-config-complex.sh`, `example-env-config-unifi.sh`,
+`example-env-config-dev.sh`.
 
-> ⚠️ **Booleans are presence-based.** `OPN_DEBUG=0` and `OPN_DEBUG=false` are both **true** — unset the var to disable. `OPN_GIT_ENABLE` is opt-in.
+> [!IMPORTANT]
+> **Booleans are presence-based.** `OPN_DEBUG=0` and `OPN_DEBUG=false` are both **true** —
+> unset the variable to disable a feature. `OPN_GIT_ENABLE` is opt-in.
 
 <details open>
 <summary><b>🎯 Basics</b></summary>
@@ -136,9 +235,10 @@ Ready-to-use examples: `example.sh`, `example-env-config-simple.sh`, `example-en
 </details>
 
 <details>
-<summary><b>☁️ Git store</b></summary>
+<summary><b>☁️ Git store</b> — native go-git, no external binary</summary>
 
-`OPN_PATH` is managed as a git repo (native go-git, no external git binary): auto-init, `.gitignore` upkeep, commit per backup pass, aggressive repack (delta window=250) after each commit.
+`OPN_PATH` is managed as a git repo: auto-init, `.gitignore` upkeep, commit per backup pass,
+aggressive repack (delta window = 250) after each commit.
 
 | Variable | Description |
 | --- | --- |
@@ -152,24 +252,36 @@ Ready-to-use examples: `example.sh`, `example-env-config-simple.sh`, `example-en
 <details>
 <summary><b>🤖 AI security audit</b> — Ollama first, OpenAI-compatible fallback</summary>
 
-The LLM reads an enriched diff and writes the commit message — headline, security summary, trailing `tag: low|medium|high|critical[, needs-review]` — surfaced on the BorgAUDIT page. Needs `OPN_GIT_ENABLE`.
+The LLM reads an enriched diff and writes the commit message: a headline, a short security
+summary, and a trailing `tag: low|medium|high|critical[, needs-review]` line that is surfaced on
+the BorgAUDIT page. Requires `OPN_GIT_ENABLE`.
 
 ```sh
 export OLLAMA_DESC_URL='http://localhost:11434'
 export OLLAMA_DESC_MODEL='llama3'
-# or/and (automatic fallback):
-export OPENAPI_DESC_URL='http://192.168.6.222:11434/v1'   # model: gpt-4o-mini (default)
-# export OPENAPI_DESC_MODEL='...' OPENAPI_DESC_TOKEN='...'
+
+# optional fallback (used when Ollama is unset or fails):
+export OPENAPI_DESC_URL='http://192.168.6.222:11434/v1'   # model defaults to gpt-4o-mini
+# export OPENAPI_DESC_MODEL='...'
+# export OPENAPI_DESC_TOKEN='...'
 ```
+
+`.unf`-only commits and any model failure fall back to `opnborg auto update` — the backup
+pipeline never blocks on a model.
 
 </details>
 
 <details>
 <summary><b>🔐 WebUI auth</b> — monitoring by default, admin opt-in</summary>
 
-Monitoring mode is always open (green badge): dashboards, audit page, progress. Sensitive actions — config downloads, audit diffs, forced backup, approvals — need an admin session (red/yellow badge): Argon2id (time=8, 64 MiB) credentials, HttpOnly SameSite=Strict cookies, 12 h sliding TTL, exponential global lockout on failed logins.
+Monitoring mode is always open (green badge): dashboards, audit page, progress. Sensitive
+actions — config downloads, audit diffs, forced backup, approvals — require an admin session
+(red/yellow badge): Argon2id (time=8, 64 MiB) credentials, HttpOnly SameSite=Strict cookies,
+12 h sliding TTL, exponential global lockout on failed logins.
 
-Generate `OPN_AUTH_HASH` + `OPN_AUTH_SALT` from a password on the `/auth-hash` page — nothing is ever logged. Without valid credentials, login is impossible and sensitive paths return 403.
+Generate `OPN_AUTH_HASH` + `OPN_AUTH_SALT` from a password on the `/auth-hash` page — the
+password is never stored or logged. Without valid credentials, login is impossible and sensitive
+paths return **403 Forbidden**.
 
 </details>
 
@@ -227,32 +339,53 @@ export OPN_UNIFI_BACKUP_DESC='Network controller'   # (+_IMGURL) like target gro
 
 ```
 <OPN_PATH>/<server>/
-  current.xml          # latest backup
-  .archive/<Y>/<M>/<ts>-<server>.xml
-  CONFIG-CURRENT/LAST # symlink rotation
-  sha256.db           # dedup log
+  current.xml          # latest backup (admin-only download)
+  .archive/<Y>/<M>/<timestamp>-<server>.xml
+  CONFIG-CURRENT/LAST  # symlink rotation
+  sha256.db            # dedup log
 .db/
-  approval.db          # security-approval ledger (SQLite, always gitignored, never committed)
+  approval.db          # security-approval ledger (SQLite, always gitignored)
   approval.db-wal
   approval.db-shm
 .git/                  # when OPN_GIT_ENABLE is set
+Logs/current.log       # rotated by lumberjack (256 MB, 256 backups, 180 d, gzipped)
 ```
 
 </details>
 
 ---
 
+## 🔐 Security Model
+
+opnborg is built for people who treat firewall configs as production state:
+
+- **Least-privilege API user** — a dedicated OPNsense user with *Diagnostics: Configuration
+  History* (plus *System: Firmware* only if you enable plugin sync).
+- **Keypin instead of CA trust** — the OPNsense API is used with an explicit SPKI SHA-256 pin;
+  the OS trust store is deliberately not consulted.
+- **Two-mode access** — unauthenticated sessions are monitoring-only, always. `current.xml`,
+  `current.unf` and the archive are never served without a live admin session, and return 403
+  when no credentials are configured at all. A regression test guards this invariant.
+- **Constant-time auth** — Argon2id-derived keys compared with `subtle.ConstantTimeCompare`,
+  per-session random tokens, global exponential lockout on failed logins.
+- **Ledger isolation** — the SQLite approval ledger lives in `.db/`, is gitignored on every
+  startup, and is skipped at commit-staging time by a hardwired path guard. It cannot leak into
+  your git history, not even through a manual `git add .`.
+
+---
+
 ## ❓ FAQ
 
 <details>
-<summary><b>Create an OPNsense API key?</b></summary>
+<summary><b>How do I create an OPNsense API key?</b></summary>
 
-System → Access → Users → add a `backup` user (scrambled password) → grant *Diagnostics: Configuration History* (+ *System: Firmware* for plugin sync) → API Keys → Add.
+System → Access → Users → add a `backup` user (scrambled password) → grant
+*Diagnostics: Configuration History* (+ *System: Firmware* for plugin sync) → API Keys → Add.
 
 </details>
 
 <details>
-<summary><b>Generate <code>OPN_TLSKEYPIN</code>?</b></summary>
+<summary><b>How do I generate <code>OPN_TLSKEYPIN</code>?</b></summary>
 
 ```sh
 go run paepcke.de/tlsinfo/cmd/tlsinfo@latest <your-opn-server-name>
@@ -263,16 +396,19 @@ export OPN_TLSKEYPIN='FezOCC3qZFzBmD5xRKtDoLgK445Kr0DeJBj2TWVvR9M='
 </details>
 
 <details>
-<summary><b>Enable the AI audit?</b></summary>
+<summary><b>How do I enable the AI audit?</b></summary>
 
-Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL` + `OLLAMA_DESC_MODEL`, enable `OPN_GIT_ENABLE`, restart.
+Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL` +
+`OLLAMA_DESC_MODEL`, enable `OPN_GIT_ENABLE`, restart. The config dashboard then shows a live
+model probe (server reachable, API ready, model ready).
 
 </details>
 
 <details>
-<summary><b>Arm admin mode?</b></summary>
+<summary><b>How do I arm admin mode?</b></summary>
 
-`/config` → *Create Authentication Env Vars* → copy both `OPN_AUTH_*` lines into your env → restart.
+`/config` → *Create Authentication Env Vars* → copy both `OPN_AUTH_*` lines into your env →
+restart. The generator is always available, even when credentials are already armed.
 
 </details>
 
@@ -281,7 +417,9 @@ Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL
 
 - Targets need an explicit port unless `:443`; plain HTTP is unsupported.
 - OS trust-store verification is intentionally **off** — use `OPN_TLSKEYPIN`.
-- The `.db/` ledger directory (`approval.db` + WAL sidecars, plus anything else inside) is always gitignored and hardwire-excluded from commit staging — never committed, not even by a manual `git add .`. A legacy root-level ledger is migrated into `.db/` at startup.
+- Auth sessions live in process memory only: a restart revokes every admin session.
+- The `.db/` ledger directory (database plus WAL sidecars, and anything else inside) is always
+  gitignored and hardwire-excluded from commit staging.
 
 </details>
 
@@ -291,7 +429,8 @@ Install [Ollama](https://ollama.com), `ollama pull llama3`, set `OLLAMA_DESC_URL
 
 ## 🤝 Contributing
 
-PRs welcome — see [`AGENTS.md`](AGENTS.md) for the workflow. BSD 3-Clause, see [LICENSE](LICENSE).
+PRs welcome — see [`AGENTS.md`](AGENTS.md) for the build, test and release workflow.
+BSD 3-Clause, see [LICENSE](LICENSE).
 
 **💖 Sponsors:** [pvz.digital](https://pvz.digital) · [debitor.de](https://debitor.de)
 **🧑‍🎨 UX Borg design:** [@Codebase-Torben](https://github.com/Codebase-Torben) & [@Jones71190](https://github.com/Jones71190)

@@ -1,6 +1,6 @@
 module paepcke.de/opnborg
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/cnaude/go-syslog/syslog/v3 v3.0.0-20220728001533-6297dc1b2ff3

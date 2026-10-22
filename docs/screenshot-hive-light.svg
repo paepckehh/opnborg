@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="812" viewBox="0 0 1200 812" role="img" aria-label="OPNBORG hive dashboard screenshot">
+<title>OPNBORG hive dashboard</title>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#f4f8fe"/><stop offset="0.55" stop-color="#e6effb"/><stop offset="1" stop-color="#f4f8fe"/>
+</linearGradient>
+<linearGradient id="mark" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#1567cc"/><stop offset="0.55" stop-color="#0d7fd6"/><stop offset="1" stop-color="#7b46d6"/>
+</linearGradient>
+<linearGradient id="okg" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#1a7f37" stop-opacity="0.15"/><stop offset="1" stop-color="#1a7f37" stop-opacity="0.85"/>
+</linearGradient>
+<radialGradient id="glowA"><stop offset="0" stop-color="#1567cc" stop-opacity="0.42"/><stop offset="1" stop-color="#1567cc" stop-opacity="0"/></radialGradient>
+<radialGradient id="glowB"><stop offset="0" stop-color="#7b46d6" stop-opacity="0.34"/><stop offset="1" stop-color="#7b46d6" stop-opacity="0"/></radialGradient>
+<radialGradient id="glowC"><stop offset="0" stop-color="#cf3296" stop-opacity="0.26"/><stop offset="1" stop-color="#cf3296" stop-opacity="0"/></radialGradient>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+<path d="M40 0H0V40" fill="none" stroke="#4a7fc4" stroke-opacity="0.07" stroke-width="1"/>
+</pattern>
+<filter id="blur36" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="36"/></filter>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+<feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.12"/>
+</filter>
+</defs>
+<rect width="1200" height="812" fill="#f4f8fe"/>
+<rect width="1200" height="812" fill="url(#grid)"/>
+<circle cx="180" cy="120" r="240" fill="url(#glowA)" filter="url(#blur36)"/>
+<circle cx="1060" cy="200" r="260" fill="url(#glowB)" filter="url(#blur36)"/>
+<rect width="1200" height="46" fill="#eef5fe"/><line x1="0" y1="46" x2="1200" y2="46" stroke="#d2e0f2"/><circle cx="26" cy="23.0" r="5.5" fill="#cf222e" opacity="0.8"/><circle cx="44" cy="23.0" r="5.5" fill="#8a6100" opacity="0.8"/><circle cx="62" cy="23.0" r="5.5" fill="#1a7f37" opacity="0.8"/><rect x="86" y="10.0" width="470" height="26" rx="13" fill="#f4f8fe" stroke="#d2e0f2"/><text x="104.0" y="27.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#5c6f88" text-anchor="start">localhost:6464/</text><rect x="1068" y="11.0" width="104" height="24" rx="12" fill="#f4f8fe" stroke="#d2e0f2"/><text x="1120.0" y="27.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#5c6f88" text-anchor="middle">opnborg</text>
+<rect x="28" y="74" width="1144" height="66" rx="14" fill="#ffffff" stroke="#d2e0f2" filter="url(#shadow)"/><text x="52.0" y="117.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="25" font-weight="800" fill="url(#mark)" text-anchor="start" letter-spacing="1.6">OPNBORG</text><text x="186.0" y="116.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#5c6f88" text-anchor="start" opacity="0.8">hive control</text><rect x="1050.475" y="93" width="97.525" height="28" rx="14" fill="#eef5fe" stroke="#a8c2e4"/><circle cx="1065.475" cy="107" r="9.6" fill="#1a7f37" opacity="0.14"/><circle cx="1065.475" cy="107" r="4" fill="#1a7f37"/><text x="1077.5" y="111.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="700" fill="#1a7f37" text-anchor="start" letter-spacing="0.8">MONITORING</text><rect x="965.7" y="94.0" width="72.8" height="26" rx="13.0" fill="#eef5fe" stroke="#d2e0f2" stroke-width="1"/><text x="1002.1" y="110.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#0d7fd6" text-anchor="middle">v0.1.228</text>
+<rect x="28.0" y="156.0" width="58.2" height="30" rx="15.0" fill="#eef5fe" stroke="#a8c2e4" stroke-width="1"/><text x="57.1" y="175.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d7fd6" text-anchor="middle" letter-spacing="0.4">Hive</text><rect x="95.2" y="156.0" width="72.3" height="30" rx="15.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="131.4" y="175.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d1a2b" text-anchor="middle" letter-spacing="0.4">Config</text><rect x="176.6" y="156.0" width="93.5" height="30" rx="15.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="223.3" y="175.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d1a2b" text-anchor="middle" letter-spacing="0.4">BorgAUDIT</text><rect x="279.0" y="156.0" width="100.5" height="30" rx="15.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="329.3" y="175.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d1a2b" text-anchor="middle" letter-spacing="0.4">Backup NOW</text><rect x="388.6" y="156.0" width="114.7" height="30" rx="15.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="445.9" y="175.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d1a2b" text-anchor="middle" letter-spacing="0.4">Authenticate</text>
+<rect x="28" y="208" width="1144" height="268" rx="14" fill="#ffffff" stroke="#d2e0f2" filter="url(#shadow)"/>
+<text x="52.0" y="245.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="16" font-weight="700" fill="#0d7fd6" text-anchor="start" letter-spacing="1.4">INTRANET</text>
+<text x="154.0" y="245.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="400" fill="#5c6f88" text-anchor="start">production edge fleet  ·  3 members  ·  master opn01.lan</text>
+<rect x="1017.2" y="224.0" width="130.8" height="30" rx="15.0" fill="#eef5fe" stroke="#a8c2e4" stroke-width="1"/><text x="1082.6" y="243.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0d1a2b" text-anchor="middle" letter-spacing="0.4">[ Backup NOW ]</text>
+<rect x="52" y="266" width="1096" height="52" rx="11" fill="#eef5fe" stroke="#d2e0f2"/>
+<circle cx="74" cy="292" r="14.399999999999999" fill="#1a7f37" opacity="0.14"/><circle cx="74" cy="292" r="6" fill="#1a7f37"/>
+<path d="M71.5 292.0 l1.9 2.1 l3.7 -4.3" fill="none" stroke="#eef5fe" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="94.0" y="298.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#0d1a2b" text-anchor="start">opn01.lan</text>
+<rect x="180.2" y="282.0" width="58.4" height="22" rx="11.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="209.4" y="296.6" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#0d7fd6" text-anchor="middle">#edge-1</text>
+<text x="94.0" y="312.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#5c6f88" text-anchor="start" opacity="0.75">master</text>
+<rect x="498" y="276" width="128" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="508.0" y="290.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">LAST SEEN</text>
+<text x="508.0" y="302.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">00:41 ago</text>
+<rect x="636" y="276" width="120" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="646.0" y="290.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">VERSION</text>
+<text x="646.0" y="302.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">25.7.1</text>
+<rect x="766" y="276" width="176" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="776.0" y="290.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">CONFIG</text>
+<text x="776.0" y="302.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">sha256:4f2a…c81</text>
+<rect x="1094.2" y="279.0" width="53.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="1121.1" y="295.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#0d7fd6" text-anchor="middle">Audit</text>
+<rect x="1013.4" y="279.0" width="72.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1" opacity="0.55"/><text x="1049.8" y="295.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#5c6f88" text-anchor="middle">Download</text>
+<rect x="52" y="328" width="1096" height="52" rx="11" fill="#eef5fe" stroke="#d2e0f2"/>
+<circle cx="74" cy="354" r="14.399999999999999" fill="#1a7f37" opacity="0.14"/><circle cx="74" cy="354" r="6" fill="#1a7f37"/>
+<path d="M71.5 354.0 l1.9 2.1 l3.7 -4.3" fill="none" stroke="#eef5fe" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="94.0" y="360.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#0d1a2b" text-anchor="start">opn02.lan</text>
+<rect x="180.2" y="344.0" width="58.4" height="22" rx="11.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="209.4" y="358.6" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#0d7fd6" text-anchor="middle">#edge-2</text>
+<text x="94.0" y="374.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#5c6f88" text-anchor="start" opacity="0.75">in sync</text>
+<rect x="498" y="338" width="128" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="508.0" y="352.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">LAST SEEN</text>
+<text x="508.0" y="364.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">00:42 ago</text>
+<rect x="636" y="338" width="120" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="646.0" y="352.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">VERSION</text>
+<text x="646.0" y="364.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">25.7.1</text>
+<rect x="766" y="338" width="176" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="776.0" y="352.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">CONFIG</text>
+<text x="776.0" y="364.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">sha256:91be…0d4</text>
+<rect x="1094.2" y="341.0" width="53.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="1121.1" y="357.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#0d7fd6" text-anchor="middle">Audit</text>
+<rect x="1013.4" y="341.0" width="72.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1" opacity="0.55"/><text x="1049.8" y="357.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#5c6f88" text-anchor="middle">Download</text>
+<rect x="52" y="390" width="1096" height="52" rx="11" fill="#eef5fe" stroke="#d2e0f2"/>
+<circle cx="74" cy="416" r="14.399999999999999" fill="#1567cc" opacity="0.14"/><circle cx="74" cy="416" r="6" fill="#1567cc"/>
+<path d="M71.5 416.0 l1.9 2.1 l3.7 -4.3" fill="none" stroke="#eef5fe" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="94.0" y="422.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#0d1a2b" text-anchor="start">unifi-controller</text>
+<rect x="239.5" y="406.0" width="58.4" height="22" rx="11.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="268.7" y="420.6" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#0d7fd6" text-anchor="middle">#rack-3</text>
+<text x="94.0" y="436.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#5c6f88" text-anchor="start" opacity="0.75">unifi</text>
+<rect x="498" y="400" width="128" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="508.0" y="414.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">LAST SEEN</text>
+<text x="508.0" y="426.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">04:00 ago</text>
+<rect x="636" y="400" width="120" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="646.0" y="414.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">VERSION</text>
+<text x="646.0" y="426.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">8.5.6</text>
+<rect x="766" y="400" width="176" height="32" rx="7" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="776.0" y="414.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.8">CONFIG</text>
+<text x="776.0" y="426.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="600" fill="#0d1a2b" text-anchor="start">backup.unf</text>
+<rect x="1094.2" y="403.0" width="53.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1"/><text x="1121.1" y="419.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#0d7fd6" text-anchor="middle">Audit</text>
+<rect x="1013.4" y="403.0" width="72.8" height="26" rx="13.0" fill="#ffffff" stroke="#d2e0f2" stroke-width="1" opacity="0.55"/><text x="1049.8" y="419.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#5c6f88" text-anchor="middle">Download</text>
+<rect x="28" y="496" width="1144" height="176" rx="14" fill="#ffffff" stroke="#d2e0f2" filter="url(#shadow)"/>
+<text x="52.0" y="528.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="14" font-weight="700" fill="#0d7fd6" text-anchor="start" letter-spacing="1.2">BACKUP STORE</text>
+<text x="184.0" y="528.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#5c6f88" text-anchor="start">git-native  ·  deduplicated  ·  symlink rotation</text>
+<text x="52.0" y="558.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#0d1a2b" text-anchor="start">current.xml</text>
+<text x="158.0" y="558.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#5c6f88" text-anchor="start">12.4 KB  ·  last change 00:41 ago  ·  archive 1,284 entries  ·  repack delta-window 250</text>
+<polygon points="52,630 52.0,630.0 88.8,626.1 125.7,627.4 162.5,622.2 199.4,623.5 236.2,618.3 273.1,619.6 309.9,614.4 346.7,615.7 383.6,610.5 420.4,611.8 457.3,606.6 494.1,601.4 530.9,604.0 567.8,596.2 604.6,597.5 641.5,589.7 678.3,584.5 715.2,587.1 752.0,578.0 752,630" fill="url(#okg)" opacity="0.3"/>
+<polyline points="52.0,630.0 88.8,626.1 125.7,627.4 162.5,622.2 199.4,623.5 236.2,618.3 273.1,619.6 309.9,614.4 346.7,615.7 383.6,610.5 420.4,611.8 457.3,606.6 494.1,601.4 530.9,604.0 567.8,596.2 604.6,597.5 641.5,589.7 678.3,584.5 715.2,587.1 752.0,578.0" fill="none" stroke="#1567cc" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="776.0" y="598.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#5c6f88" text-anchor="start">30 d</text>
+<text x="776.0" y="620.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" font-weight="700" fill="#1a7f37" text-anchor="start">+184</text>
+<text x="776.0" y="636.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9.5" font-weight="400" fill="#5c6f88" text-anchor="start">snapshots</text>
+<rect x="842" y="578" width="306" height="68" rx="10" fill="#eef5fe" stroke="#d2e0f2"/>
+<text x="858.0" y="602.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.9">COMMITS</text>
+<text x="858.0" y="628.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="17" font-weight="700" fill="#0d7fd6" text-anchor="start">3</text>
+<text x="958.0" y="602.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.9">PUSHED</text>
+<text x="958.0" y="628.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="17" font-weight="700" fill="#1a7f37" text-anchor="start">yes</text>
+<text x="1058.0" y="602.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5c6f88" text-anchor="start" letter-spacing="0.9">LEDGER</text>
+<text x="1058.0" y="628.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="17" font-weight="700" fill="#8a6100" text-anchor="start">1 open</text>
+<rect x="28" y="692" width="1144" height="80" rx="14" fill="#ffffff" stroke="#d2e0f2"/>
+<text x="52.0" y="722.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#0d7fd6" text-anchor="start">Git</text>
+<text x="86.0" y="722.0" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#5c6f88" text-anchor="start">·</text>
+<text x="100.0" y="722.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#0d7fd6" text-anchor="start">Mastodon</text>
+<text x="52.0" y="744.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#5c6f88" text-anchor="start">SPONSORED-BY: pvz.digital  debitor.de</text>
+<text x="1148.0" y="744.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9.5" font-weight="400" fill="#5c6f88" text-anchor="end" letter-spacing="0.6" opacity="0.8">RESISTANCE IS FUTILE. YOUR OPNSENSE WILL BE ASSIMILATED.</text>
+</svg>
