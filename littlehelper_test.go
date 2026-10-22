@@ -9315,12 +9315,6 @@ func TestDocsShowCurrentSemVer(t *testing.T) {
 	files := []string{
 		"docs/hero-dark.svg",
 		"docs/hero-light.svg",
-		"docs/screenshot-hive-dark.svg",
-		"docs/screenshot-hive-light.svg",
-		"docs/screenshot-audit-dark.svg",
-		"docs/screenshot-audit-light.svg",
-		"docs/screenshot-backup-dark.svg",
-		"docs/screenshot-backup-light.svg",
 		"docs/screenshot-console-dark.svg",
 		"docs/screenshot-console-light.svg",
 	}
@@ -9332,6 +9326,26 @@ func TestDocsShowCurrentSemVer(t *testing.T) {
 		}
 		if !bytes.Contains(body, []byte(SemVer)) {
 			t.Errorf("%s does not mention the current SemVer %q", f, SemVer)
+		}
+	}
+}
+
+// TestReadmeAssetsExist guards the README against dead asset links: every
+// docs/ path referenced by an img/source element must exist in the checkout.
+func TestReadmeAssetsExist(t *testing.T) {
+	root := sourceDir(t)
+	body, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	re := regexp.MustCompile(`(?:src|srcset)="(docs/[^"]+)"`)
+	matches := re.FindAllStringSubmatch(string(body), -1)
+	if len(matches) == 0 {
+		t.Fatal("README.md references no docs/ assets")
+	}
+	for _, m := range matches {
+		if _, err := os.Stat(filepath.Join(root, m[1])); err != nil {
+			t.Errorf("README.md references missing asset %q", m[1])
 		}
 	}
 }

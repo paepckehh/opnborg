@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.229`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.230`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -228,7 +228,7 @@ For a configured `OPN_PATH` (default `.`):
 
 ## Testing
 
-The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, the display color classifier (`TestColorizeLine`), SemVer/tag sync (`TestSemVerFormatAndTagSync`), the README artwork version guard (`TestDocsShowCurrentSemVer`), URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), `.db` directory migration (`TestApprovalDBMigrateMovesLegacyRootLedger`, `TestGitInitMigratesLegacyLedgerAndOpensIt`) and the hardwired whole-`.db/`-directory never-committed invariant (`TestDBDirContentsNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
+The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers env parsing, the display color classifier (`TestColorizeLine`), SemVer/tag sync (`TestSemVerFormatAndTagSync`), the README artwork version guard (`TestDocsShowCurrentSemVer`) and dead-asset guard (`TestReadmeAssetsExist`), URL helpers, OPN/Unifi group builders, `splitPlugins`/`checkInstallPKG`, syslog config comparison, git init/checkin round-trip + aggressive-window + GC (repack-only, no prune), Unifi autoBackup watch, `checkIntoStore` rotation, compression helpers, httpd enable gating, non-blocking `/force` handler, forced-backup progress ring buffer, approval ledger round-trip / backfill / approve-all / commit-tracking / source capture, approval.db never-committed invariant (`TestApprovalDBNeverCommitted`), `.db` directory migration (`TestApprovalDBMigrateMovesLegacyRootLedger`, `TestGitInitMigratesLegacyLedgerAndOpensIt`) and the hardwired whole-`.db/`-directory never-committed invariant (`TestDBDirContentsNeverCommitted`), Ollama prompt / retry / fallback / model-match / health-check, OpenAI-compatible fallback / retry / health-check / dashboard panel / review-pending banner, audit page rendering / threat dashboard / tag-line highlighting / performer extraction / diff direction, dashboard gather/render, and the WebUI authentication two-mode model (credential generation, login success/failure lockout, session round-trip, nav-bar badge, greyed-out download buttons, `requireAdmin`/`requireAdminFiles` middleware blocking and pass-through, `/files` admin gate, audit locked hints, logout clearing `adminEnabled`, login handler, auth-hash generator). Run `go build ./...`, `go vet ./...`, and `go test -count=1 ./...` locally (`make check` / `make test`). Prefer extending the existing table-driven tests and keeping `make check` green.
 
 ## Coding Conventions
 
@@ -241,7 +241,12 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
-- README artwork lives in `docs/` as hand-built SVG (no binary screenshots): `hero-{dark,light}.svg` plus `screenshot-{hive,audit,backup,console}-{dark,light}.svg`. The README embeds them with `<picture>` + `prefers-color-scheme`, so every asset must ship as a matched dark/light pair and stay within a 1280 px-wide banner or 1200 px-wide screenshot canvas. Keep the pair in sync when editing either file.
+- README artwork lives in `docs/`:
+- `hero-{dark,light}.svg` — hand-built theme-aware banner (1280x360 canvas).
+- `screenshot-console-{dark,light}.svg` — hand-built terminal illustration of the ANSI-colored display engine.
+- `screenshot-{hive,audit,progress,config}.jpg` — **real captures** of a running dark-theme WebUI (1600 px wide, JPEG q90). They are not generated by code: to refresh them, run the daemon against a demo store, authenticate as admin, and capture the page (full page for hive/audit, element crops for config/progress). The UI footer in those images shows the release version, so recapture them whenever `SemVer` changes.
+
+`hero-dark/light` and `screenshot-console-dark/light` are embedded with `<picture>` + `prefers-color-scheme`; every theme-aware asset must ship as a matched dark/light pair. `TestDocsShowCurrentSemVer` pins the SemVer in those SVGs and `TestReadmeAssetsExist` fails on any dead `docs/` link in the README.
 
 ## Gotchas
 

@@ -15,7 +15,7 @@ controller) in a git-tracked, SHA-256 deduplicated archive — then lets a local
 security review of every change it makes.
 
 <sub><b>⚡ ESTABLISHED IN THE OPEN SINCE SEPTEMBER 2024</b> · 2 years of continuous public development
-on GitHub · 287 tagged releases · still one binary, still zero runtime dependencies</sub>
+on GitHub · 288 tagged releases · still one binary, still zero runtime dependencies</sub>
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
@@ -63,48 +63,48 @@ on GitHub · 287 tagged releases · still one binary, still zero runtime depende
 
 ## 📸 Screenshots
 
-> All previews below are theme-aware — they follow your GitHub light/dark setting.
+> Real captures from a live `opnborg` daemon, not mockups: a two-member edge fleet is backed up,
+> reviewed by the model, committed to git, and displayed in the dark WebUI theme.
 
 <details open>
 <summary><b>🖥️ The hive — fleet status at a glance</b></summary>
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-hive-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-hive-light.svg">
-  <img src="docs/screenshot-hive-dark.svg" width="100%" alt="OPNBORG hive dashboard showing three fleet members, their versions, last-seen times and SHA-256 config state">
-</picture>
+<img src="docs/screenshot-hive.jpg" width="100%" alt="OPNBORG hive dashboard showing two OPNsense members, their firmware versions, asset tags, last-seen times and archive links">
 
-Every member tile carries its version, last-seen time, config hash and asset tag.
-Downloads are locked until you authenticate — by design.
+Every member tile carries its live firmware version, asset tag, last-seen time and
+`current.xml` / `.archive` links. Config downloads stay locked until you authenticate.
 </details>
 
 <details open>
 <summary><b>🧟 BorgAUDIT — the AI-reviewed change history</b></summary>
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-audit-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-audit-light.svg">
-  <img src="docs/screenshot-audit-dark.svg" width="100%" alt="BorgAUDIT page with a threat level map and commit cards containing AI-written security summaries, severity tags and diffs">
-</picture>
+<img src="docs/screenshot-audit.jpg" width="100%" alt="BorgAUDIT page with the security threat level summary, severity-tagged commit cards, an APPROVED high-severity change and its unified diff">
 
-Each commit is a collapsible card: hash, author, diff stats, the model-written summary,
-the severity tag, the full unified diff, and the admin account that made the change.
+Threat-level summary, severity-tagged commits, and a full unified diff on demand.
+This capture shows a `high, needs-review` change that has been reviewed and approved
+in the ledger; the medium-severity sync commit is still awaiting approval.
 </details>
 
 <details open>
 <summary><b>⚡ Live backup console — force a pass and watch it stream</b></summary>
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-backup-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-backup-light.svg">
-  <img src="docs/screenshot-backup-dark.svg" width="100%" alt="OPNBORG forced backup progress page with a radar animation, progress bar, live stats and a streaming log console">
-</picture>
+<img src="docs/screenshot-progress.jpg" width="100%" alt="OPNBORG forced backup progress view with the radar animation, progress bar, live statistics and streaming per-server log">
 
-`/force` arms a pass; the progress page streams the daemon log line by line and redirects
-back to the hive view when the pass completes.
+`/force` arms a pass; this page streams the daemon log line by line, shows live
+stats, and redirects back to the hive when the pass completes.
+</details>
+
+<details>
+<summary><b>🔧 Config dashboard — every parsed env knob, live probes</b></summary>
+<br>
+
+<img src="docs/screenshot-config.jpg" width="100%" alt="OPNBORG config dashboard tiles for backup targets, auth mode, git storage, OpenAI model probe, WebUI and monitoring links">
+
+Startup configuration, masked secrets, Argon2id auth state, the git store, and live model
+probes (server reachable, REST API ready, model found) — all on one page.
 </details>
 
 <details open>
