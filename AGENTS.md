@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.231`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.232`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -242,6 +242,9 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
 - `config.dirty` is an `atomic.Bool` — always `.Store()`/`.Load()`, never `=`.
 - `hive`, `unifiStatus`, and `unifiWatchStatus` are package globals guarded by `hiveMutex`/`unifiMutex`/`unifiWatchMutex`. Mutate only under the matching lock.
 - `gofmt -s` (simplify) is enforced; run `make check` before committing.
+- WebUI nav and hive member controls must never shrink: `nav a`, `.member-links a` and
+  `.member-links button` carry `flex-shrink:0` / `white-space:nowrap` so long labels wrap
+  instead of clipping inside the flex row.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
 - README artwork lives in `docs/`:
 - `hero-{dark,light}.svg` — hand-built theme-aware banner (1280x360 canvas).

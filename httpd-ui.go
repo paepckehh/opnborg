@@ -329,7 +329,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background-image:linear
 .app-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.1rem;margin-bottom:.5rem;background:var(--card);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow),var(--glow)}
 .app-header h1{font-size:1.6rem;letter-spacing:.06em;background:linear-gradient(90deg,var(--accent),var(--neon),var(--neon-2));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(74,158,255,.35))}
 nav{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 0}
-nav a{text-decoration:none}
+nav a{text-decoration:none;flex-shrink:0}
 nav a button{background:var(--card-2);color:var(--fg);border:1px solid var(--border);padding:.4rem .85rem;border-radius:99px;cursor:pointer;font-size:.82rem;letter-spacing:.02em;backdrop-filter:var(--glass-2);-webkit-backdrop-filter:var(--glass-2);transition:border-color .25s,box-shadow .25s,transform .2s,background .25s}
 nav a button:hover{border-color:var(--accent);box-shadow:0 0 18px rgba(74,158,255,.35);transform:translateY(-1px);background:rgba(74,158,255,.12)}
 nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.14);box-shadow:0 0 16px rgba(74,158,255,.3);color:var(--accent-2)}
@@ -353,6 +353,8 @@ nav .audit-active button{border-color:var(--accent);background:rgba(74,158,255,.
 .member-status{display:flex;align-items:center;font-size:1.4rem;flex-shrink:0;min-width:1.6em;justify-content:center;filter:drop-shadow(0 0 10px rgba(74,158,255,.45))}
 .member-main{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1 1 auto;min-width:200px}
 .member-links{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+.member-links a{flex-shrink:0}
+.member-links button{white-space:nowrap}
 .member-links a button{background:var(--card-2);color:var(--fg);border:1px solid var(--border);padding:.28rem .55rem;border-radius:6px;cursor:pointer;font-size:.74rem;font-family:var(--mono);transition:border-color .2s,box-shadow .2s,background .2s,transform .15s;backdrop-filter:var(--glass-2)}
 .member-links a button:hover{border-color:var(--accent);background:rgba(74,158,255,.14);box-shadow:0 0 14px rgba(74,158,255,.3);transform:translateY(-1px)}
 .member-links a button img{vertical-align:middle}

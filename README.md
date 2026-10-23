@@ -14,8 +14,10 @@ A single self-hosted Go daemon that keeps every OPNsense firewall (and optionall
 controller) in a git-tracked, SHA-256 deduplicated archive — then lets a local LLM write the
 security review of every change it makes.
 
+**0** agents on the firewalls · **0** database servers · **0** runtime dependencies · **1** static binary.
+
 <sub><b>⚡ ESTABLISHED IN THE OPEN SINCE SEPTEMBER 2024</b> · 2 years of continuous public development
-on GitHub · 289 tagged releases · still one binary, still zero runtime dependencies</sub>
+on GitHub · 290 tagged releases · still one binary, still zero runtime dependencies</sub>
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/opnborg.svg)](https://pkg.go.dev/paepcke.de/opnborg)
 [![Go Report Card](https://goreportcard.com/badge/paepcke.de/opnborg)](https://goreportcard.com/report/paepcke.de/opnborg)
@@ -63,38 +65,41 @@ on GitHub · 289 tagged releases · still one binary, still zero runtime depende
 
 ## 📸 Screenshots
 
-> Real captures from a live `opnborg` daemon, not mockups: a two-member edge fleet is backed up,
-> reviewed by the model, committed to git, and displayed in the dark WebUI theme.
+> Real captures from a live `opnborg` daemon, not mockups: a four-member edge hive is backed up,
+> reviewed by the model, committed to git, and displayed in the dark WebUI theme — authenticated
+> as an admin so the full diff and approval controls are visible.
 
 <details open>
 <summary><b>🖥️ The hive — fleet status at a glance</b></summary>
 <br>
 
-<img src="docs/screenshot-hive.jpg" width="100%" alt="OPNBORG hive dashboard showing two OPNsense members, their firmware versions, asset tags, last-seen times and archive links">
+<img src="docs/screenshot-hive.jpg" width="100%" alt="OPNBORG hive dashboard showing four OPNsense members in admin mode, live firmware versions, asset tags, last-seen times, archive links and the BorgDASHBOARD store and git summary">
 
 Every member tile carries its live firmware version, asset tag, last-seen time and
-`current.xml` / `.archive` links. Config downloads stay locked until you authenticate.
+`current.xml` / `.archive` links — here with one member degraded so the status colors are visible.
+The BorgDASHBOARD below summarises the backup store, the local git repo and upstream sync health.
 </details>
 
 <details open>
 <summary><b>🧟 BorgAUDIT — the AI-reviewed change history</b></summary>
 <br>
 
-<img src="docs/screenshot-audit.jpg" width="100%" alt="BorgAUDIT page with the security threat level summary, severity-tagged commit cards, an APPROVED high-severity change and its unified diff">
+<img src="docs/screenshot-audit.jpg" width="100%" alt="BorgAUDIT page with the security threat level summary, five severity-tagged commits, expanded unified diffs and approved and pending approval states">
 
 Threat-level summary, severity-tagged commits, and a full unified diff on demand.
-This capture shows a `high, needs-review` change that has been reviewed and approved
-in the ledger; the medium-severity sync commit is still awaiting approval.
+Two changes are approved in the ledger; a `critical, needs-review` DMZ rule change is still
+waiting for the operator, and the severity map at the top filters the list on click.
 </details>
 
 <details open>
 <summary><b>⚡ Live backup console — force a pass and watch it stream</b></summary>
 <br>
 
-<img src="docs/screenshot-progress.jpg" width="100%" alt="OPNBORG forced backup progress view with the radar animation, progress bar, live statistics and streaming per-server log">
+<img src="docs/screenshot-progress.jpg" width="100%" alt="OPNBORG forced backup progress view with the radar animation, progress bar, four live server and seven change counters and a streaming per-server log">
 
 `/force` arms a pass; this page streams the daemon log line by line, shows live
-stats, and redirects back to the hive when the pass completes.
+stats (16 lines · 4 servers · 7 changes · 0 errors in this capture), and redirects back to the
+hive when the pass completes.
 </details>
 
 <details>
