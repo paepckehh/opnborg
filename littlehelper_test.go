@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -9445,5 +9446,281 @@ func TestForceRedirectsWhenOPNBackupDisabled(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "PROGRESS-PAGE") {
 		t.Fatalf("progress page rendered without an observable pass")
+	}
+}
+
+// --- transport.go: fetchXML retry + truncation + TLS knobs ------------------
+
+// fetchTestXMLDoc is a minimal well-formed backup XML document for the
+// transport tests below.
+var fetchTestXMLDoc = []byte("<opnsense><version>26.7</version><system><hostname>opn03</hostname><firmware><plugins>os-a</plugins></firmware></system></opnsense>\n")
+
+// fetchTestTruncDoc returns the same document cut mid-stream (inside its
+// closing tags, so it can never validate as XML) - the body shape a
+// truncated / surplus-framed TLS record stream delivers to the client.
+func fetchTestTruncDoc() []byte {
+	return fetchTestXMLDoc[:len(fetchTestXMLDoc)-20]
+}
+
+// fetchTestServer spins up a TLS API double serving the backup XML endpoint
+// via the given handler. The handler receives the request hit number
+// (1 = first attempt), the test receives the hit counter to assert retry
+// behavior. The counter is atomic: the handler runs on the server goroutine
+// while the assertion runs on the test goroutine.
+func fetchTestServer(tb testing.TB, h func(w http.ResponseWriter, r *http.Request, hit int32)) (string, *atomic.Int32) {
+	tb.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != _apiBackupXML {
+			http.NotFound(w, r)
+			return
+		}
+		h(w, r, hits.Add(1))
+	}))
+	tb.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "https://"), &hits
+}
+
+// TestFetchXMLRetriesTruncatedBody verifies that a body delivered truncated
+// (framing consistent, content cut mid-XML - e.g. a partial appliance write)
+// is retried on a fresh connection until a complete document arrives, and
+// that the complete document is what gets returned.
+func TestFetchXMLRetriesTruncatedBody(t *testing.T) {
+	ensureDisplayDrained(t)
+	trunc := fetchTestTruncDoc()
+	host, hits := fetchTestServer(t, func(w http.ResponseWriter, r *http.Request, hit int32) {
+		if hit < 3 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(trunc)))
+			_, _ = w.Write(trunc)
+			return
+		}
+		_, _ = w.Write(fetchTestXMLDoc)
+	})
+	data, err := fetchXML(host, &OPNCall{Key: "k", Secret: "s"})
+	if err != nil {
+		t.Fatalf("fetchXML: %v", err)
+	}
+	if !bytes.Equal(data, fetchTestXMLDoc) {
+		t.Fatalf("fetchXML returned a truncated body (%d bytes, want %d)", len(data), len(fetchTestXMLDoc))
+	}
+	if got := hits.Load(); got != 3 {
+		t.Fatalf("truncated body must be retried until valid: got %d requests", got)
+	}
+}
+
+// TestFetchXMLSurvivesSurplusFraming reproduces the exact observed failure
+// mode: the appliance declares a Content-Length smaller than the payload it
+// writes (FreeBSD kTLS/nginx record-stream split). The transport delivers
+// exactly the declared prefix - a backup XML cut mid-document - the tail
+// ("</server_address>...") lands on the connection as unsolicited data
+// ("Unsolicited response received on idle HTTP channel"). fetchXML must
+// detect the broken document via validation and retry on a fresh stream.
+func TestFetchXMLSurvivesSurplusFraming(t *testing.T) {
+	ensureDisplayDrained(t)
+	trunc := fetchTestTruncDoc()
+	host, hits := fetchTestServer(t, func(w http.ResponseWriter, r *http.Request, hit int32) {
+		if hit == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(trunc)))
+			_, _ = w.Write(fetchTestXMLDoc) // writes MORE than declared
+			return
+		}
+		_, _ = w.Write(fetchTestXMLDoc)
+	})
+	data, err := fetchXML(host, &OPNCall{Key: "k", Secret: "s"})
+	if err != nil {
+		t.Fatalf("fetchXML: %v", err)
+	}
+	if !bytes.Equal(data, fetchTestXMLDoc) {
+		t.Fatalf("fetchXML returned a truncated body (%d bytes, want %d)", len(data), len(fetchTestXMLDoc))
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("surplus-framed stream must be retried once and then succeed: got %d requests", got)
+	}
+}
+
+// TestFetchXMLNoRetryOnAuthFailure verifies a definitive API rejection
+// (HTTP 401) is reported immediately with its status instead of being
+// mislabelled as an invalid-XML body, and that it is never retried.
+func TestFetchXMLNoRetryOnAuthFailure(t *testing.T) {
+	ensureDisplayDrained(t)
+	host, hits := fetchTestServer(t, func(w http.ResponseWriter, r *http.Request, hit int32) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("<html><body>401 unauthorized</body></html>"))
+	})
+	_, err := fetchXML(host, &OPNCall{Key: "k", Secret: "s"})
+	if err == nil {
+		t.Fatal("401 must fail the fetch")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Fatalf("auth failure must surface its HTTP status: %q", err.Error())
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("4xx must not be retried: got %d requests", got)
+	}
+}
+
+// TestFetchXMLRetriesShortBody verifies a body shorter than its declared
+// Content-Length (a truncated record stream the reader catches as an
+// unexpected EOF) is retried on fresh connections up to _fetchMaxAttempts
+// and reported with the read-body reason.
+func TestFetchXMLRetriesShortBody(t *testing.T) {
+	ensureDisplayDrained(t)
+	host, hits := fetchTestServer(t, func(w http.ResponseWriter, r *http.Request, hit int32) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(fetchTestXMLDoc)+64))
+		_, _ = w.Write(fetchTestXMLDoc) // writes LESS than declared
+	})
+	_, err := fetchXML(host, &OPNCall{Key: "k", Secret: "s"})
+	if err == nil {
+		t.Fatal("short body must fail the fetch")
+	}
+	if !strings.Contains(err.Error(), "UNABLE-TO-READ-XML-BODY") {
+		t.Fatalf("short body must surface its read-body reason: %q", err.Error())
+	}
+	if got := hits.Load(); got != _fetchMaxAttempts {
+		t.Fatalf("short body must be retried up to %d attempts: got %d requests", _fetchMaxAttempts, got)
+	}
+}
+
+// TestGetRequestClosesConnection guards the Connection: close policy on API
+// fetch requests: the transport must never pool an OPNsense API stream, so
+// surplus record-stream bytes can never be read as the start of the next
+// request on a reused idle connection.
+func TestGetRequestClosesConnection(t *testing.T) {
+	req, err := getRequest("https://opn01.lan:8443"+_apiBackupXML, _userAgent)
+	if err != nil {
+		t.Fatalf("getRequest: %v", err)
+	}
+	if !req.Close {
+		t.Fatal("API fetch requests must carry Connection: close")
+	}
+	if req.Method != http.MethodGet {
+		t.Fatalf("request method = %q, want GET", req.Method)
+	}
+}
+
+// TestGetTlsConfVersionKnobs guards the TLS version range handling: the
+// defaults stay pinned to TLS 1.3 without any CipherSuites (Go ignores them
+// for TLS 1.3, and the old TLS-1.3-suite pin would break a TLS 1.2
+// handshake), and a 1.2 range pins the ChaCha20-Poly1305 TLS 1.2 suite pair
+// (the FreeBSD kTLS-compatible workaround path).
+func TestGetTlsConfVersionKnobs(t *testing.T) {
+	wantSuites := []uint16{
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+	}
+	cases := []struct {
+		name       string
+		cfg        *OPNCall
+		wantMin    uint16
+		wantMax    uint16
+		wantSuites bool
+	}{
+		{"defaults", &OPNCall{}, tls.VersionTLS13, tls.VersionTLS13, false},
+		{"explicit 1.3", &OPNCall{TLSMin: tls.VersionTLS13, TLSMax: tls.VersionTLS13}, tls.VersionTLS13, tls.VersionTLS13, false},
+		{"ktls 1.2 workaround", &OPNCall{TLSMin: tls.VersionTLS12, TLSMax: tls.VersionTLS12}, tls.VersionTLS12, tls.VersionTLS12, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getTlsConf(tc.cfg)
+			if got.MinVersion != tc.wantMin || got.MaxVersion != tc.wantMax {
+				t.Fatalf("version range = (%x, %x), want (%x, %x)", got.MinVersion, got.MaxVersion, tc.wantMin, tc.wantMax)
+			}
+			if tc.wantSuites {
+				if !reflect.DeepEqual(got.CipherSuites, wantSuites) {
+					t.Fatalf("TLS 1.2 range must pin the 1.2 ChaCha20 suite pair: got %v", got.CipherSuites)
+				}
+			} else if len(got.CipherSuites) != 0 {
+				t.Fatalf("TLS 1.3 range must not pin CipherSuites (Go ignores them there): %v", got.CipherSuites)
+			}
+			if !got.InsecureSkipVerify || !got.SessionTicketsDisabled {
+				t.Fatal("keypin + no-session-resumption hardening must stay enabled")
+			}
+		})
+	}
+}
+
+// TestParseTLSVersion guards the OPN_TLS_{MIN,MAX}_VERSION parser: accepted
+// spellings, case/whitespace tolerance, and the rejection path.
+func TestParseTLSVersion(t *testing.T) {
+	ok := map[string]uint16{
+		"1.2":    tls.VersionTLS12,
+		"1.3":    tls.VersionTLS13,
+		"TLS12":  tls.VersionTLS12,
+		"tls13":  tls.VersionTLS13,
+		"TLS1.2": tls.VersionTLS12,
+		" 1.3 ":  tls.VersionTLS13,
+	}
+	for in, want := range ok {
+		got, err := parseTLSVersion("OPN_TLS_MIN_VERSION", in)
+		if err != nil {
+			t.Fatalf("parse %q: %v", in, err)
+		}
+		if got != want {
+			t.Fatalf("parse %q = %x, want %x", in, got, want)
+		}
+	}
+	if _, err := parseTLSVersion("OPN_TLS_MIN_VERSION", "1.1"); err == nil {
+		t.Fatal("unsupported version must be rejected")
+	}
+	if got := tlsVersionString(tls.VersionTLS12); got != "1.2" {
+		t.Fatalf("tlsVersionString(1.2) = %q", got)
+	}
+	if got := tlsVersionString(tls.VersionTLS13); got != "1.3" {
+		t.Fatalf("tlsVersionString(1.3) = %q", got)
+	}
+}
+
+// TestSetupTLSVersionKnobs verifies Setup wires the OPN_TLS_MIN_VERSION /
+// OPN_TLS_MAX_VERSION env knobs: defaults, explicit overrides (the
+// appliance kTLS compatibility range), and the two setup-fatal misconfigs.
+func TestSetupTLSVersionKnobs(t *testing.T) {
+	ensureDisplayDrained(t)
+	for _, k := range []string{"OPN_APIKEY", "OPN_APISECRET", "OPN_TARGETS", "OPN_TLS_MIN_VERSION", "OPN_TLS_MAX_VERSION"} {
+		old, had := os.LookupEnv(k)
+		_ = os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(k, old)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		})
+	}
+	withEnv(t, "OPN_APIKEY", "k", true)
+	withEnv(t, "OPN_APISECRET", "s", true)
+	withEnv(t, "OPN_TARGETS", "opn01.lan", true)
+
+	// defaults: TLS 1.3 only
+	config, err := Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if config.TLSMin != tls.VersionTLS13 || config.TLSMax != tls.VersionTLS13 {
+		t.Fatalf("default TLS range = (%x, %x), want TLS 1.3 only", config.TLSMin, config.TLSMax)
+	}
+
+	// explicit range: the FreeBSD kTLS workaround lowers the floor to 1.2
+	withEnv(t, "OPN_TLS_MIN_VERSION", "1.2", true)
+	withEnv(t, "OPN_TLS_MAX_VERSION", "TLS1.3", true)
+	config, err = Setup()
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if config.TLSMin != tls.VersionTLS12 || config.TLSMax != tls.VersionTLS13 {
+		t.Fatalf("explicit TLS range = (%x, %x), want (1.2, 1.3)", config.TLSMin, config.TLSMax)
+	}
+
+	// unsupported version: setup-fatal
+	withEnv(t, "OPN_TLS_MAX_VERSION", "1.1", true)
+	if _, err = Setup(); err == nil {
+		t.Fatal("unsupported TLS version must fail Setup")
+	}
+
+	// min > max: setup-fatal
+	withEnv(t, "OPN_TLS_MIN_VERSION", "1.3", true)
+	withEnv(t, "OPN_TLS_MAX_VERSION", "1.2", true)
+	if _, err = Setup(); err == nil {
+		t.Fatal("OPN_TLS_MIN_VERSION > OPN_TLS_MAX_VERSION must fail Setup")
 	}
 }

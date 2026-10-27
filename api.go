@@ -11,7 +11,7 @@ import (
 // below and is overridden at build time via
 // `-ldflags "-X paepcke.de/opnborg.SemVer=<tag>"` by the Docker image build,
 // goreleaser and `make build` so shipped artifacts always report their tag.
-var SemVer = "v0.1.233"
+var SemVer = "v0.1.234"
 
 // global var
 var (
@@ -44,6 +44,8 @@ type OPNCall struct {
 	Secret    string      // OPNSense Backup User API Secret (required)
 	Path      string      // OPNSense Backup Files Target Path, default:'.'
 	TLSKeyPin string      // TLS Connection Server Certificate KeyPIN
+	TLSMin    uint16      // TLS minimum version for OPNsense API fetches (default: 1.3, OPN_TLS_MIN_VERSION)
+	TLSMax    uint16      // TLS maximum version for OPNsense API fetches (default: 1.3, OPN_TLS_MAX_VERSION)
 	AppName   string      // Display and SysLog Application Name
 	Email     string      // Git Commiter eMail Address (default: git@opnborg)
 	Sleep     int64       // number of seconds to sleep between polls

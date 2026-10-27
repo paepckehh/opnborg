@@ -255,6 +255,8 @@ file is auto-loaded. Ready-to-use examples live in the repo: `example.sh`,
 | `OPN_TARGETS_IMGURL_<GROUP>` | — | WebUI group image URL (description becomes the tooltip) |
 | `OPN_PATH` | `.` | Backup store path |
 | `OPN_TLSKEYPIN` | — | SPKI SHA-256 keypin — MitM-proofing for the OPNsense API |
+| `OPN_TLS_MIN_VERSION` | `1.3` | Minimum TLS version for OPNsense API fetches (`1.2` / `1.3`) |
+| `OPN_TLS_MAX_VERSION` | `1.3` | Maximum TLS version — set to `1.2` when an appliance's FreeBSD kTLS record stream corrupts TLS 1.3 backup downloads |
 | `OPN_SLEEP` | `3600` | Poll interval in seconds (min `10`) |
 | `OPN_MASTER` | — | Master host — replicate its config across the hive |
 | `OPN_SYNC_PKG` | — | Sync installed plugins from master to all targets |
@@ -448,6 +450,11 @@ restart. The generator is always available, even when credentials are already ar
 
 - Targets need an explicit port unless `:443`; plain HTTP is unsupported.
 - OS trust-store verification is intentionally **off** — use `OPN_TLSKEYPIN`.
+- Backup XML downloads are **Connection: close** and retried on a fresh TLS stream (3 attempts): a
+  truncated / surplus-framed body (the `Unsolicited response received on idle HTTP channel` +
+  `[FAIL:XML-VALIDATION]` pair some OPNsense/FreeBSD kTLS appliances emit) is a per-connection
+  record-stream fault — a new connection fixes it. Lower `OPN_TLS_MAX_VERSION` to `1.2` for an
+  appliance that trips it on every pass.
 - Auth sessions live in process memory only: a restart revokes every admin session.
 - The `.db/` ledger directory (database plus WAL sidecars, and anything else inside) is always
   gitignored and hardwire-excluded from commit staging.

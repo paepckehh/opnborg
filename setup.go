@@ -1,6 +1,7 @@
 package opnborg
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -134,6 +135,33 @@ func Setup() (*OPNCall, error) {
 	// validate bools
 	config.Daemon = !isEnv("OPN_NODAEMON")
 	config.Debug = isEnv("OPN_DEBUG")
+
+	// TLS version range for OPNsense API fetches (default: TLS 1.3 only).
+	// Lowering OPN_TLS_MAX_VERSION to 1.2 is the compatibility escape hatch
+	// for appliances whose FreeBSD kTLS record stream corrupts TLS 1.3
+	// response bodies (truncated backup XML, "unsolicited response" tails:
+	// a fresh connection per fetch attempt plus the retry in fetchXML repair
+	// transient splits; a TLS 1.2 negotiation avoids the TLS 1.3 record path
+	// entirely for persistent offenders).
+	config.TLSMin, config.TLSMax = tls.VersionTLS13, tls.VersionTLS13
+	for _, knob := range []struct {
+		env string
+		dst *uint16
+	}{
+		{"OPN_TLS_MIN_VERSION", &config.TLSMin},
+		{"OPN_TLS_MAX_VERSION", &config.TLSMax},
+	} {
+		if val := strings.TrimSpace(os.Getenv(knob.env)); val != "" {
+			ver, verErr := parseTLSVersion(knob.env, val)
+			if verErr != nil {
+				return nil, verErr
+			}
+			*knob.dst = ver
+		}
+	}
+	if config.TLSMin > config.TLSMax {
+		return nil, errors.New("[SETUP][OPN_TLS_MIN_VERSION] must not exceed OPN_TLS_MAX_VERSION (" + tlsVersionString(config.TLSMin) + " > " + tlsVersionString(config.TLSMax) + ")")
+	}
 
 	// configure WebUI authentication credentials (OPN_AUTH_HASH /
 	// OPN_AUTH_SALT). When both are set with valid-looking values the
