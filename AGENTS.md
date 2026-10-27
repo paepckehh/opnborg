@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.238`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.239`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
