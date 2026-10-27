@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.235`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.237`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -274,7 +274,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
   instead of clipping inside the flex row.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
 - README artwork lives in `docs/`:
-- `docs/rca-2026-10-27-opnsense-backup-download-framing.md` — sanitized, upstreamable root-cause analysis of the OPNsense 26.7.7 backup-download framing violation (declared `Content-Length` smaller than the body actually written; surplus tail delivered out-of-band on the keep-alive connection). Attach the per-attempt `[DECLARED]/[RECEIVED]` log lines from a future occurrence before filing upstream.
+- `docs/rca-2026-10-27-opnsense-backup-download-framing.md` — sanitized, upstreamable root-cause analysis of the OPNsense 26.7.7 backup-download framing violation (declared `Content-Length` smaller than the body actually written; surplus tail delivered out-of-band on the keep-alive connection). The README opens with a short `> [!WARNING]` pointing here and giving the appliance-side workaround (`kern.ipc.tls.enable=0`, or client-side `OPN_TLS_MAX_VERSION=1.2`). Attach the per-attempt `[DECLARED]/[RECEIVED]` log lines from a future occurrence before filing upstream.
 - `hero-{dark,light}.svg` — hand-built theme-aware banner (1280x360 canvas).
 - `established-{dark,light}.svg` — hand-built theme-aware "established" trust banner (1200x130 canvas) rendered below the hero; carries project age, the development claim, and the tagged-release count.
 - `screenshot-console-{dark,light}.svg` — hand-built terminal illustration of the ANSI-colored display engine.

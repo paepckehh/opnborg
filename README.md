@@ -1,3 +1,6 @@
+> [!WARNING]
+> **OPNsense 26.7.7 with kernel TLS (kTLS) can send truncated backup XML** (more body bytes than its declared `Content-Length`), so a backup download fails or yields a partial config. Disable kTLS on the appliance (`kern.ipc.tls.enable=0` in `/boot/loader.conf`, then reboot) or set `OPN_TLS_MAX_VERSION=1.2`. Root cause and evidence: [OPNsense backup framing RCA](docs/rca-2026-10-27-opnsense-backup-download-framing.md).
+
 <div align="center">
 
 <picture>
