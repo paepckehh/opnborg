@@ -45,7 +45,7 @@
 <rect x="402.1" y="274.0" width="70.7" height="30" rx="15.0" fill="#0e1828" stroke="#24395c" stroke-width="1"/><text x="437.5" y="293.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#3fb950" text-anchor="middle" letter-spacing="0.8">GO-GIT</text>
 <rect x="481.8" y="274.0" width="78.2" height="30" rx="15.0" fill="#0e1828" stroke="#24395c" stroke-width="1"/><text x="520.9" y="293.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#d29922" text-anchor="middle" letter-spacing="0.8">RFC5424</text>
 <text x="66.0" y="338.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#93a6bf" text-anchor="start" opacity="0.7">go run paepcke.de/opnborg/cmd/opnborg@main</text>
-<text x="1214.0" y="338.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#93a6bf" text-anchor="end" letter-spacing="0.8" opacity="0.8">EST. 2024-09-14  ·  v0.1.235  ·  293 TAGGED RELEASES  ·  2 YEARS IN PUBLIC</text>
+<text x="1214.0" y="338.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#93a6bf" text-anchor="end" letter-spacing="0.8" opacity="0.8">EST. 2024-09-14  ·  v0.1.236  ·  294 TAGGED RELEASES  ·  2 YEARS IN PUBLIC</text>
 <rect x="664" y="46" width="552" height="268" rx="18" fill="#0e1828" stroke="#24395c" filter="url(#shadow)"/>
 <rect x="664" y="46" width="552" height="46" rx="18" fill="#132135"/>
 <rect x="664" y="74" width="552" height="18" fill="#132135"/>

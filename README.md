@@ -401,9 +401,14 @@ opnborg is built for people who treat firewall configs as production state:
   when no credentials are configured at all. A regression test guards this invariant.
 - **Constant-time auth** — Argon2id-derived keys compared with `subtle.ConstantTimeCompare`,
   per-session random tokens, global exponential lockout on failed logins.
-- **Ledger isolation** — the SQLite approval ledger lives in `.db/`, is gitignored on every
-  startup, and is skipped at commit-staging time by a hardwired path guard. It cannot leak into
-  your git history, not even through a manual `git add .`.
+- **Ledger isolation** — the SQLite approval ledger lives in `.db/` and stays out of your git
+  history through four independent layers: the store `.gitignore` (`.db/` plus the three file
+  names, reconciled on every startup and every commit), a hardwired staging skip over every
+  `approval.db*` path, an index filter (`gitLedgerScrubIndex`) that unstages any ledger path
+  before the commit tree is built — even one staged by a manual `git add .` — and a post-commit
+  tree verification that fails the tick loudly if ledger content leaked in anyway. A startup
+  audit flags ledger paths found in existing history so the blob can be purged upstream. The
+  opnborg source checkout carries the same `.gitignore` guard for itself.
 
 ---
 

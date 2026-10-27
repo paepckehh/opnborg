@@ -3,6 +3,7 @@ package opnborg
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitcfg "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	gitindex "github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	xssh "golang.org/x/crypto/ssh"
@@ -243,6 +245,118 @@ func isApprovalDBPath(p string) bool {
 	return strings.HasSuffix(base, ".db") || strings.Contains(base, ".db-")
 }
 
+// gitLedgerScrubIndex is the last-chance filter in front of every commit: it
+// removes every security-approval ledger path (approval.db, its SQLite WAL
+// sidecars, anything inside .db/, and every ledger-style spelling — see
+// isApprovalDBPath) from the git index and persists the scrubbed index. A
+// commit tree is built from the index, so a ledger path that is absent from
+// the index can never reach a commit — no matter which code path staged it
+// (a stale go-git re-stage of tracked-but-ignored files, a future regression
+// reintroducing wtree.Add("."), or a hand-run `git add .` against a stale
+// .gitignore). The staging skip in gitCommit is the first filter; this scrub
+// is the independent second one. It returns the removed paths so the caller
+// can log loudly when the first line of defence was bypassed, and a nil
+// slice (with no write) when the index is already ledger-clean.
+func gitLedgerScrubIndex(repo *git.Repository) ([]string, error) {
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return nil, fmt.Errorf("read index: %w", err)
+	}
+	var removed []string
+	entries := make([]*gitindex.Entry, 0, len(idx.Entries))
+	for _, e := range idx.Entries {
+		if isApprovalDBPath(e.Name) {
+			removed = append(removed, e.Name)
+			continue
+		}
+		entries = append(entries, e)
+	}
+	if len(removed) == 0 {
+		return nil, nil
+	}
+	idx.Entries = entries
+	if err := repo.Storer.SetIndex(idx); err != nil {
+		return removed, fmt.Errorf("persist scrubbed index: %w", err)
+	}
+	return removed, nil
+}
+
+// gitLedgerVerifyCommit is the runtime verification behind every commit: it
+// walks the freshly created commit's tree and reports every security-approval
+// ledger path it finds. A non-empty result means the staged-filter defences
+// were bypassed and ledger content reached the history — the caller logs the
+// breach and fails the tick so the operator notices. It is deliberately
+// independent of the staging path: it inspects the commit object that now
+// exists, not the code that produced it. A repo without any commits yet is
+// clean (the caller passes HEAD, which only exists after the first commit).
+func gitLedgerVerifyCommit(repo *git.Repository, commit plumbing.Hash) ([]string, error) {
+	obj, err := repo.CommitObject(commit)
+	if err != nil {
+		return nil, fmt.Errorf("read commit %s: %w", commit, err)
+	}
+	tree, err := obj.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("read tree of %s: %w", commit, err)
+	}
+	var leaked []string
+	iter := tree.Files()
+	for {
+		f, err := iter.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return leaked, fmt.Errorf("walk tree of %s: %w", commit, err)
+			}
+			break
+		}
+		if isApprovalDBPath(f.Name) || strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir {
+			leaked = append(leaked, f.Name)
+		}
+	}
+	return leaked, nil
+}
+
+// gitLedgerAuditTracked is the startup runtime verification: it walks the
+// HEAD tree of the storage repo and reports every tracked security-approval
+// ledger path. A non-empty result means ledger content is already inside the
+// commit history (a store inherited from an era or a manual `git add` that
+// committed the ledger before the guards existed). opnborg never rewrites
+// history — the finding is logged loudly so the operator can purge the blob
+// upstream — but the new-commit defences (staging skip + index scrub + tree
+// verify) guarantee no further ledger content is added. A repo with no
+// commits yet (fresh init) reports clean.
+func gitLedgerAuditTracked(repo *git.Repository) ([]string, error) {
+	head, err := repo.Head()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read HEAD: %w", err)
+	}
+	obj, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("read HEAD commit: %w", err)
+	}
+	tree, err := obj.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("read HEAD tree: %w", err)
+	}
+	var tracked []string
+	iter := tree.Files()
+	for {
+		f, err := iter.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return tracked, fmt.Errorf("walk HEAD tree: %w", err)
+			}
+			break
+		}
+		if isApprovalDBPath(f.Name) || strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir {
+			tracked = append(tracked, f.Name)
+		}
+	}
+	return tracked, nil
+}
+
 // sshUserFromURL extracts the SSH user from an SSH git URL. It handles both the
 // scp-style form ("user@host:path") and the ssh:// URI form
 // ("ssh://user@host[:port]/path"). It falls back to the conventional "git"
@@ -360,22 +474,23 @@ func gitEnsureOrigin(repo *git.Repository, upstream string) error {
 // gitCommit stages the whole worktree and commits any pending changes. It
 // returns committed=false (a no-op) when the worktree is clean. The on-disk
 // security-approval ledger (approval.db and its SQLite WAL sidecars
-// approval.db-wal / approval.db-shm) is never committed: it is gitignored (see
-// _ignore / reconcileGitignoreApprovalLedger, reconciled at the start of every
-// gitCheckIn) so wtree.Add(".") never stages it, and the status partition
-// below treats a changeset that touches only approval-ledger files as a clean
-// no-op so no commit (and no Ollama round-trip) is spent on a ledger rotation.
+// approval.db-wal / approval.db-shm) is never committed. Three independent
+// defences keep it out:
 //
-// The staging is path-by-path rather than wtree.Add("."): go-git's
-// wtree.Add(".") and CommitOptions.All both re-stage tracked-but-gitignored
-// files — a file committed before it was added to .gitignore stays tracked,
-// and go-git's gitignore matcher only excludes untracked ignored files, so a
-// modified tracked approval.db would be re-staged on every tick. Staging each
-// non-ledger path from the status map explicitly (and committing with
-// All:false so autoAddModifiedAndDeleted never runs) guarantees a ledger file
-// is never staged, regardless of .gitignore state. The status map already
-// excludes gitignored untracked files, so non-ledger staging coverage is
-// identical to wtree.Add(".").
+//  1. The .gitignore written/reconciled by gitEnsureIgnore (see _ignore /
+//     reconcileGitignoreApprovalLedger, reconciled at the start of every
+//     gitInit and gitCheckIn) lists ".db/" plus all three ledger file names,
+//     so ignored untracked ledger files never even surface in the status map.
+//  2. The status partition below treats a changeset that touches only
+//     approval-ledger files as a clean no-op, and the path-by-path staging
+//     (wtree.Add(".") and CommitOptions.All are NOT used: both re-stage
+//     tracked-but-gitignored files) skips every isApprovalDBPath path.
+//  3. gitLedgerScrubIndex removes any ledger entry that nevertheless made it
+//     into the index (staged by this loop, a legacy tracked file, or a
+//     hand-run `git add .` against a stale .gitignore), because the commit
+//     tree is built from the index. gitLedgerVerifyCommit then walks the
+//     fresh tree and fails the tick loudly if any ledger path leaked in
+//     anyway, and gitLedgerAuditTracked re-checks HEAD at every startup.
 func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 	wtree, err := repo.Worktree()
 	if err != nil {
@@ -412,6 +527,16 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 		if _, err := wtree.Add(p); err != nil {
 			return false, fmt.Errorf("stage %s: %w", p, err)
 		}
+	}
+	// Second, independent filter: scrub every approval-ledger path from the
+	// index. A commit tree is built from the index, so this guarantees no
+	// staged ledger path (staged by this loop, a legacy tracked entry, or a
+	// stray hand-run `git add`) can reach the tree below — belt and braces on
+	// top of the staging skip above.
+	if scrubbed, err := gitLedgerScrubIndex(repo); err != nil {
+		displayChan <- []byte("[GIT][REPO][LEDGER][INDEX][FAIL] " + err.Error())
+	} else if len(scrubbed) > 0 {
+		displayChan <- []byte("[GIT][REPO][LEDGER][INDEX][WARN] unstaged approval-ledger path(s): " + strings.Join(scrubbed, ","))
 	}
 	// Choose the commit message. The default is the static _commitMsg string.
 	// When Ollama-assisted generation is enabled (OLLAMA_DESC_URL +
@@ -465,6 +590,19 @@ func gitCommit(config *OPNCall, repo *git.Repository) (bool, error) {
 		return false, err
 	}
 	displayChan <- []byte("[GIT][REPO][COMMIT][" + obj.Hash.String() + "] " + obj.Message)
+	// Post-commit runtime verification: the freshly created tree must be free
+	// of every approval-ledger path. A non-empty result is a defence breach
+	// (the staging skip and the index scrub were both bypassed); fail the tick
+	// so the operator notices, after logging the leaked path(s). The backup
+	// itself is safely committed at this point, so the error is a loud
+	// incident signal, not a data-loss rollback.
+	leaked, err := gitLedgerVerifyCommit(repo, commit)
+	if err != nil {
+		displayChan <- []byte("[GIT][REPO][LEDGER][VERIFY][FAIL] " + err.Error())
+	} else if len(leaked) > 0 {
+		displayChan <- []byte("[GIT][REPO][LEDGER][VERIFY][FAIL:LEDGER-COMMITTED] " + strings.Join(leaked, ","))
+		return true, fmt.Errorf("approval ledger committed into %s: %s", obj.Hash, strings.Join(leaked, ","))
+	}
 	// Record the commit in the security-approval ledger when its Ollama
 	// security-impact tag is above low/none/backup (medium / high /
 	// critical). A ledger problem is a non-fatal no-op so a backup is never
@@ -608,6 +746,17 @@ func gitInit(config *OPNCall) error {
 	repo, err := gitRepo(config.Path)
 	if err != nil {
 		return err
+	}
+	// Startup runtime verification: audit the existing HEAD tree for tracked
+	// approval-ledger paths. A finding means ledger content sits in history
+	// from before the guards existed (or from a manual `git add`); it is
+	// logged loudly for upstream purging. The per-commit filters guarantee
+	// nothing further is added.
+	if tracked, err := gitLedgerAuditTracked(repo); err != nil {
+		displayChan <- []byte("[GIT][REPO][LEDGER][AUDIT][FAIL] " + err.Error())
+	} else if len(tracked) > 0 {
+		displayChan <- []byte("[GIT][REPO][LEDGER][AUDIT][WARN:LEDGER-IN-HISTORY] " + strings.Join(tracked, ","))
+		displayChan <- []byte("[GIT][REPO][LEDGER][AUDIT][WARN] purge the blob upstream: git filter-repo / BFG on " + strings.Join(tracked, ","))
 	}
 	// Open the security-approval ledger so it is ready before the first
 	// worker pass. A failure is logged but non-fatal: the daemon keeps

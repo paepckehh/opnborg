@@ -3525,8 +3525,11 @@ func TestGitCommitSkipsApprovalLedger(t *testing.T) {
 // been committed into history (so it is tracked), .gitignore no longer keeps
 // its worktree modifications out of subsequent commits — go-git's gitignore
 // matcher only excludes untracked ignored files. gitCommit must still refuse
-// to re-stage it, so a tracked-ledger modification plus a real XML change
-// produces a commit that carries the new XML but NOT the new ledger blob.
+// to re-stage it AND the index scrub must drop the tracked legacy entry
+// entirely, so a tracked-ledger modification plus a real XML change produces
+// a commit that carries the new XML but NOT the ledger at all: the ledger is
+// untracked from that commit on (the `git rm --cached` equivalent), while the
+// seed commit in history keeps its original blob untouched.
 func TestGitCommitSkipsTrackedApprovalLedger(t *testing.T) {
 	ensureDisplayDrained(t)
 	cwd, err := os.Getwd()
@@ -3606,27 +3609,51 @@ func TestGitCommitSkipsTrackedApprovalLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
-	entry, err := tree.FindEntry("approval.db")
-	if err != nil {
-		t.Fatalf("approval.db should still be tracked at its original blob: %v", err)
+	// The ledger must be GONE from the new HEAD tree: the staging skip kept
+	// the v2 modification out, and the index scrub dropped the tracked legacy
+	// entry so the commit untracks approval.db from here on. The v2 content
+	// must not be reachable through the new tree at all.
+	if _, err := tree.FindEntry(_approvalDBName); err == nil {
+		t.Fatalf("approval.db must be untracked from the new commit: the tracked legacy ledger entry must be scrubbed from the index")
 	}
-	// The committed blob must still hold the v1 content, proving the v2
-	// worktree modification was never staged into this commit.
-	blob, err := repo.BlobObject(entry.Hash)
+	// The seed commit in history keeps its original v1 blob untouched: the
+	// scrub only ever removes entries from the index that builds NEW commits,
+	// it never rewrites history.
+	headCommitParent, err := headCommit.Parent(0)
 	if err != nil {
-		t.Fatalf("BlobObject: %v", err)
+		t.Fatalf("parent commit: %v", err)
 	}
-	r, err := blob.Reader()
+	seedTree, err := headCommitParent.Tree()
 	if err != nil {
-		t.Fatalf("Reader: %v", err)
+		t.Fatalf("parent tree: %v", err)
 	}
-	got, err := io.ReadAll(r)
-	r.Close()
+	seedEntry, err := seedTree.FindEntry(_approvalDBName)
 	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
+		t.Fatalf("approval.db must still be tracked in the seed commit history: %v", err)
 	}
-	if string(got) != "ledger-v1" {
-		t.Fatalf("approval.db worktree modification was committed: HEAD blob = %q, want %q", string(got), "ledger-v1")
+	seedBlob, err := repo.BlobObject(seedEntry.Hash)
+	if err != nil {
+		t.Fatalf("BlobObject seed: %v", err)
+	}
+	sr, err := seedBlob.Reader()
+	if err != nil {
+		t.Fatalf("seed reader: %v", err)
+	}
+	seedGot, err := io.ReadAll(sr)
+	sr.Close()
+	if err != nil {
+		t.Fatalf("seed readall: %v", err)
+	}
+	if string(seedGot) != "ledger-v1" {
+		t.Fatalf("history rewrite detected: seed approval.db blob = %q, want %q", string(seedGot), "ledger-v1")
+	}
+	// The ledger file must remain on disk untouched (it is live SQLite data).
+	onDisk, err := os.ReadFile(filepath.Join(store, _approvalDBName))
+	if err != nil {
+		t.Fatalf("read on-disk approval.db: %v", err)
+	}
+	if string(onDisk) != "ledger-v2-must-not-commit" {
+		t.Fatalf("on-disk approval.db was modified: %q", string(onDisk))
 	}
 	// And the real XML change must have landed.
 	xmlEntry, err := tree.FindEntry("fw01.lan/current.xml")
@@ -4197,6 +4224,287 @@ func TestDBDirContentsNeverCommitted(t *testing.T) {
 	for p := range status2 {
 		if strings.HasPrefix(p, _approvalDBDir+"/") || p == _approvalDBDir || isApprovalDBPath(p) {
 			t.Errorf("path %q from the .db ledger directory must be gitignored and absent from the worktree status", p)
+		}
+	}
+}
+
+// TestGitCommitScrubsLedgerFromIndex is the regression test for the
+// last-chance index filter: a ledger path that is already STAGED in the
+// index (by whatever bypassed the staging skip — a manual `git add`, a
+// legacy tracked-but-ignored entry, or a future regression) must be
+// scrubbed by gitLedgerScrubIndex before the commit tree is built, so the
+// resulting commit never carries it.
+func TestGitCommitScrubsLedgerFromIndex(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	// A .gitignore without any ledger ignore, seeded via a raw commit so
+	// neither gitInit's reconcile nor the status map can keep the ledger
+	// paths below out of the staging area. The only defence under test is
+	// gitCommit's index scrub.
+	if err := os.WriteFile(filepath.Join(store, _gitignore), []byte(".archive\nCONFIG*\nLogs\n"), 0660); err != nil {
+		t.Fatalf("write gitignore: %v", err)
+	}
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	if _, err := wtree.Add(_gitignore); err != nil {
+		t.Fatalf("add gitignore: %v", err)
+	}
+	if _, err := wtree.Commit("seed", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "seed", Email: "test@opnborg", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("seed commit: %v", err)
+	}
+
+	// Stage ledger paths straight through the worktree API — the equivalent
+	// of a hand-run `git add .db/approval.db` against this bare .gitignore —
+	// plus a real XML change staged the same way.
+	if err := os.MkdirAll(filepath.Join(store, _approvalDBDir), 0770); err != nil {
+		t.Fatalf("mkdir .db: %v", err)
+	}
+	for _, name := range []string{_approvalDBName, _approvalDBName + "-wal", _approvalDBName + "-shm"} {
+		if err := os.WriteFile(filepath.Join(store, _approvalDBDir, name), []byte("staged-"+name), 0660); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		if _, err := wtree.Add(_approvalDBDir + "/" + name); err != nil {
+			t.Fatalf("add %s: %v", name, err)
+		}
+	}
+	// A root-level legacy ledger file, also staged raw.
+	if err := os.WriteFile(filepath.Join(store, _approvalDBName), []byte("legacy-staged"), 0660); err != nil {
+		t.Fatalf("write legacy approval.db: %v", err)
+	}
+	if _, err := wtree.Add(_approvalDBName); err != nil {
+		t.Fatalf("add legacy approval.db: %v", err)
+	}
+	// A real XML change so gitCommit has a legitimate reason to commit.
+	if err := os.MkdirAll(filepath.Join(store, "fw01.lan"), 0770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "fw01.lan", "current.xml"), []byte("<a/>"), 0660); err != nil {
+		t.Fatalf("write xml: %v", err)
+	}
+	if _, err := wtree.Add("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("add xml: %v", err)
+	}
+	// The staged XML blob must be retrievable so the post-scrub commit can
+	// be proven to carry it.
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	var staged int
+	for _, e := range idx.Entries {
+		if strings.HasPrefix(e.Name, _approvalDBDir+"/") || e.Name == _approvalDBName {
+			staged++
+		}
+	}
+	if staged == 0 {
+		t.Fatalf("test setup broken: no ledger path staged in the index")
+	}
+
+	committed, err := gitCommit(config, repo)
+	if err != nil {
+		t.Fatalf("gitCommit: %v", err)
+	}
+	if !committed {
+		t.Fatalf("staged XML plus scrubbed ledger must still produce a commit")
+	}
+
+	// The index must be ledger-clean again.
+	idx2, err := repo.Storer.Index()
+	if err != nil {
+		t.Fatalf("index (2): %v", err)
+	}
+	for _, e := range idx2.Entries {
+		if isApprovalDBPath(e.Name) {
+			t.Errorf("index still carries approval-ledger path %q after gitCommit", e.Name)
+		}
+	}
+
+	// The new HEAD tree must carry the XML but no ledger path.
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Head: %v", err)
+	}
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	tree, err := headCommit.Tree()
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	iter := tree.Files()
+	for {
+		f, err := iter.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("tree files: %v", err)
+			}
+			break
+		}
+		if isApprovalDBPath(f.Name) || strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir {
+			t.Errorf("approval-ledger path %q must never be committed into the HEAD tree", f.Name)
+		}
+	}
+	if _, err := tree.FindEntry("fw01.lan/current.xml"); err != nil {
+		t.Fatalf("xml entry missing: %v", err)
+	}
+}
+
+// TestGitCommitFailsTickWhenLedgerVerifiedInCommit pins the post-commit
+// runtime verification: when a commit tree DOES contain an approval-ledger
+// path (simulated by scrubbing nothing — a repo pre-seeded with a committed
+// ledger, which the scrub leaves untouched in history), gitLedgerVerifyCommit
+// reports the leak and gitCommit surfaces it as a failed tick.
+func TestGitCommitFailsTickWhenLedgerVerifiedInCommit(t *testing.T) {
+	ensureDisplayDrained(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	store := t.TempDir()
+	config := &OPNCall{Path: store, Email: "test@opnborg"}
+	if err := gitInit(config); err != nil {
+		t.Fatalf("gitInit: %v", err)
+	}
+	repo, err := gitRepo(config.Path)
+	if err != nil {
+		t.Fatalf("gitRepo: %v", err)
+	}
+	wtree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree: %v", err)
+	}
+	// Seed a commit that carries a ledger path, bypassing every defence via
+	// the raw worktree API (gitCommit would scrub it). This simulates the
+	// only state the verification exists for: ledger content already in a
+	// fresh tree.
+	if err := os.WriteFile(filepath.Join(store, _approvalDBName), []byte("committed-ledger"), 0660); err != nil {
+		t.Fatalf("write approval.db: %v", err)
+	}
+	if _, err := wtree.Add(_approvalDBName); err != nil {
+		t.Fatalf("add approval.db: %v", err)
+	}
+	seed, err := wtree.Commit("seed with ledger", &git.CommitOptions{
+		Author: &gitobject.Signature{Name: "seed", Email: "test@opnborg", When: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("seed commit: %v", err)
+	}
+	leaked, err := gitLedgerVerifyCommit(repo, seed)
+	if err != nil {
+		t.Fatalf("gitLedgerVerifyCommit: %v", err)
+	}
+	if len(leaked) != 1 || leaked[0] != _approvalDBName {
+		t.Fatalf("verify must report the committed ledger path: got %v", leaked)
+	}
+
+	// A clean HEAD reports no leak.
+	clean, err := gitLedgerAuditTracked(repo)
+	if err != nil {
+		t.Fatalf("gitLedgerAuditTracked: %v", err)
+	}
+	if len(clean) == 0 {
+		t.Fatalf("audit must report the ledger path tracked in HEAD")
+	}
+	// The audit against a repo with no commits (fresh init) reports clean.
+	fresh := t.TempDir()
+	freshRepo, err := gitRepo(fresh)
+	if err != nil {
+		t.Fatalf("gitRepo fresh: %v", err)
+	}
+	none, err := gitLedgerAuditTracked(freshRepo)
+	if err != nil {
+		t.Fatalf("gitLedgerAuditTracked fresh: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("fresh repo must audit clean, got %v", none)
+	}
+}
+
+// TestSourceRepoTracksNoLedger guards the opnborg SOURCE repository itself
+// (the checkout running this test) against the recurring bug where a local
+// dev/test run with the default OPN_PATH (= the working directory) drops
+// .db/approval.db* into the source tree and a mandated `git add .` commits
+// the ledger into the product repo. Every former fix guarded only the
+// daemon-managed backup STORE repo; this test pins the source side:
+//
+//   - no tracked path in the source HEAD tree matches isApprovalDBPath,
+//   - the source .gitignore ignores the ledger (so a `git add .` cannot
+//     sweep a stray ledger into a commit),
+//   - the source index carries no staged ledger path.
+//
+// It skips cleanly outside a git checkout (e.g. module-zip runs).
+func TestSourceRepoTracksNoLedger(t *testing.T) {
+	root := sourceDir(t)
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		t.Skip("not a git checkout: source-repo ledger guard does not apply")
+	}
+	repo, err := git.PlainOpen(root)
+	if err != nil {
+		t.Skipf("open source repo: %v", err)
+	}
+
+	// (1) The source .gitignore must ignore the ledger.
+	raw, err := os.ReadFile(filepath.Join(root, _gitignore))
+	if err != nil {
+		t.Fatalf("read source .gitignore: %v", err)
+	}
+	if !gitignoreIgnoresApprovalLedger(string(raw)) {
+		t.Errorf("source .gitignore must ignore the approval ledger (approval.db, approval.db-wal, approval.db-shm), got:\n%s", raw)
+	}
+
+	// (2) No tracked path in the source HEAD tree may be a ledger path.
+	head, err := repo.Head()
+	if err != nil {
+		t.Skipf("source repo has no HEAD yet: %v", err)
+	}
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		t.Skipf("read source HEAD commit: %v", err)
+	}
+	tree, err := headCommit.Tree()
+	if err != nil {
+		t.Fatalf("read source HEAD tree: %v", err)
+	}
+	iter := tree.Files()
+	for {
+		f, err := iter.Next()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("walk source HEAD tree: %v", err)
+			}
+			break
+		}
+		if isApprovalDBPath(f.Name) || strings.HasPrefix(f.Name, _approvalDBDir+"/") || f.Name == _approvalDBDir {
+			t.Errorf("source repo tracks approval-ledger path %q: the internal ledger must never be committed into the source repository", f.Name)
+		}
+	}
+
+	// (3) The source index must carry no staged ledger path either.
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		t.Skipf("read source index: %v", err)
+	}
+	for _, e := range idx.Entries {
+		if isApprovalDBPath(e.Name) || strings.HasPrefix(e.Name, _approvalDBDir+"/") || e.Name == _approvalDBDir {
+			t.Errorf("source index carries approval-ledger path %q: the internal ledger must never be staged in the source repository", e.Name)
 		}
 	}
 }

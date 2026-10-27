@@ -3,3 +3,14 @@ cmd/opnborg/opnborg
 .*.swp
 .*.swo
 /.crushrc
+
+# opnborg runtime artifacts — never commit the security-approval ledger
+# (approval.db, approval.db-wal, approval.db-shm) or any backup-store data
+# a dev run with a default OPN_PATH may drop into this source tree.
+# Guarded by TestSourceRepoTracksNoLedger; see AGENTS.md.
+.db/
+approval.db
+approval.db-wal
+approval.db-shm
+Logs/
+.archive/
