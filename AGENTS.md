@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.239`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.240`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -23,7 +23,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 `opnborg` is a single-binary Go daemon that backs up, monitors, and synchronizes configuration across a fleet of OPNsense firewalls and (optionally) Unifi controllers. Configuration is driven entirely through environment variables; the binary accepts only `-v` / `-h`. `-v` prints the SemVer plus the embedded VCS commit, and the same version/commit pair is logged by `main.go` at startup. Output goes to stdout via an internal `displayChan` log engine (ANSI-colored per status tag when stdout is a tty), and an embedded HTTP server renders the hive status as HTML. Backups are stored as XML on disk, deduplicated by SHA-256, and (optionally) committed to a local git repo.
 
 - Module path: `paepcke.de/opnborg`
-- Go version: see `go.mod` (currently `1.27.2`); CI uses `go-version-file: go.mod`
+- Go version: see `go.mod` (currently `1.27.3`); CI uses `go-version-file: go.mod`
 - Entry point: `cmd/opnborg/main.go` -> `opnborg.Start(config)` -> `srv(config)`
 - License: BSD 3-Clause
 
