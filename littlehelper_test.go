@@ -9818,7 +9818,7 @@ func TestFetchXMLRetriesTruncatedBody(t *testing.T) {
 
 // TestFetchXMLSurvivesSurplusFraming reproduces the exact observed failure
 // mode: the appliance declares a Content-Length smaller than the payload it
-// writes (FreeBSD kTLS/nginx record-stream split). The transport delivers
+// writes (FreeBSD kTLS/lighttpd record-stream split). The transport delivers
 // exactly the declared prefix - a backup XML cut mid-document - the tail
 // ("</server_address>...") lands on the connection as unsolicited data
 // ("Unsolicited response received on idle HTTP channel"). fetchXML must

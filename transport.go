@@ -29,7 +29,7 @@ const (
 	// FRESH TCP+TLS connection instead of failing the whole backup pass for
 	// that appliance. The observed "Unsolicited response received on idle
 	// HTTP channel starting with ..." + "[FAIL:XML-VALIDATION]" pair is a
-	// FreeBSD kTLS/nginx record-stream split: the transport delivers exactly
+	// FreeBSD kTLS/lighttpd record-stream split: the transport delivers exactly
 	// the Content-Length-declared prefix (an XML document cut in half), the
 	// surplus tail then arrives as unsolicited data on the pooled connection.
 	// A fresh connection per attempt dodges the broken stream deterministically.
@@ -281,7 +281,7 @@ func fetchXMLAttempt(targetURL, server string, config *OPNCall, attempt int) ([]
 	// truncation guard: the appliance framing must match the delivered
 	// payload. A short body (declared more than delivered) or a surplus-framed
 	// stream (the transport stops at Content-Length while the appliance keeps
-	// streaming the tail, the FreeBSD kTLS/nginx record-split mode) both end
+	// streaming the tail, the FreeBSD kTLS/lighttpd record-split mode) both end
 	// up here as a truncated document and are retried on a fresh stream.
 	if body.ContentLength >= 0 && int64(len(data)) != body.ContentLength {
 		displayChan <- []byte("[FETCH][FAIL:TRUNCATED-XML-BODY] " + targetURL +

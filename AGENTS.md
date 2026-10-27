@@ -12,7 +12,7 @@ Reference guide for AI agents working in the `opnborg` repository.
 >    Always use parallel package builds (the Go toolchain default); never pass `-p 1`.
 > 3. **Test** — `go test -count=1 ./...` must pass. Always use parallel test
 > 4. **Commit** — `git add . && git commit -m '<message>'`
-> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.237`).
+> 5. **Tag** — bump the patch segment only: `v0.1.<N+1>` (latest tag is `v0.1.238`).
 >    Never move, delete, or reuse an existing tag. Also bump the `SemVer` constant
 >    in `api.go` to match the new tag.
 > 6. **Push** — always push commits and tags.
@@ -203,7 +203,7 @@ HTTPS is mandatory; the client intentionally skips OS trust store verification a
 
 The negotiated TLS version range is tunable via `OPN_TLS_MIN_VERSION` / `OPN_TLS_MAX_VERSION` (`1.2` / `1.3`, default `1.3` only), wired in `Setup()` into `config.TLSMin` / `config.TLSMax`; lowering the ceiling to `1.2` is the escape hatch for appliances whose FreeBSD kTLS TLS 1.3 record stream corrupts backup downloads. `getTlsConf` never pins `CipherSuites` for TLS 1.3 (Go ignores them there) and pins the ChaCha20-Poly1305 1.2 suite pair only when the range dips into 1.2 (a TLS-1.3-only suite id would break every 1.2 handshake).
 
-Backup XML downloads (`fetchXML`, used by `actionOPN` / `readMasterConf` / `fetchOPN`) carry **`Connection: close`** (`getRequest`) so the transport never pools an OPNsense API stream, and are **retried on a fresh TCP+TLS connection** (`fetchXMLAttempt`, `_fetchMaxAttempts` = 3, linear `_fetchRetrySleep` backoff). A truncated or surplus-framed body — the `Unsolicited response received on idle HTTP channel starting with "</server_address>..."` + `[FAIL:XML-VALIDATION]` pair a FreeBSD kTLS/nginx record-split emits, where the transport delivers exactly the Content-Length-declared prefix and the surplus tail lands on the pooled conn — is a per-connection fault a fresh stream repairs. Each attempt logs its own diagnosis (status, declared Content-Length vs bytes received) at default verbosity (`OPN_DEBUG` adds per-attempt debug lines); transient transport/read/truncation/invalid-XML/5xx conditions are retried, definitive 4xx API rejections are returned immediately with their status.
+Backup XML downloads (`fetchXML`, used by `actionOPN` / `readMasterConf` / `fetchOPN`) carry **`Connection: close`** (`getRequest`) so the transport never pools an OPNsense API stream, and are **retried on a fresh TCP+TLS connection** (`fetchXMLAttempt`, `_fetchMaxAttempts` = 3, linear `_fetchRetrySleep` backoff). A truncated or surplus-framed body — the `Unsolicited response received on idle HTTP channel starting with "</server_address>..."` + `[FAIL:XML-VALIDATION]` pair a FreeBSD kTLS/lighttpd record-split emits, where the transport delivers exactly the Content-Length-declared prefix and the surplus tail lands on the pooled conn — is a per-connection fault a fresh stream repairs. Each attempt logs its own diagnosis (status, declared Content-Length vs bytes received) at default verbosity (`OPN_DEBUG` adds per-attempt debug lines); transient transport/read/truncation/invalid-XML/5xx conditions are retried, definitive 4xx API rejections are returned immediately with their status.
 
 ## Configuration Conventions (ENV)
 
@@ -274,7 +274,7 @@ The test suite lives in `littlehelper_test.go` (package `opnborg`) and covers en
   instead of clipping inside the flex row.
 - The WebUI HTML/SVG is hand-rolled and inlined as Go `const` strings in `httpd-ui.go`. The favicon is embedded via `//go:embed resources/borg.png`.
 - README artwork lives in `docs/`:
-- `docs/rca-2026-10-27-opnsense-backup-download-framing.md` — sanitized, upstreamable root-cause analysis of the OPNsense 26.7.7 backup-download framing violation (declared `Content-Length` smaller than the body actually written; surplus tail delivered out-of-band on the keep-alive connection). The README opens with a short `> [!WARNING]` pointing here and giving the appliance-side workaround (`kern.ipc.tls.enable=0`, or client-side `OPN_TLS_MAX_VERSION=1.2`). Attach the per-attempt `[DECLARED]/[RECEIVED]` log lines from a future occurrence before filing upstream.
+- `docs/rca-2026-10-27-opnsense-backup-download-framing.md` — short, sanitized root-cause summary of the OPNsense 26.7.7 backup-download framing violation (declared `Content-Length` smaller than the body actually written; surplus tail delivered out-of-band on the keep-alive connection). The affected HTTPS frontend is lighttpd (not nginx); disabling FreeBSD kTLS (`kern.ipc.tls.enable=0`) fixes the intermittently reproducible failure, and Caddy is the proposed permanent replacement. The README opens with a short `> [!WARNING]` pointing here and giving the appliance-side workaround (`kern.ipc.tls.enable=0`, or client-side `OPN_TLS_MAX_VERSION=1.2`). Attach the per-attempt `[DECLARED]/[RECEIVED]` log lines from a future occurrence before filing upstream.
 - `hero-{dark,light}.svg` — hand-built theme-aware banner (1280x360 canvas).
 - `established-{dark,light}.svg` — hand-built theme-aware "established" trust banner (1200x130 canvas) rendered below the hero; carries project age, the development claim, and the tagged-release count.
 - `screenshot-console-{dark,light}.svg` — hand-built terminal illustration of the ANSI-colored display engine.
